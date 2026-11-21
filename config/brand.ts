@@ -20,9 +20,9 @@ export const PLACEHOLDER = "[PREENCHER]";
 
 export const brand = {
   /** Nome exibido na interface, nos e-mails e no título das páginas. */
-  name: "AutoInsta",
+  name: "InstaFluxo",
   /** Nome curto para o ícone do app instalado no celular (até ~12 letras). */
-  shortName: "AutoInsta",
+  shortName: "InstaFluxo",
   /** Frase curta usada na landing page e nas metatags. */
   tagline: "Respostas automáticas no Instagram, do comentário à DM.",
   /** Descrição usada em metatags e no manifest. */
@@ -39,7 +39,7 @@ export const brand = {
    */
   logo: {
     src: "/brand/logo.svg",
-    alt: "AutoInsta",
+    alt: "InstaFluxo",
     width: 32,
     height: 32,
   },
@@ -58,7 +58,7 @@ export const brand = {
 
   /** Contato exibido para clientes e para titulares de dados. */
   support: {
-    email: PLACEHOLDER,
+    email: "suporte@instafluxo.com.br",
     /** Opcional. Ex.: "+55 11 99999-9999". Deixe "" para ocultar. */
     whatsapp: "",
   },
@@ -69,17 +69,17 @@ export const brand = {
    */
   legal: {
     /** Razão social. Ex.: "Minha Empresa Tecnologia LTDA". */
-    companyName: PLACEHOLDER,
+    companyName: "Bruno Fernandes Pereira",
     /** CNPJ no formato 00.000.000/0000-00. */
-    cnpj: PLACEHOLDER,
+    cnpj: "33.926.069/0001-08",
     /** Endereço completo da sede. */
-    address: PLACEHOLDER,
+    address: "São Paulo/SP",
     /** Nome do encarregado pelo tratamento de dados pessoais (DPO). */
-    dpoName: PLACEHOLDER,
+    dpoName: "Bruno Fernandes",
     /** E-mail do encarregado — canal oficial para pedidos de titulares. */
-    dpoEmail: PLACEHOLDER,
+    dpoEmail: "bruno@instafluxo.com.br",
     /** Cidade/UF do foro dos Termos de Uso. Ex.: "São Paulo/SP". */
-    jurisdiction: PLACEHOLDER,
+    jurisdiction: "São Paulo/SP",
     /**
      * Data da última revisão das páginas legais (AAAA-MM-DD). Atualize quando
      * mudar o texto de /privacidade ou /termos.

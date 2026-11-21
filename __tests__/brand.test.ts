@@ -12,10 +12,8 @@ describe("brand configuration", () => {
     expect(missingBrandFields({ name: "X", colors: { primary: "#000" } })).toEqual([]);
   });
 
-  it("ships with the legal identification flagged until it is filled in", () => {
-    expect(missingBrandFields()).toEqual(
-      expect.arrayContaining(["legal.companyName", "legal.cnpj", "legal.dpoEmail"])
-    );
+  it("has every brand and legal field filled in (no [PREENCHER] left)", () => {
+    expect(missingBrandFields()).toEqual([]);
   });
 
   it("uses valid hex colors and a parseable legal date", () => {
