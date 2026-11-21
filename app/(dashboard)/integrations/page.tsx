@@ -6,7 +6,7 @@ import { useI18n } from "@/lib/i18n/provider";
 type Key = { id: string; name: string; expiresAt: string; revokedAt: string | null };
 
 export default function IntegrationsPage() {
-  const { t, locale } = useI18n();
+  const { t, locale, message } = useI18n();
   const [keys, setKeys] = useState<Key[]>([]);
   const [name, setName] = useState("");
   const [days, setDays] = useState(30);
@@ -54,7 +54,7 @@ export default function IntegrationsPage() {
   return <div className="mx-auto max-w-4xl space-y-6 p-6">
     <h1 className="text-2xl font-semibold">{t("API & MCP")}</h1>
     <p className="text-muted">{t("Workspace-scoped, read-only keys. No key can modify campaigns or send messages. Only admins and owners can manage keys.")}</p>
-    {notice && <p role="status">{notice}</p>}
+    {notice && <p role="status">{message(notice)}</p>}
     <section className="space-y-3 rounded border border-border p-4">
       <label className="block">{t("Key name")}<input maxLength={100} disabled={busy} className="w-full rounded border border-border p-2" value={name} onChange={e => setName(e.target.value)} /></label>
       <label className="block">{t("Key lifetime")}<select disabled={busy} value={days} onChange={e => setDays(Number(e.target.value))} className="ml-3 rounded border border-border p-2">

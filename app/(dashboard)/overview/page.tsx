@@ -37,7 +37,7 @@ const COUNT_OPTIONS = [
 ] as const;
 
 export default function OverviewPage() {
-  const { t, locale } = useI18n();
+  const { t, locale, message } = useI18n();
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export default function OverviewPage() {
   if (error) {
     return (
       <div className="panel rounded p-8 text-center">
-        <p className="text-sm text-error">{error === "Failed to load overview" ? t("Failed to load overview") : error}</p>
+        <p className="text-sm text-error">{message(error)}</p>
         {error.includes("connect") && (
           <a
             href="/api/instagram/connect"

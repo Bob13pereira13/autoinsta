@@ -15,7 +15,7 @@ async function currentUser() {
 export async function GET() {
   const user = await currentUser();
   if (!user) {
-    return NextResponse.json({ success: false, error: "Não autenticado" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   return NextResponse.json({
     success: true,
@@ -30,7 +30,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const user = await currentUser();
   if (!user) {
-    return NextResponse.json({ success: false, error: "Não autenticado" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   if (user.passwordHash && !(await verifyPassword(currentPassword, user.passwordHash))) {
     return NextResponse.json(
-      { success: false, error: "A senha atual está incorreta." },
+      { success: false, error: "The current password is incorrect." },
       { status: 400 }
     );
   }

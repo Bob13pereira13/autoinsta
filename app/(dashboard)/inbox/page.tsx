@@ -38,7 +38,7 @@ function formatTime(iso: string | null, locale: Locale): string {
 }
 
 export default function InboxPage() {
-  const { t, locale } = useI18n();
+  const { t, locale, message } = useI18n();
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   // Seed from the last-used account so a revisit can paint the cached
   // conversation list immediately, before the account list even loads.
@@ -244,7 +244,7 @@ export default function InboxPage() {
         // Roll the optimistic message back and restore the draft so it's not lost.
         setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
         setDraft(text);
-        setSendError(data.error ?? t("Failed to send message"));
+        setSendError(message(data.error, "Failed to send message"));
       }
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
@@ -291,7 +291,7 @@ export default function InboxPage() {
             {convLoading ? (
               <p className="px-4 py-6 text-sm text-muted">{t("Loading…")}</p>
             ) : convError ? (
-              <p className="px-4 py-6 text-sm text-error">{convError === "Failed to load conversations" ? t("Failed to load conversations") : convError}</p>
+              <p className="px-4 py-6 text-sm text-error">{message(convError)}</p>
             ) : conversations.length === 0 ? (
               <p className="px-4 py-6 text-sm text-muted">{t("No conversations yet.")}</p>
             ) : (

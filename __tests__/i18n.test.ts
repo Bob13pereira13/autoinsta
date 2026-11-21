@@ -73,3 +73,18 @@ describe("interface translations", () => {
     }
   });
 });
+
+describe("runtime messages (API errors)", () => {
+  it("translates known messages and passes unknown ones through", () => {
+    const { message } = createI18n("pt-BR");
+    expect(message("Campaign not found")).toBe(ptBR["Campaign not found"]);
+    expect(message("Some raw Meta error (#100)")).toBe("Some raw Meta error (#100)");
+    expect(message(undefined, "Failed to load posts")).toBe(ptBR["Failed to load posts"]);
+    expect(message("", "Failed to load posts")).toBe(ptBR["Failed to load posts"]);
+    expect(message("toString")).toBe("toString");
+  });
+
+  it("returns the English source unchanged in English", () => {
+    expect(createI18n("en").message("Campaign not found")).toBe("Campaign not found");
+  });
+});

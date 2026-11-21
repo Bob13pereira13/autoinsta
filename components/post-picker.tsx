@@ -44,7 +44,7 @@ export default function PostPicker({
   usedPostIds,
   onSelect,
 }: PostPickerProps) {
-  const { t } = useI18n();
+  const { t, message } = useI18n();
   const [limitations, setLimitations] = useState<string[]>([]);
   const [posts, setPosts] = useState<InstagramPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ export default function PostPicker({
   if (error) {
     return (
       <div className="text-center py-8">
-        <p className="text-sm text-muted">{error === "Failed to load posts" ? t("Failed to load posts") : error}</p>
+        <p className="text-sm text-muted">{message(error)}</p>
         <p className="text-xs text-zinc-500 mt-1">{t("Connect your Instagram account first")}</p>
       </div>
     );

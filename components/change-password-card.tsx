@@ -5,7 +5,7 @@ import { useI18n } from "@/lib/i18n/provider";
 
 /** Settings card: change the password (or set one, for magic-link-only users). */
 export default function ChangePasswordCard() {
-  const { t } = useI18n();
+  const { t, message } = useI18n();
   const [account, setAccount] = useState<{ email: string | null; hasPassword: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,7 +38,7 @@ export default function ChangePasswordCard() {
       window.location.href = "/login?passwordChanged=1";
       return;
     }
-    setError(payload.error ?? t("Could not change the password."));
+    setError(message(payload.error, "Could not change the password."));
     setBusy(false);
   }
 
