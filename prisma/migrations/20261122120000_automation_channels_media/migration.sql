@@ -44,8 +44,8 @@ CREATE TABLE "AutomationMedia" (
 -- CreateTable
 CREATE TABLE "BotMessage" (
     "mid" TEXT NOT NULL,
-    "instagramAccountId" TEXT NOT NULL,
-    "recipientId" TEXT NOT NULL,
+    "instagramId" TEXT NOT NULL,
+    "recipientId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "BotMessage_pkey" PRIMARY KEY ("mid")
@@ -70,6 +70,9 @@ CREATE INDEX "AutomationMedia_workspaceId_idx" ON "AutomationMedia"("workspaceId
 CREATE INDEX "AutomationMedia_automationId_idx" ON "AutomationMedia"("automationId");
 
 -- CreateIndex
+CREATE INDEX "BotMessage_instagramId_idx" ON "BotMessage"("instagramId");
+
+-- CreateIndex
 CREATE INDEX "BotMessage_createdAt_idx" ON "BotMessage"("createdAt");
 
 -- CreateIndex
@@ -89,9 +92,6 @@ ALTER TABLE "AutomationMedia" ADD CONSTRAINT "AutomationMedia_workspaceId_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "AutomationMedia" ADD CONSTRAINT "AutomationMedia_automationId_fkey" FOREIGN KEY ("automationId") REFERENCES "Automation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "BotMessage" ADD CONSTRAINT "BotMessage_instagramAccountId_fkey" FOREIGN KEY ("instagramAccountId") REFERENCES "InstagramAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ConversationActivity" ADD CONSTRAINT "ConversationActivity_instagramAccountId_fkey" FOREIGN KEY ("instagramAccountId") REFERENCES "InstagramAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE;

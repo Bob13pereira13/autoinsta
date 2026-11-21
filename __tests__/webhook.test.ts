@@ -375,6 +375,7 @@ describe("parseMessageEvents", () => {
         messageId: "mid_abc",
         messageText: "send me the LINK please",
         senderId: "user_999",
+        channel: "DIRECT",
       },
     ]);
   });
@@ -410,7 +411,7 @@ describe("parseMessageEvents", () => {
     ).toHaveLength(0);
   });
 
-  it("should ignore attachment-only messages with no text", () => {
+  it("keeps attachment-only DMs with empty text (only no-keyword automations answer them)", () => {
     const payload = messagingPayload([
       {
         sender: { id: "user_999" },
@@ -419,6 +420,15 @@ describe("parseMessageEvents", () => {
       },
     ]);
 
+    expect(parseMessageEvents(payload)).toEqual([
+      expect.objectContaining({ messageText: "", channel: "DIRECT" }),
+    ]);
+  });
+
+  it("drops messages with neither text nor attachments", () => {
+    const payload = messagingPayload([
+      { sender: { id: "user_999" }, recipient: { id: "ig_456" }, message: { mid: "mid_abc", text: "   " } },
+    ]);
     expect(parseMessageEvents(payload)).toHaveLength(0);
   });
 

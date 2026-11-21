@@ -207,7 +207,6 @@ model InstagramAccount {
   dmLogs               DmLog[]
   linkClicks           LinkClick[]
   followerSnapshots    FollowerSnapshot[]
-  botMessages          BotMessage[]
   conversationActivity ConversationActivity[]
 
   @@index([workspaceId])
@@ -509,15 +508,15 @@ model AutomationMedia {
 
 /// Message ids (mid) of DMs sent by the automations. An echo webhook whose mid
 /// is not here was sent by a person (Instagram app, Business Suite, Inbox).
-/// Kept 7 days (lib/privacy/purge.ts).
+/// Keyed by the Instagram account id the worker and the echo both know;
+/// kept 7 days (lib/privacy/purge.ts) and deleted with the account.
 model BotMessage {
-  mid                String   @id
-  instagramAccountId String
-  recipientId        String
-  createdAt          DateTime @default(now())
+  mid         String   @id
+  instagramId String
+  recipientId String?
+  createdAt   DateTime @default(now())
 
-  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
-
+  @@index([instagramId])
   @@index([createdAt])
 }
 

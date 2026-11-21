@@ -105,16 +105,37 @@ interface WebhookEntry {
       is_echo?: boolean;
       is_deleted?: boolean;
       is_unsupported?: boolean;
-      attachments?: Array<{ type?: string }>;
+      attachments?: Array<{ type?: string; payload?: { url?: string } }>;
+      // Present when the message is a reply to one of the account's stories.
+      reply_to?: { mid?: string; story?: { id?: string; url?: string } };
     };
   }>;
 }
 
+/**
+ * Where an inbound message came from:
+ * - STORY_REPLY: a reply to one of the account's stories (message.reply_to.story)
+ * - STORY_MENTION: the person mentioned the account in their own story
+ *   (attachment type "story_mention", no text)
+ * - DIRECT: any other direct message
+ */
+export type MessageChannel = "DIRECT" | "STORY_REPLY" | "STORY_MENTION";
+
 export interface WebhookMessageEvent {
   instagramAccountId: string;
   messageId: string;
+  /** Empty for a mention or an attachment-only message. */
   messageText: string;
   senderId: string;
+  channel: MessageChannel;
+  storyId?: string;
+}
+
+/** A message the account itself sent (Instagram app, Business Suite, API). */
+export interface WebhookEchoEvent {
+  instagramAccountId: string;
+  recipientId: string;
+  messageId: string;
 }
 
 export interface WebhookPostbackEvent {
@@ -218,14 +239,14 @@ export function parsePostbackEvents(
 }
 
 /**
- * Parse inbound Instagram DMs out of a webhook payload. These drive the
- * keyword-triggered autoreply: a user messages the account, and a campaign
- * with `dmTriggerEnabled` whose keywords match the text replies to them.
+ * Parse inbound Instagram messages out of a webhook payload and tell the
+ * channel apart: story replies and story mentions go to STORIES automations,
+ * everything else to DIRECT automations.
  *
- * Echoes (messages the account itself sent, including our own autoreplies),
- * deletions, and attachment-only messages with no text are dropped here so
- * the worker never sees them — an echo would otherwise let an autoreply
- * containing its own keyword trigger itself.
+ * Echoes (messages the account itself sent, including our own replies),
+ * deletions and unsupported messages are dropped so the worker never sees
+ * them — an echo would otherwise let an autoreply containing its own keyword
+ * trigger itself. Messages with neither text nor attachments are dropped too.
  */
 export function parseMessageEvents(
   payload: WebhookPayload
@@ -242,21 +263,59 @@ export function parseMessageEvents(
         continue;
       }
 
-      const text = message.text?.trim();
+      const text = message.text?.trim() ?? "";
+      const attachments = message.attachments ?? [];
       const messageId = message.mid;
       const senderId = messaging.sender?.id;
       const accountId = entry.id ?? messaging.recipient?.id;
 
-      if (!text || !messageId || !senderId || !accountId) continue;
+      if (!messageId || !senderId || !accountId) continue;
+      if (!text && attachments.length === 0) continue;
       // Ignore anything the connected account sent to itself.
       if (senderId === accountId) continue;
+
+      const mention = attachments.some((a) => a.type === "story_mention");
+      const story = message.reply_to?.story;
+      const channel: MessageChannel = mention
+        ? "STORY_MENTION"
+        : story
+          ? "STORY_REPLY"
+          : "DIRECT";
 
       events.push({
         instagramAccountId: accountId,
         messageId,
-        messageText: text,
+        // A mention carries no text the person typed; keyword automations
+        // never fire on it.
+        messageText: mention ? "" : text,
         senderId,
+        channel,
+        ...(story?.id ? { storyId: story.id } : {}),
       });
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Messages the connected account sent. Instagram reports them all with
+ * is_echo and no reliable way to tell the app that sent them, so the worker
+ * compares the mid with the ones the automations sent (BotMessage): any other
+ * echo was written by a person.
+ */
+export function parseEchoEvents(payload: WebhookPayload): WebhookEchoEvent[] {
+  const events: WebhookEchoEvent[] = [];
+  if (payload.object !== "instagram") return events;
+
+  for (const entry of payload.entry ?? []) {
+    for (const messaging of entry.messaging ?? []) {
+      const message = messaging.message;
+      if (!message?.is_echo || !message.mid) continue;
+      const accountId = entry.id ?? messaging.sender?.id;
+      const recipientId = messaging.recipient?.id;
+      if (!accountId || !recipientId || recipientId === accountId) continue;
+      events.push({ instagramAccountId: accountId, recipientId, messageId: message.mid });
     }
   }
 
