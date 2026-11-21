@@ -30,17 +30,11 @@ export default function LanguageSwitcher() {
           }}
           className="min-h-9 rounded border border-border bg-surface px-2 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
         >
-          <option value="en" lang="en">
-            English
-          </option>
-          <option value="zh-TW" lang="zh-TW">
-            繁體中文
-          </option>
           <option value="pt-BR" lang="pt-BR">
             Português (Brasil)
           </option>
-          <option value="ru" lang="ru">
-            Русский
+          <option value="en" lang="en">
+            English
           </option>
         </select>
       </label>

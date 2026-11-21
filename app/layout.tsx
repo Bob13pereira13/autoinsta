@@ -1,22 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
+import { brand } from "@/config/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OpenReply - Open source Instagram comment-to-DM automation",
-  description:
-    "A free, self-hosted ManyChat alternative. Send an Instagram DM automatically when someone comments a keyword on your post or reel, using the official Meta API.",
-  keywords: [
-    "instagram automation",
-    "comment to DM",
-    "instagram private replies",
-    "social commerce",
-    "manychat alternative",
-  ],
+  title: `${brand.name} - ${brand.tagline}`,
+  description: brand.description,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "OpenReply",
+    title: brand.shortName,
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -29,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#18181b",
+  themeColor: brand.colors.theme,
   width: "device-width",
   initialScale: 1,
   // Installed on iOS the app owns the full screen, notch included; the safe
@@ -37,20 +29,26 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Brand colors come from config/brand.ts. globals.css maps the accent tokens
+// to these variables, so every bg-accent/text-accent utility follows them.
+const brandStyle = `:root{--brand-primary:${brand.colors.primary};--brand-primary-hover:${brand.colors.primaryHover};}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full dark">
+    <html lang="pt-BR" className="h-full dark">
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: brandStyle }} />
+      </head>
       <body
         className="min-h-full bg-background text-foreground font-sans antialiased"
         // Clears the home indicator when installed; 0 everywhere else.
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {children}
-        <Analytics />
       </body>
     </html>
   );

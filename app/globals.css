@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* ManyChat Alternative — Design System
-   Plain and functional. No gradients, glass, glow, or animation. */
+/* Design system — plain and functional. No gradients, glass, glow, or
+   animation. The accent color comes from config/brand.ts (see app/layout.tsx). */
 
 @theme inline {
   --color-background: #ffffff;
@@ -11,8 +11,8 @@
   --color-border: #e4e4e7;
   --color-border-hover: #d4d4d8;
   --color-muted: #71717a;
-  --color-accent: #f97316;
-  --color-accent-hover: #ea580c;
+  --color-accent: var(--brand-primary, #4f46e5);
+  --color-accent-hover: var(--brand-primary-hover, #4338ca);
   --color-success: #16a34a;
   --color-error: #dc2626;
   --color-warning: #d97706;
@@ -106,3 +106,43 @@ select:focus-visible {
   font-display: swap;
 }
 .zernio-sponsor { font-family: 'Zernio Geist', sans-serif; }
+
+/* Long-form legal pages (/privacidade, /termos, /exclusao-dados). */
+.legal-content h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+.legal-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+.legal-content p + p {
+  margin-top: 0.75rem;
+}
+.legal-content ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-top: 0.5rem;
+}
+.legal-content li + li {
+  margin-top: 0.25rem;
+}
+.legal-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.legal-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+.legal-content th,
+.legal-content td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}

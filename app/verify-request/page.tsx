@@ -1,10 +1,11 @@
 import { getI18n } from "@/lib/i18n/server";
 import Link from "next/link";
+import BrandMark from "@/components/brand-mark";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
   return {
-    title: t("Check your email - OpenReply"),
+    title: t("Check your email - {brand}"),
     description: t("A sign-in link was sent to your email."),
   };
 }
@@ -15,8 +16,8 @@ export default async function VerifyRequestPage() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-foreground">
-            OpenReply
+          <h1>
+            <BrandMark size="lg" />
           </h1>
         </div>
 

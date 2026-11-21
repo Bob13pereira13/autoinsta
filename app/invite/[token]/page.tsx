@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { getI18n } from "@/lib/i18n/server";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import InvitationAcceptCard from "@/components/invitation-accept-card";
+import BrandMark from "@/components/brand-mark";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 
@@ -13,7 +13,7 @@ type InvitePageProps = {
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
   return {
-    title: t("Accept Workspace Invitation - OpenReply"),
+    title: t("Accept Workspace Invitation - {brand}"),
     robots: { index: false, follow: false },
   };
 }
@@ -40,9 +40,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-12">
-        <Link href="/" className="mb-8 text-sm font-bold text-cyan-100">
-          OpenReply
-        </Link>
+        <BrandMark className="mb-8" />
         <section className="border border-white/10 bg-white/[0.035] p-8">
           <p className="text-xs font-semibold uppercase tracking-wide text-cyan-100">
             {t("Workspace invitation")}

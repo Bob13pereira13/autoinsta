@@ -1,39 +1,49 @@
-import ptBRCatalog from "./pt-BR.json";
-import ruCatalog from "./ru.json";
-import zhTW from "./zh-TW.json";
+import { brand } from "@/config/brand";
+import ptBR from "./pt-BR.json";
 
-export const LOCALE_COOKIE = "openreply-locale";
-export type Locale = "en" | "zh-TW" | "pt-BR" | "ru";
-export type MessageKey = keyof typeof zhTW;
+export const LOCALE_COOKIE = "app-locale";
+/**
+ * pt-BR is the default interface language. English stays available because
+ * Meta asks App Review screencasts to be recorded with the UI in English (or
+ * captioned) — see GUIA_META_APP_REVIEW.md.
+ */
+export type Locale = "pt-BR" | "en";
+export const DEFAULT_LOCALE: Locale = "pt-BR";
+export type MessageKey = keyof typeof ptBR;
 
-// Every catalog must translate exactly the same English keys. `satisfies` makes
-// a missing key a compile error instead of an `undefined` at render time.
-const ptBR = ptBRCatalog satisfies Record<MessageKey, string>;
-const ru = ruCatalog satisfies Record<MessageKey, string>;
 const catalogs: Record<Exclude<Locale, "en">, Record<MessageKey, string>> = {
-  "zh-TW": zhTW,
   "pt-BR": ptBR,
-  ru,
 };
 
 export function isLocale(value: unknown): value is Locale {
-  return value === "en" || value === "zh-TW" || value === "pt-BR" || value === "ru";
+  return value === "en" || value === "pt-BR";
 }
 
 export function resolveLocale(value: unknown): Locale {
-  return isLocale(value) ? value : "en";
+  return isLocale(value) ? value : DEFAULT_LOCALE;
 }
 
+/**
+ * `{brand}` is filled in automatically with the configured brand name, so the
+ * product name lives only in config/brand.ts and never in a message key.
+ */
+type AutoPlaceholder = "brand";
 type Placeholders<S extends string> =
   S extends `${string}{${infer Name}}${infer Rest}`
     ? Name | Placeholders<Rest>
     : never;
+type RequiredPlaceholders<S extends string> = Exclude<
+  Placeholders<S>,
+  AutoPlaceholder
+>;
 export type StaticMessageKey = {
-  [K in MessageKey]: [Placeholders<K>] extends [never] ? K : never;
+  [K in MessageKey]: [RequiredPlaceholders<K>] extends [never] ? K : never;
 }[MessageKey];
-type MessageArgs<K extends MessageKey> = [Placeholders<K>] extends [never]
+type MessageArgs<K extends MessageKey> = [RequiredPlaceholders<K>] extends [
+  never,
+]
   ? []
-  : [values: Record<Placeholders<K>, string | number>];
+  : [values: Record<RequiredPlaceholders<K>, string | number>];
 
 // English is the source language. Only application-owned copy belongs here;
 // campaign messages, account names and API values are never translation keys.
@@ -66,9 +76,12 @@ const labels: Record<string, StaticMessageKey> = {
 export function createI18n(locale: Locale) {
   function t<K extends MessageKey>(key: K, ...args: MessageArgs<K>): string {
     const message = locale === "en" ? key : catalogs[locale][key];
-    const values = args[0] as Record<string, string | number> | undefined;
+    const values: Record<string, string | number> = {
+      brand: brand.name,
+      ...(args[0] as Record<string, string | number> | undefined),
+    };
     return message.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
-      values?.[name] === undefined ? placeholder : String(values[name]),
+      values[name] === undefined ? placeholder : String(values[name]),
     );
   }
 

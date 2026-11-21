@@ -12,36 +12,29 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("language preference", () => {
   it("renders a saved language on the server before hydration", async () => {
-    store.get.mockReturnValue({ value: "zh-TW" });
+    store.get.mockReturnValue({ value: "en" });
     const { locale, t } = await getI18n();
     expect(store.get).toHaveBeenCalledWith(LOCALE_COOKIE);
-    expect(locale).toBe("zh-TW");
-    expect(t("Settings")).toBe("設定");
+    expect(locale).toBe("en");
+    expect(t("Settings")).toBe("Settings");
   });
 
-  it("renders Brazilian Portuguese from the saved cookie", async () => {
-    store.get.mockReturnValue({ value: "pt-BR" });
+  it("renders Brazilian Portuguese when no language was saved", async () => {
+    store.get.mockReturnValue(undefined);
     const { locale, t } = await getI18n();
     expect(locale).toBe("pt-BR");
     expect(t("Settings")).toBe("Configurações");
   });
 
-  it("renders Russian from the saved cookie", async () => {
-    store.get.mockReturnValue({ value: "ru" });
-    const { locale, t } = await getI18n();
-    expect(locale).toBe("ru");
-    expect(t("Settings")).toBe("Настройки");
-  });
-
-  it("falls back to English for an invalid cookie", async () => {
-    store.get.mockReturnValue({ value: "unsupported" });
-    expect((await getI18n()).locale).toBe("en");
+  it("falls back to Brazilian Portuguese for an invalid cookie", async () => {
+    store.get.mockReturnValue({ value: "zh-TW" });
+    expect((await getI18n()).locale).toBe("pt-BR");
   });
 
   it("persists only the language cookie, across routes and browser restarts", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    await setLocale("zh-TW");
-    expect(store.set).toHaveBeenCalledExactlyOnceWith(LOCALE_COOKIE, "zh-TW", {
+    await setLocale("en");
+    expect(store.set).toHaveBeenCalledExactlyOnceWith(LOCALE_COOKIE, "en", {
       path: "/",
       maxAge: 31_536_000,
       sameSite: "lax",
@@ -50,12 +43,12 @@ describe("language preference", () => {
     });
   });
 
-  it("allows switching back to English during local development", async () => {
+  it("allows switching back to Portuguese during local development", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    await setLocale("en");
+    await setLocale("pt-BR");
     expect(store.set).toHaveBeenCalledWith(
       LOCALE_COOKIE,
-      "en",
+      "pt-BR",
       expect.objectContaining({ secure: false }),
     );
   });
