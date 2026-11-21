@@ -90,6 +90,15 @@ export function createI18n(locale: Locale) {
     t,
     label: (value: string) =>
       Object.hasOwn(labels, value) ? t(labels[value]) : value,
+    /**
+     * Translates a message that arrives at runtime (e.g. an API `error`) when
+     * it is a known catalog key; anything else is shown as received.
+     */
+    message: (value: string | null | undefined, fallback?: string): string => {
+      const text = value || fallback || "";
+      if (locale === "en" || !Object.hasOwn(catalogs[locale], text)) return text;
+      return catalogs[locale][text as MessageKey];
+    },
   };
 }
 

@@ -40,7 +40,7 @@ const MESSAGES: Record<string, { tone: Tone; title: StaticMessageKey; detail: St
 };
 
 export function InstagramConnectNotice() {
-  const { t } = useI18n();
+  const { t, message } = useI18n();
   const searchParams = useSearchParams();
   const status = searchParams.get("instagram");
 
@@ -87,7 +87,7 @@ export function InstagramConnectNotice() {
         </p>
         {reason && (
           <p className="mt-2 font-mono text-xs break-words opacity-80">
-            {reason}
+            {message(reason)}
           </p>
         )}
       </Notice>

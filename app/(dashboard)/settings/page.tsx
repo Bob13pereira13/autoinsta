@@ -23,6 +23,7 @@ interface SettingsData {
     AccountOption & {
       tokenExpiresAt: string | null;
       tokenInvalidAt?: string | null;
+      metaLogin?: "INSTAGRAM" | "UNIFIED";
       webhookSubscribed: boolean;
     }
   >;
@@ -197,10 +198,16 @@ export default function SettingsPage() {
                     @{account.username}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    {t("Token expires")}{" "}
-                    {account.tokenExpiresAt
-                      ? new Date(account.tokenExpiresAt).toLocaleDateString(locale)
-                      : t("not available")}{" "}
+                    {account.metaLogin === "UNIFIED" && !account.tokenExpiresAt ? (
+                      t("Unified login · token does not expire")
+                    ) : (
+                      <>
+                        {t("Token expires")}{" "}
+                        {account.tokenExpiresAt
+                          ? new Date(account.tokenExpiresAt).toLocaleDateString(locale)
+                          : t("not available")}
+                      </>
+                    )}{" "}
                     · {account.webhookSubscribed ? t("Webhook ready") : t("Webhook pending")}
                   </p>
                   {account.tokenInvalidAt && (

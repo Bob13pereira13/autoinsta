@@ -49,6 +49,7 @@ describe("token refresh schedule", () => {
     expect(db.instagramAccount.findMany.mock.calls[0][0].where).toEqual({
       accessToken: { not: "" },
       provider: "META",
+      metaLogin: "INSTAGRAM",
       tokenInvalidAt: null,
       tokenExpiresAt: { not: null, lte: refreshCutoff(now) },
     });

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       instagramId: true,
       accessToken: true,
       provider: true,
+      metaLogin: true,
       zernioAccountId: true,
     },
   });

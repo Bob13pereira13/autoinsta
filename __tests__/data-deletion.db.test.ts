@@ -29,7 +29,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
 const schema = `deletion_${randomBytes(4).toString("hex")}`;
 let sql: Client;
 
-async function seedAccount(suffix: string, opts: { scopedId?: string } = {}) {
+async function seedAccount(suffix: string, opts: { scopedId?: string; metaLoginUserId?: string } = {}) {
   const db = state.db;
   const workspaceId = `ws_${suffix}`;
   await db.user.upsert({ where: { id: "owner" }, update: {}, create: { id: "owner", email: "owner@example.test" } });
@@ -40,6 +40,7 @@ async function seedAccount(suffix: string, opts: { scopedId?: string } = {}) {
       workspaceId,
       instagramId: `ig_${suffix}`,
       instagramScopedId: opts.scopedId ?? null,
+      metaLoginUserId: opts.metaLoginUserId ?? null,
       username: suffix,
       accessToken: "encrypted",
     },
@@ -120,6 +121,12 @@ describe.skipIf(!databaseUrl)("Meta data deletion on real PostgreSQL", () => {
   it("matches the app-scoped Instagram id as well", async () => {
     await seedAccount("scoped", { scopedId: "app_scoped_42" });
     await handleMetaDataDeletion("app_scoped_42");
+    expect(await state.db.instagramAccount.count()).toBe(0);
+  });
+
+  it("matches the Unified login token user as well", async () => {
+    await seedAccount("unified", { metaLoginUserId: "system_user_9" });
+    await handleMetaDataDeletion("system_user_9");
     expect(await state.db.instagramAccount.count()).toBe(0);
   });
 

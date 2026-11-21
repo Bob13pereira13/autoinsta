@@ -177,11 +177,19 @@ model InstagramAccount {
   username          String
   name              String?
   provider          InstagramProvider @default(META)
+  /// Which Meta setup issued the token, for META accounts. Existing rows are
+  /// INSTAGRAM: their tokens only work on graph.instagram.com. UNIFIED tokens
+  /// are business system user tokens that only work on graph.facebook.com.
+  metaLogin         MetaLogin @default(INSTAGRAM)
   zernioAccountId   String?
   /// App-scoped Instagram user id (`id` from /me). Meta's data deletion and
   /// deauthorize callbacks may identify the user by this id instead of
   /// `instagramId` (the professional account id), so both are stored.
   instagramScopedId String?
+  /// Unified login only: the user id debug_token reports for the token (the
+  /// business system user). Also matched by the data deletion / deauthorize
+  /// callbacks, since Meta does not document which id they send for this flow.
+  metaLoginUserId   String?
   /// Long-lived token, AES-256-GCM encrypted (lib/meta/oauth.ts). Empty when
   /// the user removed the app on Instagram.
   accessToken       String
@@ -201,6 +209,7 @@ model InstagramAccount {
 
   @@index([workspaceId])
   @@index([instagramScopedId])
+  @@index([metaLoginUserId])
 }
 
 /// Daily follower total for one account. Instagram only retains ~30 days of
@@ -484,6 +493,12 @@ enum OperationalEventLevel {
 enum InstagramProvider {
   META
   ZERNIO
+}
+
+/// Instagram Login (Business Login for Instagram) or Meta's Unified login.
+enum MetaLogin {
+  INSTAGRAM
+  UNIFIED
 }
 
 model ZernioConnection {

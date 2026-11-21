@@ -5,7 +5,15 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "crypto";
-import { getEncryptionKeyHex, requireEnv } from "@/lib/env";
+import {
+  getEncryptionKeyHex,
+  getMetaGraphApiVersion,
+  getUnifiedLoginUrlParts,
+  isUnifiedLogin,
+  requireEnv,
+  requireMetaAppId,
+  requireMetaLoginConfigId,
+} from "@/lib/env";
 import { getInstagramScopes } from "@/lib/meta/scopes";
 
 // Instagram API with Instagram Login authorizes on www.instagram.com. The old
@@ -89,6 +97,28 @@ export function verifyOAuthState(state: string | null): OAuthStatePayload | null
 }
 
 export function getAuthorizationUrl(redirectUri: string, state: string): string {
+  if (isUnifiedLogin()) {
+    // The login configuration carries the permissions and the asset picker,
+    // so there is no scope parameter here. prompt=login offers both the
+    // Instagram and the Facebook login, even to someone already signed in to
+    // Facebook in this browser. With META_UNIFIED_LOGIN_URL the pasted URL's
+    // dialog path (and Graph version) and extra parameters are kept.
+    const pasted = getUnifiedLoginUrlParts();
+    const params = new URLSearchParams(pasted?.extraParams ?? []);
+    params.set("client_id", requireMetaAppId());
+    params.set("config_id", requireMetaLoginConfigId());
+    params.set("redirect_uri", redirectUri);
+    params.set("response_type", "code");
+    // Meta's system-user configurations expect the code flow explicitly.
+    if (!params.has("override_default_response_type")) {
+      params.set("override_default_response_type", "true");
+    }
+    if (!params.has("prompt")) params.set("prompt", "login");
+    params.set("state", state);
+    const dialogUrl = pasted?.dialogUrl ?? "https://www.facebook.com/dialog/oauth";
+    return `${dialogUrl}?${params.toString()}`;
+  }
+
   const params = new URLSearchParams({
     client_id: requireEnv("INSTAGRAM_APP_ID"),
     redirect_uri: redirectUri,
@@ -104,6 +134,27 @@ export async function exchangeCodeForToken(
   code: string,
   redirectUri: string
 ): Promise<{ accessToken: string; userId: string }> {
+  if (isUnifiedLogin()) {
+    // Returns the final token: a business system user token for the client's
+    // portfolio. It names no Instagram account; the callback lists the
+    // accounts the client assigned to it.
+    const url = new URL(
+      `https://graph.facebook.com/${getMetaGraphApiVersion()}/oauth/access_token`
+    );
+    url.searchParams.set("client_id", requireMetaAppId());
+    url.searchParams.set("client_secret", requireEnv("FACEBOOK_APP_SECRET"));
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("code", code);
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    if (!response.ok || !data.access_token) {
+      throw new Error(
+        `Token exchange failed: ${data.error?.message || JSON.stringify(data)}`
+      );
+    }
+    return { accessToken: data.access_token, userId: "" };
+  }
+
   const body = new URLSearchParams({
     client_id: requireEnv("INSTAGRAM_APP_ID"),
     client_secret: requireEnv("INSTAGRAM_APP_SECRET"),

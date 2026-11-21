@@ -35,11 +35,15 @@ export function deletionStatusUrl(confirmationCode: string): string {
 
 /**
  * Meta may identify the user by the Instagram professional account id
- * (`instagramId`) or by the app-scoped id (`instagramScopedId`); match both.
+ * (`instagramId`), the app-scoped id (`instagramScopedId`) or — for Unified
+ * login — the token's user (`metaLoginUserId`); match all of them. Requests
+ * that match nothing are recorded and raise a warning (see runDataDeletion).
  */
 export function findAccountsForMetaUser(userId: string) {
   return prisma.instagramAccount.findMany({
-    where: { OR: [{ instagramId: userId }, { instagramScopedId: userId }] },
+    where: {
+      OR: [{ instagramId: userId }, { instagramScopedId: userId }, { metaLoginUserId: userId }],
+    },
     select: { id: true, instagramId: true, workspaceId: true, username: true },
   });
 }
