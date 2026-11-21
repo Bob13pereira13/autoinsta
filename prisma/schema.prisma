@@ -10,26 +10,26 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
+  id                String    @id @default(cuid())
+  name              String?
+  email             String?   @unique
+  emailVerified     DateTime?
+  image             String?
   /// scrypt hash (lib/auth/password.ts). Null until the user sets a password.
   passwordHash      String?
   /// Sessions issued before this instant are rejected (lib/auth.ts).
   passwordChangedAt DateTime?
   /// Set to block sign-in (npm run user -- disable <email>).
   disabledAt        DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  authTokens        AuthToken[]
-  accounts          Account[]
-  sessions          Session[]
-  ownedWorkspaces   Workspace[]       @relation("WorkspaceOwner")
-  workspaceMembers  WorkspaceMember[]
-  sentInvitations   WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
+  authTokens       AuthToken[]
+  accounts         Account[]
+  sessions         Session[]
+  ownedWorkspaces  Workspace[]           @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+  sentInvitations  WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
 }
 
 model Account {
@@ -75,13 +75,13 @@ model VerificationToken {
 /// is created by the operator, RESET for "forgot my password". Only the SHA-256
 /// of the token is stored.
 model AuthToken {
-  id        String        @id @default(cuid())
+  id        String           @id @default(cuid())
   userId    String
   purpose   AuthTokenPurpose
-  tokenHash String        @unique
+  tokenHash String           @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime      @default(now())
+  createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -115,6 +115,7 @@ model Workspace {
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
   serviceKeys       ServiceKey[]
+  automationMedia   AutomationMedia[]
 
   @@index([ownerId])
 }
@@ -171,16 +172,16 @@ model WorkspaceInvitation {
 }
 
 model InstagramAccount {
-  id                String   @id @default(cuid())
+  id                String            @id @default(cuid())
   workspaceId       String
-  instagramId       String   @unique
+  instagramId       String            @unique
   username          String
   name              String?
   provider          InstagramProvider @default(META)
   /// Which Meta setup issued the token, for META accounts. Existing rows are
   /// INSTAGRAM: their tokens only work on graph.instagram.com. UNIFIED tokens
   /// are business system user tokens that only work on graph.facebook.com.
-  metaLogin         MetaLogin @default(INSTAGRAM)
+  metaLogin         MetaLogin         @default(INSTAGRAM)
   zernioAccountId   String?
   /// App-scoped Instagram user id (`id` from /me). Meta's data deletion and
   /// deauthorize callbacks may identify the user by this id instead of
@@ -197,15 +198,17 @@ model InstagramAccount {
   /// Set when Meta rejects the token (revoked, expired or the app was removed
   /// on Instagram). Cleared on reconnect.
   tokenInvalidAt    DateTime?
-  webhookSubscribed Boolean  @default(false)
-  connectedAt       DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  webhookSubscribed Boolean           @default(false)
+  connectedAt       DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automations Automation[]
-  dmLogs      DmLog[]
-  linkClicks  LinkClick[]
-  followerSnapshots FollowerSnapshot[]
+  workspace            Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automations          Automation[]
+  dmLogs               DmLog[]
+  linkClicks           LinkClick[]
+  followerSnapshots    FollowerSnapshot[]
+  botMessages          BotMessage[]
+  conversationActivity ConversationActivity[]
 
   @@index([workspaceId])
   @@index([instagramScopedId])
@@ -233,80 +236,92 @@ model FollowerSnapshot {
 }
 
 model Automation {
-  id                 String   @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   instagramAccountId String
 
-  name           String
-  goal           String?
-  postId         String?
-  postUrl        String?
-  pendingNextReel Boolean @default(false)
-  matchAnyPost   Boolean @default(false)
-  keywords       String[]
-  matchAnyWord   Boolean @default(false)
-  // Also fire this campaign when someone sends a DM whose text matches the
-  // keywords above. Independent of the post trigger — a DM has no media, so
-  // postId / matchAnyPost do not apply to it.
-  dmTriggerEnabled Boolean @default(false)
-  dmMessage      String
-  openingDmEnabled     Boolean @default(false)
-  openingDmMessage     String?
-  openingDmButtonLabel String?
-  linkButtonLabel      String?
-  requireFollow           Boolean @default(false)
+  name                    String
+  goal                    String?
+  postId                  String?
+  postUrl                 String?
+  pendingNextReel         Boolean        @default(false)
+  matchAnyPost            Boolean        @default(false)
+  keywords                String[]
+  matchAnyWord            Boolean        @default(false)
+  /// Which channel triggers this automation. Existing rows are COMMENTS.
+  type                    AutomationType @default(COMMENTS)
+  /// STORIES only: answer replies to the account's stories.
+  triggerStoryReplies     Boolean        @default(true)
+  /// STORIES only: answer when someone mentions the account in their story.
+  /// A mention has no text, so only automations without keywords fire on it.
+  triggerStoryMentions    Boolean        @default(false)
+  /// STORIES/DIRECT without keywords: reply to the same person at most once
+  /// per this many hours.
+  replyCooldownHours      Int            @default(24)
+  /// Deprecated: replaced by DIRECT/STORIES automations (the migration that
+  /// added `type` converted every true value). Kept, always false, so API v1
+  /// readers keep the field.
+  dmTriggerEnabled        Boolean        @default(false)
+  dmMessage               String
+  openingDmEnabled        Boolean        @default(false)
+  openingDmMessage        String?
+  openingDmButtonLabel    String?
+  linkButtonLabel         String?
+  requireFollow           Boolean        @default(false)
   followPromptMessage     String?
   followPromptButtonLabel String?
-  followUpEnabled Boolean @default(false)
-  followUpMessage String?
+  followUpEnabled         Boolean        @default(false)
+  followUpMessage         String?
   // Minutes to wait after the link is delivered before sending the follow-up.
   // 0 sends it right away.
-  followUpDelayMinutes Int @default(0)
-  publicReplyEnabled Boolean @default(false)
-  publicReplyMessage String?
-  publicReplyMessages String[] @default([])
-  isActive       Boolean @default(true)
-  wholeWordMatch Boolean @default(true)
-  reportShareSlug    String? @unique
-  reportShareEnabled Boolean @default(true)
+  followUpDelayMinutes    Int            @default(0)
+  publicReplyEnabled      Boolean        @default(false)
+  publicReplyMessage      String?
+  publicReplyMessages     String[]       @default([])
+  isActive                Boolean        @default(true)
+  wholeWordMatch          Boolean        @default(true)
+  reportShareSlug         String?        @unique
+  reportShareEnabled      Boolean        @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount  @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
   dmLogs           DmLog[]
   trackedLinks     TrackedLink[]
   linkClicks       LinkClick[]
+  media            AutomationMedia[]
 
   @@index([workspaceId])
   @@index([instagramAccountId])
   @@index([postId])
+  @@index([instagramAccountId, type, isActive])
 }
 
 model DmLog {
-  id                 String     @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   automationId       String
   instagramAccountId String
 
-  commenterId   String
-  commenterName String?
-  commentText   String
-  commentId     String
+  commenterId    String
+  commenterName  String?
+  commentText    String
+  commentId      String
   matchedKeyword String?
-  status        DmStatus @default(PENDING)
-  attempts      Int      @default(0)
-  dmSentAt      DateTime?
-  errorMessage  String?
+  status         DmStatus  @default(PENDING)
+  attempts       Int       @default(0)
+  dmSentAt       DateTime?
+  errorMessage   String?
 
   // The public comment reply is delivered independently of the DM, so its
   // outcome is tracked separately. publicReplySentAt makes it idempotent across
   // retries; a DM failure never blocks or re-posts the public reply.
-  dmDeliveryUnconfirmed Boolean @default(false)
-  publicReplyDeliveryUnconfirmed Boolean @default(false)
-  publicReplySentAt DateTime?
-  publicReplyError  String?
+  dmDeliveryUnconfirmed          Boolean   @default(false)
+  publicReplyDeliveryUnconfirmed Boolean   @default(false)
+  publicReplySentAt              DateTime?
+  publicReplyError               String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -320,6 +335,8 @@ model DmLog {
   @@index([automationId])
   @@index([instagramAccountId])
   @@index([status])
+  @@index([automationId, commenterId, dmSentAt])
+  @@index([commentId])
 }
 
 // Legacy reconciliation model; currently unwired. Runtime code does not read
@@ -386,14 +403,14 @@ model LinkClick {
 }
 
 model WebhookEvent {
-  id          String        @id @default(cuid())
-  workspaceId String?
-  object      String?
-  payload     Json
-  status      WebhookStatus @default(PENDING)
+  id           String        @id @default(cuid())
+  workspaceId  String?
+  object       String?
+  payload      Json
+  status       WebhookStatus @default(PENDING)
   errorMessage String?
-  createdAt   DateTime      @default(now())
-  processedAt DateTime?
+  createdAt    DateTime      @default(now())
+  processedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
@@ -402,13 +419,13 @@ model WebhookEvent {
 }
 
 model OperationalEvent {
-  id          String                @id @default(cuid())
+  id          String                 @id @default(cuid())
   workspaceId String?
   source      OperationalEventSource
-  level       OperationalEventLevel @default(INFO)
+  level       OperationalEventLevel  @default(INFO)
   message     String
   payload     Json?
-  createdAt   DateTime              @default(now())
+  createdAt   DateTime               @default(now())
   resolvedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -447,6 +464,76 @@ enum DataDeletionStatus {
   FAILED
 }
 
+enum AutomationType {
+  COMMENTS
+  STORIES
+  DIRECT
+}
+
+/// Which configurable message a media file belongs to.
+enum MessageSlot {
+  OPENING
+  FOLLOW_PROMPT
+  MAIN
+  FOLLOW_UP
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+/// An image or video uploaded from the dashboard (lib/media/storage.ts). The
+/// file lives in UPLOADS_DIR under `storageKey` and is served publicly at
+/// /media/<storageKey> so Meta can download it. `automationId` is null between
+/// the upload and saving the automation; unattached uploads are purged daily.
+model AutomationMedia {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  automationId String?
+  slot         MessageSlot?
+  position     Int          @default(0)
+  kind         MediaKind
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String       @unique
+  originalName String?
+  createdAt    DateTime     @default(now())
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation Automation? @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([automationId])
+}
+
+/// Message ids (mid) of DMs sent by the automations. An echo webhook whose mid
+/// is not here was sent by a person (Instagram app, Business Suite, Inbox).
+/// Kept 7 days (lib/privacy/purge.ts).
+model BotMessage {
+  mid                String   @id
+  instagramAccountId String
+  recipientId        String
+  createdAt          DateTime @default(now())
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+/// Last time a human from the account messaged this person; no-keyword
+/// STORIES/DIRECT automations stay quiet for 24 hours after it.
+model ConversationActivity {
+  instagramAccountId String
+  recipientId        String
+  lastHumanMessageAt DateTime
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@id([instagramAccountId, recipientId])
+  @@index([lastHumanMessageAt])
+}
+
 enum WorkspaceRole {
   OWNER
   ADMIN
@@ -468,6 +555,12 @@ enum DmStatus {
   SKIPPED_RATE_LIMIT
   SKIPPED_PLAN_LIMIT
   SKIPPED_NO_MATCH
+  /// No-keyword STORIES/DIRECT automation already answered this person
+  /// within replyCooldownHours.
+  SKIPPED_COOLDOWN
+  /// No-keyword STORIES/DIRECT: a human from the account talked to this
+  /// person in the last 24 hours.
+  SKIPPED_HUMAN_ACTIVE
 }
 
 enum WebhookStatus {
@@ -489,7 +582,6 @@ enum OperationalEventLevel {
   ERROR
 }
 
-
 enum InstagramProvider {
   META
   ZERNIO
@@ -502,18 +594,18 @@ enum MetaLogin {
 }
 
 model ZernioConnection {
-  workspaceId    String @id
-  apiKey         String
-  profileId      String?
-  webhookId      String?
-  webhookSecret  String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String    @id
+  apiKey        String
+  profileId     String?
+  webhookId     String?
+  webhookSecret String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 // Claims persist independently of BullMQ retention so old taps never resend.
 model PostbackDelivery {
-  id String @id
+  id        String   @id
   createdAt DateTime @default(now())
 }
