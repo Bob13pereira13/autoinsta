@@ -4,6 +4,20 @@ import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { deleteMediaFiles, mediaKeysForAutomations } from "@/lib/media/storage";
 import {
+  enabledMediaSlots,
+  MediaAttachError,
+  mediaInputSchema,
+  resolveMediaInput,
+  syncAutomationMedia,
+} from "@/lib/media/attach";
+import { mediaPublicUrl } from "@/lib/media/urls";
+import {
+  AUTOMATION_TYPES,
+  automationRuleIssues,
+  sanitizeForType,
+  type RuleIssue,
+} from "@/lib/automation/rules";
+import {
   calculateCtr,
   CLICK_ROW_SELECT,
   countUniqueClicksBy,
@@ -29,6 +43,11 @@ const createAutomationSchema = z
   .object({
     name: z.string().min(1).max(100),
     goal: z.string().min(1).max(120).optional().nullable(),
+    type: z.enum(AUTOMATION_TYPES).optional().default("COMMENTS"),
+    triggerStoryReplies: z.boolean().optional().default(true),
+    triggerStoryMentions: z.boolean().optional().default(false),
+    replyCooldownHours: z.number().int().min(1).max(168).optional().default(24),
+    media: mediaInputSchema.optional().default([]),
     instagramAccountId: z.string().min(1).optional().nullable(),
     postId: z.string().min(1).optional().nullable(),
     postUrl: z.string().url().optional().nullable(),
@@ -71,28 +90,22 @@ const createAutomationSchema = z
     isActive: z.boolean().optional().default(true),
     wholeWordMatch: z.boolean().optional().default(true),
   })
-  // A campaign must target a specific post, any post, or the next reel.
-  .refine(
-    (d) => d.matchAnyPost || d.pendingNextReel || Boolean(d.postId),
-    { message: "Choose which post(s) trigger the campaign", path: ["postId"] }
-  )
-  // And it must match either specific words or any word.
-  .refine((d) => d.matchAnyWord || d.keywords.length >= 1, {
-    message: "Add at least one keyword, or match any word",
-    path: ["keywords"],
-  })
-  // An opening DM needs both a message and a button label.
-  .refine(
-    (d) =>
-      !d.openingDmEnabled ||
-      (Boolean(d.openingDmMessage?.trim()) &&
-        Boolean(d.openingDmButtonLabel?.trim())),
-    { message: "Opening DM needs a message and a button label", path: ["openingDmMessage"] }
-  );
+  // Which options combine depends on the type (lib/automation/rules.ts).
+  // Media kinds are checked in the handler, once the uploads are looked up.
+  .superRefine((d, ctx) => {
+    for (const issue of automationRuleIssues({ ...d, media: [] })) {
+      ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message });
+    }
+  });
 
 const updateAutomationSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   goal: z.string().min(1).max(120).optional().nullable(),
+  type: z.enum(AUTOMATION_TYPES).optional(),
+  triggerStoryReplies: z.boolean().optional(),
+  triggerStoryMentions: z.boolean().optional(),
+  replyCooldownHours: z.number().int().min(1).max(168).optional(),
+  media: mediaInputSchema.optional(),
   instagramAccountId: z.string().min(1).optional(),
   postId: z.string().min(1).optional().nullable(),
   postUrl: z.string().url().optional().nullable(),
@@ -132,6 +145,31 @@ const updateAutomationSchema = z.object({
   secondaryButtonLabel: z.string().max(20).optional().nullable(),
 });
 
+const RULE_FIELDS = [
+  "type",
+  "matchAnyPost",
+  "pendingNextReel",
+  "postId",
+  "matchAnyWord",
+  "keywords",
+  "openingDmEnabled",
+  "openingDmMessage",
+  "openingDmButtonLabel",
+  "triggerStoryReplies",
+  "triggerStoryMentions",
+  "requireFollow",
+  "followUpEnabled",
+] as const;
+
+function invalidRules(issues: RuleIssue[]) {
+  const fieldErrors: Record<string, string[]> = {};
+  for (const issue of issues) (fieldErrors[issue.path] ??= []).push(issue.message);
+  return NextResponse.json(
+    { success: false, error: issues[0]?.message ?? "Invalid input", details: { fieldErrors } },
+    { status: 400 }
+  );
+}
+
 export async function GET(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
@@ -165,6 +203,10 @@ export async function GET(request: NextRequest) {
           _count: { select: { clicks: true } },
         },
         orderBy: TRACKED_LINK_ORDER,
+      },
+      media: {
+        select: { id: true, slot: true, kind: true, mimeType: true, sizeBytes: true, originalName: true, position: true, storageKey: true },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
     },
     orderBy: { createdAt: "desc" },
@@ -266,8 +308,11 @@ export async function GET(request: NextRequest) {
         topKeywords: [],
       };
 
+      const { media, ...rest } = automation;
       return {
-        ...automation,
+        ...rest,
+        // Public URL for previews; the storage key itself is not exposed.
+        media: media.map(({ storageKey, ...m }) => ({ ...m, url: mediaPublicUrl(storageKey) })),
         trackedLinks: automation.trackedLinks.map((link) => ({
           ...link,
           trackedUrl: buildTrackedUrl(link.slug),
@@ -317,6 +362,22 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  let mediaItems: Awaited<ReturnType<typeof resolveMediaInput>>;
+  try {
+    mediaItems = await resolveMediaInput(workspaceId, null, parsed.data.media);
+  } catch (err) {
+    if (err instanceof MediaAttachError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+  const mediaSlots = enabledMediaSlots(parsed.data);
+  const ruleIssues = automationRuleIssues({
+    ...parsed.data,
+    media: mediaItems.filter((m) => mediaSlots.has(m.slot)),
+  });
+  if (ruleIssues.length) return invalidRules(ruleIssues);
 
   const requestedInstagramAccountId =
     parsed.data.instagramAccountId && parsed.data.instagramAccountId !== "all"
@@ -373,10 +434,16 @@ export async function POST(request: NextRequest) {
     .map((m) => m.trim())
     .filter(Boolean);
 
-  const automation = await prisma.automation.create({
-    data: {
+  const type = parsed.data.type;
+  const automation = await prisma.$transaction(async (tx) => {
+    const created = await tx.automation.create({
+    data: sanitizeForType(type, {
       name: parsed.data.name,
       goal: parsed.data.goal,
+      type,
+      triggerStoryReplies: parsed.data.triggerStoryReplies,
+      triggerStoryMentions: parsed.data.triggerStoryMentions,
+      replyCooldownHours: parsed.data.replyCooldownHours,
       // A next-reel campaign has no post yet; the cron binds it once a reel is posted.
       postId: isSpecificPost ? parsed.data.postId : null,
       postUrl: isSpecificPost ? parsed.data.postUrl : null,
@@ -423,10 +490,18 @@ export async function POST(request: NextRequest) {
       ...(linkCreates.length > 0
         ? { trackedLinks: { create: linkCreates } }
         : {}),
-    },
+    }),
     include: {
       trackedLinks: true,
     },
+    });
+    await syncAutomationMedia(tx, {
+      automationId: created.id,
+      workspaceId,
+      items: mediaItems,
+      enabledSlots: mediaSlots,
+    });
+    return created;
   });
 
   return NextResponse.json(
@@ -490,6 +565,7 @@ export async function PATCH(request: NextRequest) {
     trackedDestinationUrl,
     secondaryDestinationUrl,
     secondaryButtonLabel,
+    media: mediaInput,
     ...automationData
   } = parsed.data;
 
@@ -543,13 +619,55 @@ export async function PATCH(request: NextRequest) {
     automationData.publicReplyMessage = null;
   }
 
+  // Validate the automation as it will be after this save.
+  const type = automationData.type ?? existing.type;
+  const merged = { ...existing, ...automationData, type };
+  let mediaItems: Awaited<ReturnType<typeof resolveMediaInput>>;
+  try {
+    mediaItems =
+      mediaInput !== undefined
+        ? await resolveMediaInput(workspaceId, automationId, mediaInput)
+        : (
+            await prisma.automationMedia.findMany({
+              where: { automationId },
+              select: { id: true, slot: true, kind: true, position: true },
+            })
+          ).flatMap((m) => (m.slot && m.slot !== "OPENING" ? [{ ...m, slot: m.slot }] : []));
+  } catch (err) {
+    if (err instanceof MediaAttachError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+  const mediaSlots = enabledMediaSlots(merged);
+  // Only a save that changes how the automation fires or what it sends is
+  // re-validated: pausing, renaming or moving an older automation must keep
+  // working even if it predates a rule.
+  const touchesRules =
+    mediaInput !== undefined ||
+    RULE_FIELDS.some((field) => (automationData as Record<string, unknown>)[field] !== undefined);
+  if (touchesRules) {
+    const ruleIssues = automationRuleIssues({
+      ...merged,
+      media: mediaItems.filter((m) => mediaSlots.has(m.slot)),
+    });
+    if (ruleIssues.length) return invalidRules(ruleIssues);
+  }
+
   // One transaction, so a save never lands half applied. Updating the campaign
   // first locks its row, which makes a second save of the same campaign wait
   // for this one before it reads the links.
+  let removedMediaKeys: string[] = [];
   const updated = await prisma.$transaction(async (tx) => {
     const campaign = await tx.automation.update({
       where: { id: automationId },
-      data: automationData,
+      data: sanitizeForType(type, automationData),
+    });
+    removedMediaKeys = await syncAutomationMedia(tx, {
+      automationId,
+      workspaceId,
+      items: mediaItems,
+      enabledSlots: mediaSlots,
     });
 
     await syncCampaignLinks(tx, {
@@ -562,6 +680,7 @@ export async function PATCH(request: NextRequest) {
 
     return campaign;
   });
+  await deleteMediaFiles(removedMediaKeys);
 
   return NextResponse.json({ success: true, data: updated });
 }

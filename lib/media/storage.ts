@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/db/client";
 
@@ -176,6 +176,27 @@ export async function storeUpload({
     await deleteMediaFiles([storageKey]);
     throw err;
   }
+}
+
+/**
+ * Copy stored files under new keys (for a duplicated automation), so deleting
+ * one automation never removes the other's media. Returns new keys in order.
+ */
+export async function copyMediaFiles(storageKeys: string[]): Promise<string[]> {
+  await ensureUploadsDir();
+  const copies: string[] = [];
+  try {
+    for (const key of storageKeys) {
+      const ext = key.split(".").pop();
+      const copy = `${randomBytes(32).toString("base64url")}.${ext}`;
+      await copyFile(resolveMediaPath(key), resolveMediaPath(copy));
+      copies.push(copy);
+    }
+  } catch (err) {
+    await deleteMediaFiles(copies);
+    throw err;
+  }
+  return copies;
 }
 
 /** Remove files from disk; a file that is already gone is fine. */

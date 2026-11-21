@@ -10,6 +10,12 @@ const { mockPrisma, mockSyncCampaignLinks } = vi.hoisted(() => {
     instagramAccount: {
       findFirst: vi.fn(),
     },
+    // Media attached to the campaign (none in these tests).
+    automationMedia: {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn(),
+      updateMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   };
   return { mockPrisma, mockSyncCampaignLinks: vi.fn() };

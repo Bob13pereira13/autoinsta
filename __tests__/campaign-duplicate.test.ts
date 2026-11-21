@@ -200,7 +200,7 @@ describe("duplicateCampaign", () => {
 
     expect(mockPrisma.automation.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        include: { trackedLinks: { orderBy: TRACKED_LINK_ORDER } },
+        include: expect.objectContaining({ trackedLinks: { orderBy: TRACKED_LINK_ORDER } }),
       })
     );
   });

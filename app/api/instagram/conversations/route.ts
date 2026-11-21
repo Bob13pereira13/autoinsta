@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordHumanMessage } from "@/lib/automation/guards";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import {
@@ -150,6 +151,11 @@ export async function POST(request: NextRequest) {
       userId: body.recipientId,
       message: text,
     });
+    // A person from the account is talking to this contact: automations
+    // without keywords (Stories/Direct) stay quiet with them for 24 hours.
+    await recordHumanMessage({ accountConnectionId: account.id, recipientId: body.recipientId }).catch(
+      (error) => console.warn("[Conversations] Could not record human reply:", error)
+    );
     return NextResponse.json({ success: true, data: result });
   } catch (err) {
     console.error("[Conversations] Send error:", err);

@@ -23,7 +23,7 @@ export type AttachNextReelResult = {
  */
 export async function attachPendingNextReels(): Promise<AttachNextReelResult> {
   const pending = await prisma.automation.findMany({
-    where: { pendingNextReel: true },
+    where: { pendingNextReel: true, type: "COMMENTS" },
     include: { instagramAccount: true },
   });
 

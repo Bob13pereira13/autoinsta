@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/client";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { TRACKED_LINK_ORDER } from "@/lib/tracking/link-order";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
+import { copyMediaFiles, deleteMediaFiles, workspaceMediaUsageBytes, workspaceQuotaBytes } from "@/lib/media/storage";
 
 // Matches the campaign name limit the create and update schemas enforce.
 const MAX_NAME_LENGTH = 100;
@@ -32,7 +33,10 @@ export function buildDuplicateName(name: string): string {
  * Four things are deliberately not carried over: the copy starts paused so it
  * cannot fire before it has been reviewed, it gets its own report share slug,
  * its tracked links get fresh slugs so click stats stay separate from the
- * original's, and the name gains a "copy" suffix.
+ * original's, and the name gains a "copy" suffix. Media files are copied to
+ * new files (so deleting one automation never removes the other's), unless
+ * that would exceed the workspace's storage quota — then the copy is made
+ * without media and `mediaSkipped` is true.
  */
 export async function duplicateCampaign({
   automationId,
@@ -43,16 +47,31 @@ export async function duplicateCampaign({
 }) {
   const source = await prisma.automation.findFirst({
     where: { id: automationId, workspaceId },
-    include: { trackedLinks: { orderBy: TRACKED_LINK_ORDER } },
+    include: {
+      trackedLinks: { orderBy: TRACKED_LINK_ORDER },
+      media: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
+    },
   });
 
   if (!source) return null;
 
-  // Every setting on the row carries over. The links are recreated rather than
-  // spread, since they are rows of their own.
-  const { trackedLinks, ...settings } = source;
+  // Every setting on the row carries over. The links and media are recreated
+  // rather than spread, since they are rows of their own.
+  const { trackedLinks, media = [], ...settings } = source;
 
-  return prisma.automation.create({
+  let mediaCopies: Array<{ storageKey: string; source: (typeof media)[number] }> = [];
+  let mediaSkipped = false;
+  if (media.length > 0) {
+    const needed = media.reduce((sum, m) => sum + m.sizeBytes, 0);
+    if ((await workspaceMediaUsageBytes(workspaceId)) + needed > workspaceQuotaBytes()) {
+      mediaSkipped = true;
+    } else {
+      const keys = await copyMediaFiles(media.map((m) => m.storageKey));
+      mediaCopies = keys.map((storageKey, i) => ({ storageKey, source: media[i] }));
+    }
+  }
+
+  const created = await prisma.automation.create({
     data: {
       ...settings,
       // The rest of the row identifies the original rather than describing it,
@@ -76,7 +95,28 @@ export async function duplicateCampaign({
           position,
         })),
       },
+      ...(mediaCopies.length
+        ? {
+            media: {
+              create: mediaCopies.map(({ storageKey, source: m }) => ({
+                workspaceId: source.workspaceId,
+                slot: m.slot,
+                position: m.position,
+                kind: m.kind,
+                mimeType: m.mimeType,
+                sizeBytes: m.sizeBytes,
+                storageKey,
+                originalName: m.originalName,
+              })),
+            },
+          }
+        : {}),
     },
     include: { trackedLinks: true },
+  }).catch(async (err) => {
+    await deleteMediaFiles(mediaCopies.map((c) => c.storageKey));
+    throw err;
   });
+
+  return Object.assign(created, { mediaSkipped });
 }
