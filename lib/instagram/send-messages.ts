@@ -245,6 +245,22 @@ export async function sendDirectMessageWithLinkButton({
   });
 }
 
+export async function sendDirectAttachment({
+  context,
+  instagramAccountId,
+  userId,
+  attachment,
+}: {
+  context: InstagramContext;
+  instagramAccountId: string;
+  userId: string;
+  attachment: meta.DirectAttachment;
+}) {
+  if (context.provider === "META")
+    return meta.sendDirectAttachment(context, instagramAccountId, userId, attachment);
+  throw new Error("Media messages are only supported on the official Meta API");
+}
+
 export async function sendCommentReply({
   context,
   commentId,

@@ -67,25 +67,41 @@ export interface ProcessFollowUpJob {
   commenterName?: string | null;
 }
 
-// An inbound DM from a user. Campaigns with `dmTriggerEnabled` whose keywords
-// match the text reply to the sender.
+// An inbound message: a DM (DIRECT automations) or a story reply / mention
+// (STORIES automations). Jobs queued before channels existed have no
+// `channel` and are treated as DIRECT.
 export interface ProcessMessageJob {
   accountConnectionId?: string;
   instagramAccountId: string;
   messageId: string;
   messageText: string;
   senderId: string;
+  channel?: "DIRECT" | "STORY_REPLY" | "STORY_MENTION";
+  storyId?: string;
+  requeueAttempt?: number;
+}
+
+// A message the account itself sent (echo). Checked against the bot's own
+// message ids to detect a person replying from the Instagram app.
+export interface ProcessEchoJob {
+  accountConnectionId?: string;
+  instagramAccountId: string;
+  recipientId: string;
+  messageId: string;
+  echo: true;
 }
 
 export type DmQueueJob =
   | ProcessCommentJob
   | ProcessPostbackJob
   | ProcessFollowUpJob
-  | ProcessMessageJob;
+  | ProcessMessageJob
+  | ProcessEchoJob;
 
 export const POSTBACK_JOB_NAME = "process-postback";
 export const FOLLOWUP_JOB_NAME = "process-followup";
 export const MESSAGE_JOB_NAME = "process-message";
+export const ECHO_JOB_NAME = "process-echo";
 
 let dmQueue: Queue<DmQueueJob> | null = null;
 

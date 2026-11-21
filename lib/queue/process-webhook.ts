@@ -1,9 +1,13 @@
 import { prisma } from '@/lib/db/client';
-import { getDMQueue, MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from '@/lib/queue/client';
-import { parseCommentEvents, parseMessageEvents, parsePostbackEvents, parseReadEvents } from '@/lib/meta/webhook';
+import { ECHO_JOB_NAME, getDMQueue, MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from '@/lib/queue/client';
+import { parseCommentEvents, parseEchoEvents, parseMessageEvents, parsePostbackEvents, parseReadEvents } from '@/lib/meta/webhook';
 import { Prisma, type InstagramProvider } from '@/app/generated/prisma/client';
 
 const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
+// Echoes are checked against the ids of the bot's own sends. The worker
+// records an id right after Meta answers the send, but the echo webhook can
+// arrive before that, so the check waits a little.
+const ECHO_CHECK_DELAY_MS = 20 * 1000;
 type InstagramPayload = Parameters<typeof parseCommentEvents>[0];
 
 export async function processInstagramWebhook({ payload: incoming, provider, workspaceId }: {
@@ -91,7 +95,7 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
       );
     }
 
-    // Inbound DMs → keyword-triggered autoreply.
+    // Inbound DMs, story replies and story mentions → Direct / Stories automations.
     const messageEvents = parseMessageEvents(
       payload as Parameters<typeof parseMessageEvents>[0]
     );
@@ -108,6 +112,8 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
           messageId: event.messageId,
           messageText: event.messageText,
           senderId: event.senderId,
+          channel: event.channel,
+          ...(event.storyId ? { storyId: event.storyId } : {}),
         },
         {
           // Message ids can contain characters BullMQ rejects in a job id (":"
@@ -126,6 +132,27 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
           data: { workspaceId: account.workspaceId },
         });
       }
+    }
+
+    // Messages the account sent: a person replying from the Instagram app
+    // pauses no-keyword Stories/Direct automations with that person for 24h.
+    for (const event of parseEchoEvents(payload as Parameters<typeof parseEchoEvents>[0])) {
+      const account = accountMap.get(event.instagramAccountId);
+      if (!account) continue;
+      await queue.add(
+        ECHO_JOB_NAME,
+        {
+          instagramAccountId: event.instagramAccountId,
+          accountConnectionId: account.id,
+          recipientId: event.recipientId,
+          messageId: event.messageId,
+          echo: true,
+        },
+        {
+          delay: ECHO_CHECK_DELAY_MS,
+          jobId: `echo_${event.instagramAccountId}_${Buffer.from(event.messageId).toString("base64url")}`,
+        }
+      );
     }
 
     // If a user reads the opening DM and never taps the button, deliver the

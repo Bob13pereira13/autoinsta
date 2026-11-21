@@ -446,6 +446,53 @@ export async function sendDirectMessage(
  * Send a direct message as a button template with up to 3 web_url buttons —
  * the reveal message plus tappable link buttons (cleaner than inline URLs).
  */
+export type DirectAttachment = { type: "image" | "video"; url: string };
+
+/**
+ * Send one image or video by public URL (Meta downloads it). Images: PNG/JPEG
+ * up to 8 MB; video: MP4/MOV/WEBM up to 25 MB. Only works inside an open
+ * conversation (the person messaged or tapped a button) — never as a private
+ * reply to a comment, which Meta documents as text only.
+ *
+ * Instagram Login documents images in an `attachments` array and video as a
+ * single `attachment`; the Messenger-style API behind Unified login uses the
+ * single form for both. An image rejected in one shape (invalid parameter)
+ * is retried once in the other.
+ */
+export async function sendDirectAttachment(
+  auth: MetaAuth,
+  instagramAccountId: string,
+  userId: string,
+  attachment: DirectAttachment
+): Promise<{ recipient_id: string; message_id: string }> {
+  const accessToken = tokenOf(auth);
+  const post = async (message: Record<string, unknown>) =>
+    handleResponse<{ recipient_id: string; message_id: string }>(
+      await fetch(`${instagramGraphBase(auth)}/${instagramAccountId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ recipient: { id: userId }, message }),
+      })
+    );
+
+  const single = { attachment: { type: attachment.type, payload: { url: attachment.url } } };
+  if (attachment.type !== "image") return post(single);
+
+  const array = { attachments: [{ type: "image", payload: { url: attachment.url } }] };
+  const [first, second] = isUnified(auth) ? [single, array] : [array, single];
+  try {
+    return await post(first);
+  } catch (err) {
+    if (err instanceof MetaApiError && err.code === 100 && !/window|not.*follow|cannot be found/i.test(err.message)) {
+      return post(second);
+    }
+    throw err;
+  }
+}
+
 export async function sendDirectMessageWithLinkButton(
   auth: MetaAuth,
   instagramAccountId: string,

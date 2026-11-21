@@ -252,3 +252,64 @@ export async function resetRateLimit(
 
 // Export constants for use in tests
 export { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, REQUEUE_DELAY_MS, MAX_REQUEUE_ATTEMPTS };
+
+// Reserve `count` sends at once, all or nothing, on the same hourly counter as
+// reserveDMSlot. Used for messages with media: every image or video is its own
+// Meta call and counts against the account's limit.
+const RESERVE_N_SLOTS_SCRIPT = `
+local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+local count = tonumber(ARGV[1])
+local max = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
+
+if current + count > max then
+  return {0, current}
+end
+
+local next_count = redis.call("INCRBY", KEYS[1], count)
+if next_count == count then
+  redis.call("EXPIRE", KEYS[1], ttl)
+end
+
+return {1, next_count}
+`;
+
+/**
+ * Atomically reserve `count` Meta send calls for this account. Returns false
+ * (reserving nothing) when that would go over the hourly cap.
+ */
+export async function reserveSendSlots(
+  instagramAccountId: string,
+  count: number
+): Promise<boolean> {
+  if (count <= 0) return true;
+  const result = await getRedis().eval(
+    RESERVE_N_SLOTS_SCRIPT,
+    1,
+    `rate:dm:${instagramAccountId}`,
+    count,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW
+  );
+  const values = Array.isArray(result) ? result : [];
+  return toScriptNumber(values[0]) === 1;
+}
+
+/**
+ * Count Meta send calls that happen outside the reserve/requeue flow (button
+ * taps, follow-ups) so the hourly counter reflects every call. Never blocks.
+ */
+export async function countSendCalls(
+  instagramAccountId: string,
+  count = 1
+): Promise<void> {
+  if (count <= 0) return;
+  try {
+    const client = getRedis();
+    const key = `rate:dm:${instagramAccountId}`;
+    const next = await client.incrby(key, count);
+    if (next === count) await client.expire(key, RATE_LIMIT_WINDOW);
+  } catch (err) {
+    console.warn("[rate-limiter] Could not count send call:", err instanceof Error ? err.message : err);
+  }
+}

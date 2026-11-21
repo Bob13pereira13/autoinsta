@@ -10,11 +10,13 @@ import { UnrecoverableError, Worker, type Job } from "bullmq";
 import {
   getDMQueue,
   getRedisConnection,
+  ECHO_JOB_NAME,
   MESSAGE_JOB_NAME,
   POSTBACK_JOB_NAME,
   FOLLOWUP_JOB_NAME,
   type DmQueueJob,
   type ProcessCommentJob,
+  type ProcessEchoJob,
   type ProcessMessageJob,
   type ProcessPostbackJob,
   type ProcessFollowUpJob,
@@ -27,20 +29,27 @@ import {
   getUserFollowStatus,
   resolveRecipientName,
   sendCommentReply,
+} from "@/lib/instagram/provider";
+// Same send functions as the provider's, plus a record of each message id the
+// automations send (echoes of other ids come from a person; see guards.ts).
+import {
+  sendDirectAttachment,
   sendDirectMessage,
   sendDirectMessageWithButton,
   sendDirectMessageWithLinkButton,
   sendPrivateReply,
   sendPrivateReplyWithButton,
   sendPrivateReplyWithLinkButton,
-} from "@/lib/instagram/provider";
+} from "@/lib/automation/bot-send";
+import { isGuardedAutomation, selectAutomation, type TriggerEvent } from "@/lib/automation/select";
+import { claimReplyCooldown, handleEcho, isHumanConversationActive } from "@/lib/automation/guards";
+import { mediaPublicUrl } from "@/lib/media/urls";
 import {
   createInstagramContext,
   hasInstagramCredentials,
   type InstagramContext,
 } from "@/lib/instagram/provider";
-import { matchKeywords } from "@/lib/utils/keyword-matcher";
-import { reserveDMSlot, releaseDMSlot } from "@/lib/utils/rate-limiter";
+import { countSendCalls, reserveDMSlot, releaseDMSlot, reserveSendSlots } from "@/lib/utils/rate-limiter";
 import {
   releaseWorkspaceDMReservation,
   reserveWorkspaceDMSend,
@@ -273,6 +282,81 @@ async function sendRevealDirectMessage({
 }
 
 
+// Media attached to an automation's messages (see AutomationMedia).
+const MEDIA_INCLUDE = {
+  select: { slot: true, kind: true, storageKey: true, position: true },
+  orderBy: [{ position: "asc" as const }, { createdAt: "asc" as const }],
+};
+
+type SlotMedia = {
+  slot: string | null;
+  kind: string;
+  storageKey: string;
+  position: number;
+};
+
+/**
+ * Send the images/videos of one message slot, after its text. Only ever runs
+ * inside an open conversation (Stories/Direct, or after a button tap on a
+ * comment flow): Meta documents the private reply to a comment as text only.
+ *
+ * Best-effort by design: the text (with the link) has already been delivered
+ * and must not be retried because of a media problem. Every file is its own
+ * Meta call, so the whole batch is reserved on the account's hourly send
+ * counter first; when that would go over, no media is sent. Returns a note
+ * for the log, or null when everything went out.
+ */
+async function sendSlotMedia({
+  accessToken,
+  automation,
+  slot,
+  userId,
+}: {
+  accessToken: InstagramContext;
+  automation: { media?: SlotMedia[]; instagramAccount: { instagramId: string } };
+  slot: "FOLLOW_PROMPT" | "MAIN" | "FOLLOW_UP";
+  userId: string;
+}): Promise<string | null> {
+  const items = (automation.media ?? []).filter((item) => item.slot === slot);
+  if (items.length === 0) return null;
+
+  const instagramId = automation.instagramAccount.instagramId;
+  if (!(await reserveSendSlots(instagramId, items.length))) {
+    return "Media not sent: the account's hourly send limit was reached";
+  }
+
+  const failures: string[] = [];
+  for (const item of items) {
+    try {
+      await sendDirectAttachment({
+        context: accessToken,
+        instagramAccountId: instagramId,
+        userId,
+        attachment: {
+          type: item.kind === "VIDEO" ? "video" : "image",
+          url: mediaPublicUrl(item.storageKey),
+        },
+      });
+    } catch (error) {
+      failures.push(formatError(error));
+    }
+  }
+  return failures.length
+    ? `Media not fully sent (${failures.length}/${items.length} failed): ${failures[0]}`
+    : null;
+}
+
+/** The automation that already logged this event, for selectAutomation's sticky rule. */
+async function findStickyAutomationId(eventId: string, automationIds: string[]): Promise<string | null> {
+  if (automationIds.length < 2) return null;
+  const existing = await prisma.dmLog.findFirst({
+    where: { commentId: eventId, automationId: { in: automationIds } },
+    orderBy: { createdAt: "asc" },
+    select: { automationId: true },
+  });
+  return existing?.automationId ?? null;
+}
+
 function connectionScope(data: DmQueueJob) {
   return data.accountConnectionId ? { instagramAccountId: data.accountConnectionId } : {};
 }
@@ -289,9 +373,10 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
   } = job.data;
   const requeueAttempt = job.data.requeueAttempt ?? 0;
 
-  const automations = await prisma.automation.findMany({
+  const candidates = await prisma.automation.findMany({
     where: {
       ...connectionScope(job.data),
+      type: "COMMENTS",
       // Match campaigns bound to this specific post, plus any-post campaigns.
       // A comment left on an ad carries the ad's own media id, while the
       // campaign is bound to the post the ad was created from, so both ids
@@ -317,23 +402,28 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         },
         orderBy: TRACKED_LINK_ORDER,
       },
+      media: MEDIA_INCLUDE,
     },
     orderBy: { createdAt: "asc" },
   });
 
-  for (const automation of automations) {
-    // "Any word" campaigns fire on every comment; otherwise require a keyword hit.
-    const matchResult = automation.matchAnyWord
-      ? { matched: true, matchedKeyword: null }
-      : matchKeywords(
-          commentText,
-          automation.keywords,
-          automation.wholeWordMatch
-        );
+  // Each comment fires at most ONE automation — DM and public reply alike.
+  // Keyword beats no keyword, a specific post beats "any post", then the
+  // oldest (lib/automation/select.ts). An automation that already handled this
+  // comment keeps it, so retries and pre-deploy logs stay consistent.
+  const commentEvent: TriggerEvent = {
+    kind: "COMMENT",
+    text: commentText,
+    mediaId,
+    ...(originalMediaId ? { originalMediaId } : {}),
+  };
+  const selection = selectAutomation(candidates, commentEvent, {
+    stickyAutomationId: await findStickyAutomationId(commentId, candidates.map((a) => a.id)),
+  });
+  const automations = selection ? [selection.automation] : [];
 
-    if (!matchResult.matched) {
-      continue;
-    }
+  for (const automation of automations) {
+    const matchResult = { matched: true, matchedKeyword: selection?.matchedKeyword ?? null };
 
     const existingLog = await prisma.dmLog.findUnique({
       where: {
@@ -472,6 +562,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           message: publicReply,
           postId: mediaId,
         });
+        await countSendCalls(instagramAccountId);
         await prisma.dmLog.update({
           where: {
             automationId_commentId: { automationId: automation.id, commentId },
@@ -873,6 +964,7 @@ async function sendFollowRecheckAck({
     } else {
       await send();
     }
+    await countSendCalls(instagramAccountId);
   } catch (error) {
     console.log(
       "[DM Worker] Failed to send follow re-check acknowledgement:",
@@ -907,6 +999,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         select: { slug: true, label: true, destinationUrl: true },
         orderBy: TRACKED_LINK_ORDER,
       },
+      media: MEDIA_INCLUDE,
     },
   });
 
@@ -1058,7 +1151,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         commenterName,
       });
       try {
-        await sendPostbackOnce({
+        const promptDelivered = await sendPostbackOnce({
           operationId,
           send: () =>
             sendDirectMessageWithButton({
@@ -1071,6 +1164,11 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
               payload: `followcheck:${automation.id}`,
             }),
         });
+        if (promptDelivered) {
+          await countSendCalls(automation.instagramAccount.instagramId);
+          const note = await sendSlotMedia({ accessToken, automation, slot: "FOLLOW_PROMPT", userId });
+          if (note) console.log("[DM Worker] Follow prompt media:", note);
+        }
       } catch (error) {
         console.log(
           "[DM Worker] Failed to re-send follow prompt:",
@@ -1125,6 +1223,10 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
       );
       return;
     }
+    // The conversation is open now (the person tapped), so the main message's
+    // media can follow the text. It never blocks or retries the text above.
+    await countSendCalls(automation.instagramAccount.instagramId);
+    const mediaNote = await sendSlotMedia({ accessToken, automation, slot: "MAIN", userId });
     // Optional appreciation follow-up: once the link has been delivered, send a
     // short thank-you. It is scheduled as its own delayed job so it can go out
     // some minutes later (followUpDelayMinutes) rather than immediately. The
@@ -1164,8 +1266,9 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         commentId: dedupeId,
         status: "SENT",
         dmSentAt: new Date(),
+        errorMessage: mediaNote,
       },
-      update: { status: "SENT", dmSentAt: new Date(), errorMessage: null },
+      update: { status: "SENT", dmSentAt: new Date(), errorMessage: mediaNote },
     });
   } catch (originalError) {
     const error = classifySendError(originalError);
@@ -1228,7 +1331,7 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
 
   const automation = await prisma.automation.findFirst({
     where: { id: automationId, isActive: true, ...connectionScope(job.data) },
-    include: { instagramAccount: true },
+    include: { instagramAccount: true, media: MEDIA_INCLUDE },
   });
 
   if (
@@ -1261,6 +1364,9 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
         commenterName: commenterName ?? null,
       }),
     });
+    await countSendCalls(automation.instagramAccount.instagramId);
+    const note = await sendSlotMedia({ accessToken, automation, slot: "FOLLOW_UP", userId });
+    if (note) console.log("[DM Worker] Follow-up media:", note);
   } catch (error) {
     console.log(
       "[DM Worker] Failed to send follow-up message:",
@@ -1270,20 +1376,28 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
 }
 
 /**
- * Reply to an inbound DM whose text matches a campaign's keywords.
+ * Reply to an inbound message: a DM (DIRECT automations) or a reply to /
+ * mention in a story (STORIES automations).
  *
- * The user has messaged us, so the conversation is already open: this path
- * skips the opening DM (which exists to work around private-reply limits from
- * comments) and delivers the reveal directly, honouring the follow gate.
- * Dedup is per inbound message id, so each message triggers at most one reply.
+ * The person messaged the account, so the conversation is already open: no
+ * opening DM, no public reply; the reveal goes out directly, honouring the
+ * follow gate, followed by the slot's media. Each message fires at most one
+ * automation (lib/automation/select.ts). Automations without keywords are
+ * guarded: one reply per person per cooldown window, and none while a human
+ * from the account is talking to that person (lib/automation/guards.ts).
+ * Dedup is per inbound message id.
  */
 async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   const { instagramAccountId, messageId, messageText, senderId } = job.data;
+  // Jobs queued before channels existed carry no channel: they were DMs.
+  const channel = job.data.channel ?? "DIRECT";
+  const requeueAttempt = job.data.requeueAttempt ?? 0;
+  const dedupeId = `dm:${messageId}`;
 
-  const automations = await prisma.automation.findMany({
+  const candidates = await prisma.automation.findMany({
     where: {
       ...connectionScope(job.data),
-      dmTriggerEnabled: true,
+      type: channel === "DIRECT" ? "DIRECT" : "STORIES",
       isActive: true,
       instagramAccount: { instagramId: instagramAccountId },
     },
@@ -1294,244 +1408,238 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
         select: { slug: true, label: true, destinationUrl: true },
         orderBy: TRACKED_LINK_ORDER,
       },
+      media: MEDIA_INCLUDE,
     },
     orderBy: { createdAt: "asc" },
   });
 
-  const dedupeId = `dm:${messageId}`;
+  const selection = selectAutomation(
+    candidates,
+    { kind: "MESSAGE", channel, text: messageText },
+    { stickyAutomationId: await findStickyAutomationId(dedupeId, candidates.map((a) => a.id)) }
+  );
+  if (!selection) return;
+  const automation = selection.automation;
 
-  for (const automation of automations) {
-    const matchResult = automation.matchAnyWord
-      ? { matched: true, matchedKeyword: null }
-      : matchKeywords(
-          messageText,
-          automation.keywords,
-          automation.wholeWordMatch
-        );
+  const existingLog = await prisma.dmLog.findUnique({
+    where: { automationId_commentId: { automationId: automation.id, commentId: dedupeId } },
+  });
 
-    if (!matchResult.matched) continue;
+  // Already replied to this message (or deliberately skipped it) — a retry of
+  // the job must not send a second DM.
+  if (
+    existingLog?.status === "SENT" ||
+    existingLog?.status === "SKIPPED_PLAN_LIMIT" ||
+    existingLog?.status === "SKIPPED_COOLDOWN" ||
+    existingLog?.status === "SKIPPED_HUMAN_ACTIVE" ||
+    existingLog?.status === "SKIPPED_RATE_LIMIT" ||
+    existingLog?.dmDeliveryUnconfirmed
+  ) {
+    return;
+  }
 
-    const existingLog = await prisma.dmLog.findUnique({
-      where: {
-        automationId_commentId: {
-          automationId: automation.id,
-          commentId: dedupeId,
-        },
-      },
+  const logBase = {
+    workspaceId: automation.workspaceId,
+    automationId: automation.id,
+    instagramAccountId: automation.instagramAccountId,
+    commenterId: senderId,
+    // A mention has no text; keep the log readable.
+    commentText: messageText || (channel === "STORY_MENTION" ? "(story mention)" : "(no text)"),
+    commentId: dedupeId,
+    matchedKeyword: selection.matchedKeyword,
+  };
+  const writeLog = (data: {
+    status: "PENDING" | "SENT" | "FAILED" | "SKIPPED_PLAN_LIMIT" | "SKIPPED_RATE_LIMIT" | "SKIPPED_COOLDOWN" | "SKIPPED_HUMAN_ACTIVE";
+    errorMessage?: string | null;
+    commenterName?: string | null;
+    dmSentAt?: Date;
+    attempts?: number;
+    dmDeliveryUnconfirmed?: boolean;
+  }) =>
+    prisma.dmLog.upsert({
+      where: { automationId_commentId: { automationId: automation.id, commentId: dedupeId } },
+      create: { ...logBase, ...data },
+      update: data,
     });
 
-    // Already replied to this message (or deliberately skipped it) — a retry
-    // of the job must not send a second DM.
+  if (!hasInstagramCredentials(automation.instagramAccount)) {
+    await writeLog({ status: "FAILED", errorMessage: "No Instagram access token available" });
+    return;
+  }
+
+  // Guards for automations that answer any message. The winner being blocked
+  // means nobody answers: the next automation in line does not take over.
+  let releaseCooldown: (() => Promise<void>) | null = null;
+  if (isGuardedAutomation(automation)) {
     if (
-      existingLog?.status === "SENT" ||
-      existingLog?.status === "SKIPPED_PLAN_LIMIT" ||
-      existingLog?.dmDeliveryUnconfirmed
+      await isHumanConversationActive({
+        accountConnectionId: automation.instagramAccountId,
+        recipientId: senderId,
+      })
     ) {
-      continue;
+      await writeLog({
+        status: "SKIPPED_HUMAN_ACTIVE",
+        errorMessage: "Not sent: someone from the account talked to this person in the last 24 hours",
+      });
+      return;
     }
-
-    const logBase = {
-      workspaceId: automation.workspaceId,
+    const claim = await claimReplyCooldown({
       automationId: automation.id,
-      instagramAccountId: automation.instagramAccountId,
-      commenterId: senderId,
-      commentText: messageText,
-      commentId: dedupeId,
-      matchedKeyword: matchResult.matchedKeyword,
-    };
-
-    if (!hasInstagramCredentials(automation.instagramAccount)) {
-      await prisma.dmLog.upsert({
-        where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId: dedupeId,
-          },
-        },
-        create: {
-          ...logBase,
-          status: "FAILED",
-          errorMessage: "No Instagram access token available",
-        },
-        update: {
-          status: "FAILED",
-          errorMessage: "No Instagram access token available",
-        },
+      recipientId: senderId,
+      hours: automation.replyCooldownHours,
+      excludeEventId: dedupeId,
+    });
+    if (!claim.allowed) {
+      await writeLog({
+        status: "SKIPPED_COOLDOWN",
+        errorMessage: "Not sent: this automation already answered this person within its reply interval",
       });
-      continue;
+      return;
     }
+    releaseCooldown = claim.release;
+  }
 
-    let accessToken: InstagramContext;
-    try {
-      accessToken = await createInstagramContext(
-        automation.instagramAccount,
-        `${job.id}:${automation.id}`
-      );
-    } catch {
-      await prisma.dmLog.upsert({
-        where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId: dedupeId,
-          },
-        },
-        create: {
-          ...logBase,
-          status: "FAILED",
-          errorMessage: "Failed to decrypt Instagram access token",
-        },
-        update: {
-          status: "FAILED",
-          errorMessage: "Failed to decrypt Instagram access token",
-        },
-      });
-      continue;
-    }
+  let accessToken: InstagramContext;
+  try {
+    accessToken = await createInstagramContext(
+      automation.instagramAccount,
+      `${job.id}:${automation.id}`
+    );
+  } catch {
+    await releaseCooldown?.();
+    await writeLog({ status: "FAILED", errorMessage: "Failed to decrypt Instagram access token" });
+    return;
+  }
 
-    // Personalize {username}. The messages webhook carries only the sender's
-    // IGSID, so the handle is recovered from an earlier send or read live.
-    const commenterName = await resolveRecipientName({
+  // Personalize {username}. The messages webhook carries only the sender's
+  // IGSID, so the handle is recovered from an earlier send or read live.
+  const commenterName = await resolveRecipientName({
+    context: accessToken,
+    workspaceId: automation.workspaceId,
+    recipientId: senderId,
+  });
+
+  // Follow gate: anyone not confirmed as a follower gets the prompt instead of
+  // the link, with the same `followcheck:` button that re-verifies on tap.
+  // `null` (unverifiable) prompts too — this is first contact, exactly like a
+  // comment, so it follows processComment's fail-closed rule rather than the
+  // postback path's fail-open one.
+  let sendFollowPrompt = false;
+  if (automation.requireFollow) {
+    const follows = await getUserFollowStatus({
       context: accessToken,
-      workspaceId: automation.workspaceId,
       recipientId: senderId,
     });
-
-    // Follow gate: anyone not confirmed as a follower gets the prompt instead of
-    // the link, with the same `followcheck:` button that re-verifies on tap.
-    // `null` (unverifiable) prompts too — this is first contact, exactly like a
-    // comment, so it follows processComment's fail-closed rule rather than the
-    // postback path's fail-open one. Fail-open is only safe after a tap, where
-    // the user has already claimed to follow; here it would hand the link to
-    // anyone whose status the API happens not to resolve.
-    let sendFollowPrompt = false;
-    if (automation.requireFollow) {
-      const follows = await getUserFollowStatus({
-        context: accessToken,
-        recipientId: senderId,
-      });
-      sendFollowPrompt =
-        accessToken.provider === "ZERNIO"
-          ? follows === false
-          : follows !== true;
-    }
-
-    const usage = await reserveWorkspaceDMSend(automation.workspaceId);
-    if (!usage.allowed) {
-      await prisma.dmLog.upsert({
-        where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId: dedupeId,
-          },
-        },
-        create: {
-          ...logBase,
-          status: "SKIPPED_PLAN_LIMIT",
-          errorMessage: `Monthly DM limit reached (${usage.limit})`,
-        },
-        update: {
-          status: "SKIPPED_PLAN_LIMIT",
-          errorMessage: `Monthly DM limit reached (${usage.limit})`,
-        },
-      });
-      continue;
-    }
-
-    try {
-      if (sendFollowPrompt) {
-        const promptText = renderMessageWithoutLink({
-          message:
-            automation.followPromptMessage ||
-            "Almost there! Follow me and tap the button below to grab your link 💛",
-          commenterName,
-        });
-        await sendDirectMessageWithButton({
-          context: accessToken,
-          instagramAccountId: automation.instagramAccount.instagramId,
-          userId: senderId,
-          text: promptText,
-          buttonTitle: automation.followPromptButtonLabel || "I'm following ✅",
-          payload: `followcheck:${automation.id}`,
-        });
-      } else {
-        await sendRevealDirectMessage({
-          accessToken: accessToken,
-          automation: automation,
-          userId: senderId,
-          commenterName: commenterName,
-          context: "message trigger",
-        });
-
-        // The link has been delivered, so the appreciation follow-up applies
-        // here exactly as it does after a button tap. Not scheduled behind the
-        // follow prompt — no link went out yet in that branch.
-        if (automation.followUpEnabled && automation.followUpMessage?.trim()) {
-          await getDMQueue().add(
-            FOLLOWUP_JOB_NAME,
-            {
-              instagramAccountId: automation.instagramAccount.instagramId,
-              accountConnectionId: automation.instagramAccountId,
-              userId: senderId,
-              automationId: automation.id,
-              commenterName,
-            },
-            {
-              delay: Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000,
-              jobId: `followup_${automation.id}_${senderId}`,
-            }
-          );
-        }
-      }
-
-      await prisma.dmLog.upsert({
-        where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId: dedupeId,
-          },
-        },
-        create: {
-          ...logBase,
-          commenterName,
-          status: "SENT",
-          dmSentAt: new Date(),
-        },
-        update: {
-          status: "SENT",
-          dmSentAt: new Date(),
-          errorMessage: null,
-        },
-      });
-    } catch (error) {
-      await releaseWorkspaceDMReservation(
-        automation.workspaceId,
-        usage.periodStart
-      );
-      await prisma.dmLog.upsert({
-        where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId: dedupeId,
-          },
-        },
-        create: {
-          ...logBase,
-          commenterName,
-          status: "FAILED",
-          attempts: job.attemptsMade + 1,
-          errorMessage: formatError(error),
-          dmDeliveryUnconfirmed: isDeliveryUnconfirmed(error),
-        },
-        update: {
-          status: "FAILED",
-          attempts: job.attemptsMade + 1,
-          errorMessage: formatError(error),
-          dmDeliveryUnconfirmed: isDeliveryUnconfirmed(error),
-        },
-      });
-      throw error;
-    }
+    sendFollowPrompt =
+      accessToken.provider === "ZERNIO" ? follows === false : follows !== true;
   }
+
+  const usage = await reserveWorkspaceDMSend(automation.workspaceId);
+  if (!usage.allowed) {
+    await releaseCooldown?.();
+    await writeLog({ status: "SKIPPED_PLAN_LIMIT", errorMessage: `Monthly DM limit reached (${usage.limit})` });
+    return;
+  }
+
+  // The reply counts against the account's hourly send cap like any other
+  // Meta call; over the cap it is retried later, then skipped.
+  const igId = automation.instagramAccount.instagramId;
+  const rateLimit = await reserveDMSlot(igId, requeueAttempt);
+  if (!rateLimit.allowed) {
+    await releaseWorkspaceDMReservation(automation.workspaceId, usage.periodStart);
+    await releaseCooldown?.();
+    if (rateLimit.shouldRequeue) {
+      await writeLog({ status: "PENDING", errorMessage: "Hourly rate limit hit; retry scheduled" });
+      await getDMQueue().add(
+        MESSAGE_JOB_NAME,
+        { ...job.data, requeueAttempt: requeueAttempt + 1 },
+        {
+          delay: rateLimit.requeueDelayMs,
+          jobId: `message_${instagramAccountId}_${Buffer.from(messageId).toString("base64url")}_retry_${requeueAttempt + 1}`,
+        }
+      );
+    } else {
+      await writeLog({ status: "SKIPPED_RATE_LIMIT", errorMessage: "Hourly Instagram DM rate limit reached" });
+    }
+    return;
+  }
+
+  try {
+    let mediaNote: string | null;
+    if (sendFollowPrompt) {
+      const promptText = renderMessageWithoutLink({
+        message:
+          automation.followPromptMessage ||
+          "Almost there! Follow me and tap the button below to grab your link 💛",
+        commenterName,
+      });
+      await sendDirectMessageWithButton({
+        context: accessToken,
+        instagramAccountId: igId,
+        userId: senderId,
+        text: promptText,
+        buttonTitle: automation.followPromptButtonLabel || "I'm following ✅",
+        payload: `followcheck:${automation.id}`,
+      });
+      mediaNote = await sendSlotMedia({ accessToken, automation, slot: "FOLLOW_PROMPT", userId: senderId });
+    } else {
+      await sendRevealDirectMessage({
+        accessToken: accessToken,
+        automation: automation,
+        userId: senderId,
+        commenterName: commenterName,
+        context: "message trigger",
+      });
+      mediaNote = await sendSlotMedia({ accessToken, automation, slot: "MAIN", userId: senderId });
+
+      // The link has been delivered, so the appreciation follow-up applies
+      // here exactly as it does after a button tap. Not scheduled behind the
+      // follow prompt — no link went out yet in that branch.
+      if (automation.followUpEnabled && automation.followUpMessage?.trim()) {
+        await getDMQueue().add(
+          FOLLOWUP_JOB_NAME,
+          {
+            instagramAccountId: igId,
+            accountConnectionId: automation.instagramAccountId,
+            userId: senderId,
+            automationId: automation.id,
+            commenterName,
+          },
+          {
+            delay: Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000,
+            jobId: `followup_${automation.id}_${senderId}`,
+          }
+        );
+      }
+    }
+
+    await writeLog({ status: "SENT", commenterName, dmSentAt: new Date(), errorMessage: mediaNote });
+  } catch (error) {
+    if (isConfirmedSendRejection(classifySendError(error))) {
+      if (rateLimit.reserved) await releaseDMSlot(igId);
+      await releaseCooldown?.();
+    }
+    await releaseWorkspaceDMReservation(automation.workspaceId, usage.periodStart);
+    await writeLog({
+      status: "FAILED",
+      commenterName,
+      attempts: job.attemptsMade + 1,
+      errorMessage: formatError(error),
+      dmDeliveryUnconfirmed: isDeliveryUnconfirmed(error),
+    });
+    throw error;
+  }
+}
+
+/**
+ * An echo of a message the account sent. If the automations did not send it,
+ * a person did (Instagram app, Business Suite, our Inbox): no-keyword
+ * Stories/Direct automations then stay quiet with that person for 24 hours.
+ */
+async function processEcho(job: Job<ProcessEchoJob>): Promise<void> {
+  const { accountConnectionId, recipientId, messageId } = job.data;
+  if (!accountConnectionId) return;
+  await handleEcho({ accountConnectionId, recipientId, messageId });
 }
 
 async function dispatchJob(job: Job<DmQueueJob>): Promise<void> {
@@ -1543,6 +1651,9 @@ async function dispatchJob(job: Job<DmQueueJob>): Promise<void> {
   }
   if (job.name === MESSAGE_JOB_NAME) {
     return processMessage(job as Job<ProcessMessageJob>);
+  }
+  if (job.name === ECHO_JOB_NAME) {
+    return processEcho(job as Job<ProcessEchoJob>);
   }
   return processComment(job as Job<ProcessCommentJob>);
 }

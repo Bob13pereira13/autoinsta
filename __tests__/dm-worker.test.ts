@@ -68,6 +68,7 @@ vi.mock("@/lib/meta/client", () => ({
   sendDirectMessage: mockSendDirectMessage,
   sendDirectMessageWithLinkButton: mockSendDirectMessageWithLinkButton,
   sendCommentReply: vi.fn(),
+  sendDirectAttachment: vi.fn().mockResolvedValue({ recipient_id: "r", message_id: "media_mid" }),
   MetaApiError: class MetaApiError extends Error {
     code: number;
     constructor(
@@ -100,6 +101,8 @@ vi.mock("@/lib/utils/keyword-matcher", () => ({
 vi.mock("@/lib/utils/rate-limiter", () => ({
   reserveDMSlot: mockReserveDMSlot,
   releaseDMSlot: mockReleaseDMSlot,
+  reserveSendSlots: vi.fn().mockResolvedValue(true),
+  countSendCalls: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/billing/usage", () => ({
@@ -119,6 +122,7 @@ vi.mock("@/lib/queue/client", () => ({
   POSTBACK_JOB_NAME: "process-postback",
   FOLLOWUP_JOB_NAME: "process-followup",
   MESSAGE_JOB_NAME: "process-message",
+  ECHO_JOB_NAME: "process-echo",
 }));
 
 vi.mock("bullmq", () => {
@@ -146,6 +150,12 @@ const usagePeriodStart = new Date("2026-05-01T00:00:00.000Z");
 
 const mockAutomation = {
   id: "auto_789",
+  type: "COMMENTS",
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  triggerStoryReplies: true,
+  triggerStoryMentions: false,
+  replyCooldownHours: 24,
+  media: [],
   workspaceId: "workspace_123",
   instagramAccountId: "ig_account_row_1",
   postId: "media_101",
@@ -336,6 +346,8 @@ describe("DM Worker — Full Pipeline", () => {
 
     expect(mockPrisma.automation.findMany).toHaveBeenCalledWith({
       where: {
+        // Comments only fire Comments automations.
+        type: "COMMENTS",
         OR: [{ postId: "media_101" }, { matchAnyPost: true }],
         isActive: true,
         instagramAccount: { instagramId: "ig_456" },
@@ -352,6 +364,10 @@ describe("DM Worker — Full Pipeline", () => {
           // Button order: position first, with createdAt and id only as
           // tie breakers, so tied rows can never come back swapped.
           orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+        },
+        media: {
+          select: { slot: true, kind: true, storageKey: true, position: true },
+          orderBy: [{ position: "asc" }, { createdAt: "asc" }],
         },
       },
       orderBy: { createdAt: "asc" },
@@ -1000,9 +1016,12 @@ describe("DM Worker — one private reply per comment", () => {
 });
 
 describe("DM Worker — DM keyword trigger", () => {
+  // DMs now go to DIRECT automations (the old per-campaign DM toggle became
+  // separate Direct/Stories automations).
   const dmTriggerAutomation = {
     ...mockAutomation,
-    dmTriggerEnabled: true,
+    type: "DIRECT",
+    postId: null,
     requireFollow: false,
     followPromptMessage: null,
     followPromptButtonLabel: null,
@@ -1034,7 +1053,7 @@ describe("DM Worker — DM keyword trigger", () => {
     expect(mockPrisma.automation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          dmTriggerEnabled: true,
+          type: "DIRECT",
           isActive: true,
         }),
       })
