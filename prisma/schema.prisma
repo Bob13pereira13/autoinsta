@@ -15,9 +15,16 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  /// scrypt hash (lib/auth/password.ts). Null until the user sets a password.
+  passwordHash      String?
+  /// Sessions issued before this instant are rejected (lib/auth.ts).
+  passwordChangedAt DateTime?
+  /// Set to block sign-in (npm run user -- disable <email>).
+  disabledAt        DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  authTokens        AuthToken[]
   accounts          Account[]
   sessions          Session[]
   ownedWorkspaces   Workspace[]       @relation("WorkspaceOwner")
@@ -62,6 +69,28 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+/// Single-use links sent by e-mail to set a password: WELCOME when an account
+/// is created by the operator, RESET for "forgot my password". Only the SHA-256
+/// of the token is stored.
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  purpose   AuthTokenPurpose
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum AuthTokenPurpose {
+  WELCOME
+  RESET
 }
 
 model Workspace {

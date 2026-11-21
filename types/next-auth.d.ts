@@ -7,3 +7,10 @@ declare module "next-auth" {
     } & DefaultSession["user"];
   }
 }
+
+declare module "@auth/core/jwt" {
+  interface JWT {
+    /** When the user signed in (ms). Sessions older than a password change are rejected. */
+    authenticatedAt?: number;
+  }
+}

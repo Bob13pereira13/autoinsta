@@ -11,6 +11,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "worker": "tsx worker/dm-worker.ts",
+    "user": "tsx scripts/users.ts",
+    "user:create": "tsx scripts/users.ts create",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

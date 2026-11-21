@@ -1,44 +1,96 @@
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth, { CredentialsSignin, type NextAuthConfig } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 import Nodemailer from "next-auth/providers/nodemailer";
 import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { brand } from "@/config/brand";
 import { prisma } from "@/lib/db/client";
 import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
-import { isEmailAllowedToSignIn } from "@/lib/env";
+import { canReceiveMagicLink, isSessionStillValid } from "@/lib/account/access";
+import { authorizeWithPassword, LoginRateLimitedError } from "@/lib/account/authorize";
+import { getEmailFrom, sendEmail } from "@/lib/email/send";
+import { magicLinkEmail } from "@/lib/email/templates";
 
 type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
 
-const emailFrom = process.env.EMAIL_FROM ?? "OpenReply <login@example.com>";
-// Setting EMAIL_SERVER switches magic links to your own SMTP server, for
-// self-hosters who do not want a third-party mail service. Resend stays the
-// default, so an existing deployment is unaffected.
+// Setting EMAIL_SERVER switches magic links to your own SMTP server; Resend
+// stays the default.
 const smtpServer = process.env.EMAIL_SERVER;
 
 /**
- * Provider id the login form has to sign in with. It differs per transport,
- * so it is derived here rather than hardcoded at the call site.
+ * Provider id the magic-link form has to sign in with. It differs per
+ * transport, so it is derived here rather than hardcoded at the call site.
  */
 export const EMAIL_PROVIDER_ID = smtpServer ? "nodemailer" : "resend";
+export const PASSWORD_PROVIDER_ID = "credentials";
+
+/** Shown as ?code=rate_limited on the login page. */
+class TooManyAttempts extends CredentialsSignin {
+  code = "rate_limited";
+}
+
+async function sendMagicLink({ identifier, url }: { identifier: string; url: string }) {
+  await sendEmail({ to: identifier, ...magicLinkEmail(url) });
+}
 
 export const authConfig = {
   adapter: PrismaAdapter(prisma as unknown as AdapterPrismaClient),
   providers: [
+    Credentials({
+      id: PASSWORD_PROVIDER_ID,
+      name: "E-mail e senha",
+      credentials: {
+        email: { label: "E-mail", type: "email" },
+        password: { label: "Senha", type: "password" },
+      },
+      async authorize(credentials, request) {
+        try {
+          return await authorizeWithPassword(credentials, request);
+        } catch (err) {
+          if (err instanceof LoginRateLimitedError) throw new TooManyAttempts();
+          throw err;
+        }
+      },
+    }),
     smtpServer
-      ? Nodemailer({ server: smtpServer, from: emailFrom })
+      ? Nodemailer({ server: smtpServer, from: getEmailFrom(), sendVerificationRequest: sendMagicLink })
       : Resend({
           apiKey: process.env.RESEND_API_KEY ?? "missing-resend-api-key",
-          from: emailFrom,
+          from: getEmailFrom(),
+          sendVerificationRequest: sendMagicLink,
         }),
   ],
   callbacks: {
-    // Runs before the magic link is sent, so a blocked address never receives
-    // one, and again when the link is verified.
-    async signIn({ user }) {
-      return isEmailAllowedToSignIn(user?.email);
+    async signIn({ user, account }) {
+      // The password provider already checked everything in authorize().
+      if (account?.provider === PASSWORD_PROVIDER_ID) return true;
+      // Magic link: runs before the e-mail is sent and again when the link is
+      // opened. Closed sign-up — see lib/account/access.ts. An unknown address
+      // gets the same "check your e-mail" page as a known one (no e-mail is
+      // sent), so the form cannot be used to discover who has an account.
+      return (await canReceiveMagicLink(user?.email)) ? true : "/verify-request";
     },
-    async session({ session, user }) {
-      if (session.user) {
-        session.user.id = user.id;
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.sub = user.id;
+        token.authenticatedAt = Date.now();
+        return token;
+      }
+      if (!token.sub) return null;
+      // Re-checked on every request: a disabled user or a password change ends
+      // existing sessions, which JWT sessions would otherwise keep alive.
+      const current = await isSessionStillValid(
+        token.sub,
+        typeof token.authenticatedAt === "number" ? token.authenticatedAt : 0
+      );
+      if (!current) return null;
+      token.email = current.email;
+      token.name = current.name;
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
       }
       return session;
     },
@@ -53,12 +105,17 @@ export const authConfig = {
   pages: {
     signIn: "/login",
     verifyRequest: "/verify-request",
+    error: "/login",
   },
+  // The password provider only works with JWT sessions in Auth.js v5. The
+  // adapter is still used for users and magic-link verification tokens.
   session: {
-    strategy: "database",
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
   },
   trustHost: true,
   secret: process.env.NEXTAUTH_SECRET,
+  theme: { brandColor: brand.colors.primary },
 } satisfies NextAuthConfig;
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

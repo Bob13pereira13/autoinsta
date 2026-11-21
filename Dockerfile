@@ -44,6 +44,7 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/app/generated ./app/generated
 COPY --from=build /app/public ./public
 COPY --from=build /app/lib ./lib
+COPY --from=build /app/config ./config
 COPY --from=build /app/worker ./worker
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/scripts ./scripts
@@ -55,5 +56,5 @@ COPY --from=build /app/package.json ./package.json
 EXPOSE 3000
 # Default to the web process — the worker service overrides this with
 # `command: ["npm", "run", "worker"]` in whatever compose/stack file deploys
-# it (see openreply-vps.stack.yml in EvolutionAPI/omni-nexus for an example).
+# it.
 CMD ["npm", "run", "start"]
