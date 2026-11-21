@@ -86,8 +86,12 @@ export async function GET(request: NextRequest) {
     const data = {
       username: userInfo.username,
       name: userInfo.name,
+      // Kept for Meta's data deletion / deauthorize callbacks, which may
+      // identify the user by the app-scoped id rather than the account id.
+      instagramScopedId: userInfo.id,
       accessToken: encryptedToken,
       tokenExpiresAt,
+      tokenInvalidAt: null,
       webhookSubscribed,
     };
     const existing = await prisma.instagramAccount.findUnique({ where: { instagramId } });

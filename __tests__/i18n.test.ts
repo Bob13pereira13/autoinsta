@@ -66,4 +66,10 @@ describe("interface translations", () => {
       expect(source, source).not.toMatch(/&(?:[a-z]+|#\d+);/i);
     }
   });
+
+  it("never hardcodes a product or provider name in a message key", () => {
+    for (const source of Object.keys(ptBR)) {
+      expect(source, source).not.toMatch(/OpenReply|Zernio/);
+    }
+  });
 });

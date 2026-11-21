@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client";
+import { isInsightsEnabled } from "@/lib/meta/scopes";
 import {
   getFollowerCountSeries,
   getUserInfo,
@@ -105,6 +106,10 @@ export async function backfillFollowerHistory({
     if (accessToken.provider === "ZERNIO") {
       points = await getZernioFollowerSnapshots(accessToken);
     } else {
+      // follower_count deltas come from account insights, which need the
+      // insights permission. Without it, history builds up from the daily
+      // snapshot cron instead.
+      if (!isInsightsEnabled()) return 0;
       const series = await getFollowerCountSeries({
         context: accessToken,
         igUserId: instagramId,

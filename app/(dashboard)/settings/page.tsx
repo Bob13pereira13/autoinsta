@@ -4,7 +4,6 @@ import LanguageSwitcher from "@/components/language-switcher";
 import { useI18n } from "@/lib/i18n/provider";
 import { Suspense, useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
-import { ZernioConnection } from "@/components/zernio-connection";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
 
 interface SettingsData {
@@ -21,8 +20,8 @@ interface SettingsData {
   } | null;
   instagramAccounts: Array<
     AccountOption & {
-      provider?: "META" | "ZERNIO";
       tokenExpiresAt: string | null;
+      tokenInvalidAt?: string | null;
       webhookSubscribed: boolean;
     }
   >;
@@ -80,7 +79,7 @@ export default function SettingsPage() {
   }
 
   async function disconnectInstagram(instagramAccountId: string) {
-    if (!confirm(t("Disconnect Instagram? Campaigns for this account will stop sending DMs."))) {
+    if (!confirm(t("Disconnect Instagram? This account's campaigns, send history and tracked links will be permanently deleted."))) {
       return;
     }
 
@@ -147,8 +146,6 @@ export default function SettingsPage() {
         <p className="text-sm text-muted">{t("Saved in this browser. Campaign messages stay unchanged.")}</p>
       </section>
 
-      <ZernioConnection canManage={canManageMembers} />
-
       <section className="panel rounded p-4 sm:p-6">
         <h2 className="text-base font-semibold mb-6">{t("Instagram Connection")}</h2>
 
@@ -199,12 +196,20 @@ export default function SettingsPage() {
                     @{account.username}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    {account.provider === "ZERNIO" ? t("Connected via Zernio") : <>{t("Token expires")}{" "}
+                    {t("Token expires")}{" "}
                     {account.tokenExpiresAt
                       ? new Date(account.tokenExpiresAt).toLocaleDateString(locale)
-                      : t("not available")}</>}{" "}
+                      : t("not available")}{" "}
                     · {account.webhookSubscribed ? t("Webhook ready") : t("Webhook pending")}
                   </p>
+                  {account.tokenInvalidAt && (
+                    <p className="mt-2 text-xs font-medium text-error">
+                      {t("Access was revoked or expired. Reconnect this account to resume sending.")}{" "}
+                      <a href="/api/instagram/connect" className="underline underline-offset-4">
+                        {t("Reconnect Instagram")}
+                      </a>
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => disconnectInstagram(account.id)}
@@ -225,7 +230,7 @@ export default function SettingsPage() {
             href="/api/instagram/connect"
             className="px-4 py-2 rounded text-sm font-medium transition-colors bg-accent text-white hover:bg-accent-hover"
           >
-            {t("Connect using your own Meta app")}
+            {t("Connect Instagram")}
           </a>
         </div>
       </section>

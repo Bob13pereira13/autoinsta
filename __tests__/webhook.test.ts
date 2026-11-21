@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   verifyWebhookSignature,
+  verifyWebhookVerifyToken,
   parseCommentEvents,
   parseMessageEvents,
   parseReadEvents,
@@ -513,5 +514,43 @@ describe("parseReadEvents", () => {
     };
 
     expect(parseReadEvents(payload)).toHaveLength(0);
+  });
+});
+
+describe("webhook signature hardening", () => {
+  it("verifies the raw body bytes, including non-ASCII payloads", () => {
+    vi.stubEnv("INSTAGRAM_APP_SECRET", "ig_secret");
+    const raw = Buffer.from('{"text":"Olá, quero o LINK 🔗"}', "utf8");
+    const signature =
+      "sha256=" + createHmac("sha256", "ig_secret").update(raw).digest("hex");
+    expect(verifyWebhookSignature(raw, signature)).toBe(true);
+    expect(verifyWebhookSignature(Buffer.concat([raw, Buffer.from(" ")]), signature)).toBe(false);
+  });
+
+  it("rejects a signature without the sha256= prefix", () => {
+    const payload = '{"test": "data"}';
+    const hex = createHmac("sha256", "test_app_secret_12345").update(payload).digest("hex");
+    expect(verifyWebhookSignature(payload, hex)).toBe(false);
+  });
+
+  it("refuses to run with no app secret configured", () => {
+    vi.stubEnv("FACEBOOK_APP_SECRET", "");
+    vi.stubEnv("INSTAGRAM_APP_SECRET", "");
+    expect(() => verifyWebhookSignature("{}", "sha256=00")).toThrow(/required/);
+  });
+});
+
+describe("verifyWebhookVerifyToken", () => {
+  it("accepts only the configured token", () => {
+    vi.stubEnv("WEBHOOK_VERIFY_TOKEN", "verify-me");
+    expect(verifyWebhookVerifyToken("verify-me")).toBe(true);
+    expect(verifyWebhookVerifyToken("verify-you")).toBe(false);
+    expect(verifyWebhookVerifyToken(null)).toBe(false);
+  });
+
+  it("fails closed when WEBHOOK_VERIFY_TOKEN is unset", () => {
+    vi.stubEnv("WEBHOOK_VERIFY_TOKEN", "");
+    expect(verifyWebhookVerifyToken("")).toBe(false);
+    expect(verifyWebhookVerifyToken("undefined")).toBe(false);
   });
 });

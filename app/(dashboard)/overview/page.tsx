@@ -5,7 +5,8 @@
  *
  * Aggregate reach/engagement across your recent posts, plus a per-post table.
  * Views / reach / saved / shares come from Instagram media insights (requires
- * the insights permission); likes and comments are always available.
+ * the insights permission, off unless INSTAGRAM_INSIGHTS_ENABLED=true); likes
+ * and comments are always available.
  */
 
 import type { Locale } from "@/lib/i18n";
@@ -105,8 +106,11 @@ export default function OverviewPage() {
 
   if (!data) return null;
 
-  const { totals, posts, accounts, insightsAvailable, followers, followerHistory } =
+  const { totals, posts, accounts, insightsAvailable, insightsEnabled, followers, followerHistory } =
     data;
+  // Without the insights permission only likes and comments exist, so the
+  // insight-only metrics are hidden instead of showing a row of dashes.
+  const showInsights = insightsEnabled;
 
   return (
     <div className="space-y-8">
@@ -115,7 +119,7 @@ export default function OverviewPage() {
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-foreground">{t("Overview")}</h1>
           <p className="text-sm text-muted mt-1">
-            {data.provider !== "ZERNIO" && data.requestedCount === "all" ? t("All-time") : t("Recent")} —{" "}
+            {data.requestedCount === "all" ? t("All-time") : t("Recent")} —{" "}
             {t(totals.posts === 1 ? "{count} post" : "{count} posts", { count: totals.posts })} {t("from @")}
             {data.account.username}
             {data.truncated ? t(" (capped at {count})", { count: totals.posts }) : ""}
@@ -159,7 +163,7 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {!insightsAvailable && (
+      {insightsEnabled && !insightsAvailable && (
         <div className="panel rounded p-4 border border-border">
           <p className="text-sm text-foreground">
             {t("Views, reach, saved and shares need the insights permission.")}
@@ -177,13 +181,13 @@ export default function OverviewPage() {
       )}
 
       {/* Aggregate totals */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard label={t("Views")} value={formatNumber(totals.views, locale)} />
-        <StatCard label={t("Reach")} value={formatNumber(totals.reach, locale)} />
+      <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${showInsights ? "sm:grid-cols-3 lg:grid-cols-6" : ""}`}>
+        {showInsights && <StatCard label={t("Views")} value={formatNumber(totals.views, locale)} />}
+        {showInsights && <StatCard label={t("Reach")} value={formatNumber(totals.reach, locale)} />}
         <StatCard label={t("Likes")} value={formatNumber(totals.likes, locale)} />
         <StatCard label={t("Comments")} value={formatNumber(totals.comments, locale)} />
-        <StatCard label={t("Saved")} value={formatNumber(totals.saved, locale)} />
-        <StatCard label={t("Shares")} value={formatNumber(totals.shares, locale)} />
+        {showInsights && <StatCard label={t("Saved")} value={formatNumber(totals.saved, locale)} />}
+        {showInsights && <StatCard label={t("Shares")} value={formatNumber(totals.shares, locale)} />}
       </div>
 
       {/* Follower trend — account-level, independent of the post range */}
@@ -198,16 +202,16 @@ export default function OverviewPage() {
           // Eight metric columns can't compress into a phone; let the table keep
           // its natural width and scroll inside the panel instead.
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className={`w-full text-sm ${showInsights ? "min-w-[720px]" : "min-w-[480px]"}`}>
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-zinc-500 border-b border-border">
                   <th className="py-2 pr-4 font-medium">{t("Post")}</th>
-                  <th className="py-2 px-3 font-medium text-right">{t("Views")}</th>
-                  <th className="py-2 px-3 font-medium text-right">{t("Reach")}</th>
+                  {showInsights && <th className="py-2 px-3 font-medium text-right">{t("Views")}</th>}
+                  {showInsights && <th className="py-2 px-3 font-medium text-right">{t("Reach")}</th>}
                   <th className="py-2 px-3 font-medium text-right">{t("Likes")}</th>
                   <th className="py-2 px-3 font-medium text-right">{t("Comments")}</th>
-                  <th className="py-2 px-3 font-medium text-right">{t("Saved")}</th>
-                  <th className="py-2 px-3 font-medium text-right">{t("Shares")}</th>
+                  {showInsights && <th className="py-2 px-3 font-medium text-right">{t("Saved")}</th>}
+                  {showInsights && <th className="py-2 px-3 font-medium text-right">{t("Shares")}</th>}
                   <th className="py-2 pl-3 font-medium text-right">{t("Date")}</th>
                 </tr>
               </thead>
@@ -233,24 +237,32 @@ export default function OverviewPage() {
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.views, locale)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.reach, locale)}
-                    </td>
+                    {showInsights && (
+                      <td className="py-3 px-3 text-right text-muted">
+                        {formatNumber(p.views, locale)}
+                      </td>
+                    )}
+                    {showInsights && (
+                      <td className="py-3 px-3 text-right text-muted">
+                        {formatNumber(p.reach, locale)}
+                      </td>
+                    )}
                     <td className="py-3 px-3 text-right text-muted">
                       {formatNumber(p.likes, locale)}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
                       {formatNumber(p.comments, locale)}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.saved, locale)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.shares, locale)}
-                    </td>
+                    {showInsights && (
+                      <td className="py-3 px-3 text-right text-muted">
+                        {formatNumber(p.saved, locale)}
+                      </td>
+                    )}
+                    {showInsights && (
+                      <td className="py-3 px-3 text-right text-muted">
+                        {formatNumber(p.shares, locale)}
+                      </td>
+                    )}
                     <td className="py-3 pl-3 text-right text-zinc-500">
                       {formatDate(p.timestamp, locale)}
                     </td>

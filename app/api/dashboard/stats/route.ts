@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
         name: true,
         provider: true,
         tokenExpiresAt: true,
+        tokenInvalidAt: true,
         webhookSubscribed: true,
       },
     }),

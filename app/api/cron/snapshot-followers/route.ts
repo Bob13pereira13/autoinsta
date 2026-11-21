@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronUnauthorized, isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { prisma } from "@/lib/db/client";
 import { createInstagramContext } from "@/lib/instagram/provider";
 import { getUserInfo } from "@/lib/instagram/provider";
@@ -15,14 +16,8 @@ import {
  * permanently — there is no way to backfill beyond the insights window.
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET;
-
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 401 }
-    );
+  if (!isAuthorizedCronRequest(request.headers.get("authorization"))) {
+    return cronUnauthorized();
   }
 
   const accounts = await prisma.instagramAccount.findMany({

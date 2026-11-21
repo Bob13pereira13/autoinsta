@@ -149,8 +149,17 @@ model InstagramAccount {
   name              String?
   provider          InstagramProvider @default(META)
   zernioAccountId   String?
+  /// App-scoped Instagram user id (`id` from /me). Meta's data deletion and
+  /// deauthorize callbacks may identify the user by this id instead of
+  /// `instagramId` (the professional account id), so both are stored.
+  instagramScopedId String?
+  /// Long-lived token, AES-256-GCM encrypted (lib/meta/oauth.ts). Empty when
+  /// the user removed the app on Instagram.
   accessToken       String
   tokenExpiresAt    DateTime?
+  /// Set when Meta rejects the token (revoked, expired or the app was removed
+  /// on Instagram). Cleared on reconnect.
+  tokenInvalidAt    DateTime?
   webhookSubscribed Boolean  @default(false)
   connectedAt       DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -162,6 +171,7 @@ model InstagramAccount {
   followerSnapshots FollowerSnapshot[]
 
   @@index([workspaceId])
+  @@index([instagramScopedId])
 }
 
 /// Daily follower total for one account. Instagram only retains ~30 days of

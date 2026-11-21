@@ -1,7 +1,14 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
+/**
+ * Validates Meta's `X-Hub-Signature-256` header: `sha256=` + hex HMAC-SHA256 of
+ * the exact request body, keyed with the app secret.
+ *
+ * Pass the raw body bytes when you have them (the webhook route does): hashing
+ * a re-encoded string only matches when the body was valid UTF-8.
+ */
 export function verifyWebhookSignature(
-  payload: string,
+  payload: string | Buffer,
   signature: string | null
 ): boolean {
   if (!signature) return false;
@@ -10,10 +17,7 @@ export function verifyWebhookSignature(
   // Facebook-Login apps use the Facebook app secret. Both belong to the same
   // app, so accept a signature that matches either — this avoids a config
   // guess about which key Meta uses for a given app type.
-  const secrets = [
-    process.env.FACEBOOK_APP_SECRET,
-    process.env.INSTAGRAM_APP_SECRET,
-  ].filter((s): s is string => Boolean(s));
+  const secrets = getAppSecrets();
 
   if (secrets.length === 0) {
     throw new Error(
@@ -24,12 +28,26 @@ export function verifyWebhookSignature(
   return secrets.some((secret) => {
     const expected =
       "sha256=" + createHmac("sha256", secret).update(payload).digest("hex");
-    try {
-      return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-    } catch {
-      return false;
-    }
+    const received = Buffer.from(signature);
+    const wanted = Buffer.from(expected);
+    return received.length === wanted.length && timingSafeEqual(received, wanted);
   });
+}
+
+/** App secrets Meta may sign with, Instagram app secret first. */
+export function getAppSecrets(): string[] {
+  return [process.env.INSTAGRAM_APP_SECRET, process.env.FACEBOOK_APP_SECRET].filter(
+    (s): s is string => Boolean(s)
+  );
+}
+
+/** Constant-time check of the `hub.verify_token` sent when Meta registers the webhook. */
+export function verifyWebhookVerifyToken(token: string | null): boolean {
+  const expected = process.env.WEBHOOK_VERIFY_TOKEN;
+  if (!expected || !token) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export interface WebhookCommentEvent {

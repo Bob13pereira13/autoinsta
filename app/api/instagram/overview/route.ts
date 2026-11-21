@@ -9,6 +9,7 @@ import {
   type InstagramMedia,
 } from "@/lib/instagram/provider";
 import { createInstagramContext } from "@/lib/instagram/provider";
+import { isInsightsEnabled } from "@/lib/meta/scopes";
 import {
   ensureFollowerHistory,
   getFollowerHistory,
@@ -69,6 +70,8 @@ export interface OverviewResponse {
   requestedCount: "all" | number;
   truncated: boolean;
   insightsAvailable: boolean;
+  /** False when INSTAGRAM_INSIGHTS_ENABLED is off: the scope is not requested. */
+  insightsEnabled: boolean;
   /** Current follower total, or null if Instagram did not return it. */
   followers: number | null;
   /**
@@ -148,9 +151,10 @@ export async function GET(request: NextRequest) {
     // before that scope.
     let insightsAvailable = false;
     let permissionDenied = false;
+    const insightsEnabled = isInsightsEnabled();
 
     const insights = await mapWithConcurrency(
-      media,
+      insightsEnabled ? media : [],
       INSIGHTS_CONCURRENCY,
       async (m) => {
         const metrics = isVideoLike(m)
@@ -254,6 +258,7 @@ export async function GET(request: NextRequest) {
           : [],
       truncated,
       insightsAvailable: insightsAvailable && !permissionDenied,
+      insightsEnabled,
       followers,
       followerHistory,
       totals,

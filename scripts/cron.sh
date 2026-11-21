@@ -59,8 +59,9 @@ while true; do
       ;;
   esac
 
-  # Once a day, early: the token refresh has a 10-day window before expiry, so
-  # the exact hour does not matter — only that it happens every day.
+  # Once a day, early: tokens are refreshed once they have 15 days or less left
+  # (45 days old), and a failed run is retried the next day — so the exact hour
+  # does not matter, only that it happens every day.
   if [ "$hour" = "05" ] && [ "$last_daily" != "$today" ]; then
     last_daily="$today"
     call refresh-tokens

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/client";
 import {
   parseCommentEvents,
   verifyWebhookSignature,
+  verifyWebhookVerifyToken,
 } from "@/lib/meta/webhook";
 import { processInstagramWebhook } from "@/lib/queue/process-webhook";
 
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+  if (mode === "subscribe" && verifyWebhookVerifyToken(token)) {
     return new NextResponse(challenge, { status: 200 });
   }
 
@@ -24,10 +25,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const rawBody = await request.text();
+  // Meta signs the exact bytes it sent, so verify against the raw body before
+  // decoding it.
+  const rawBytes = Buffer.from(await request.arrayBuffer());
+  const rawBody = rawBytes.toString("utf8");
   const signature = request.headers.get("x-hub-signature-256");
 
-  if (!verifyWebhookSignature(rawBody, signature)) {
+  if (!verifyWebhookSignature(rawBytes, signature)) {
     // Record the attempt so a signature mismatch is visible rather than a
     // silent 401. This is the common symptom of FACEBOOK_APP_SECRET being
     // set to the wrong app's secret for the webhook's signing key.
@@ -37,10 +41,11 @@ export async function POST(request: NextRequest) {
           source: "SYSTEM",
           level: "WARNING",
           message: "Webhook signature verification failed",
+          // No body preview: an unverified payload may carry personal data
+          // (comment text, usernames) from a request we did not accept.
           payload: {
             hadSignatureHeader: Boolean(signature),
-            bodyLength: rawBody.length,
-            bodyPreview: rawBody.slice(0, 200),
+            bodyLength: rawBytes.length,
           },
         },
       })

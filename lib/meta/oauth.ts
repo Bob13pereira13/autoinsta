@@ -6,6 +6,7 @@ import {
   timingSafeEqual,
 } from "crypto";
 import { getEncryptionKeyHex, requireEnv } from "@/lib/env";
+import { getInstagramScopes } from "@/lib/meta/scopes";
 
 // Instagram API with Instagram Login authorizes on www.instagram.com. The old
 // api.instagram.com/oauth/authorize host belonged to the retired Basic Display
@@ -91,8 +92,7 @@ export function getAuthorizationUrl(redirectUri: string, state: string): string 
   const params = new URLSearchParams({
     client_id: requireEnv("INSTAGRAM_APP_ID"),
     redirect_uri: redirectUri,
-    scope:
-      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_manage_insights",
+    scope: getInstagramScopes().join(","),
     response_type: "code",
     state,
   });
