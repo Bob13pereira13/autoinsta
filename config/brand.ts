@@ -20,9 +20,9 @@ export const PLACEHOLDER = "[PREENCHER]";
 
 export const brand = {
   /** Nome exibido na interface, nos e-mails e no título das páginas. */
-  name: "InstaFluxo",
+  name: "ChatIntegrAI",
   /** Nome curto para o ícone do app instalado no celular (até ~12 letras). */
-  shortName: "InstaFluxo",
+  shortName: "ChatIntegrAI",
   /** Frase curta usada na landing page e nas metatags. */
   tagline: "Respostas automáticas no Instagram, do comentário à DM.",
   /** Descrição usada em metatags e no manifest. */
@@ -39,7 +39,7 @@ export const brand = {
    */
   logo: {
     src: "/brand/logo.svg",
-    alt: "InstaFluxo",
+    alt: "ChatIntegrAI",
     width: 32,
     height: 32,
   },
@@ -58,7 +58,7 @@ export const brand = {
 
   /** Contato exibido para clientes e para titulares de dados. */
   support: {
-    email: "suporte@instafluxo.com.br",
+    email: "suporte@chatintegrai.com.br",
     /** Opcional. Ex.: "+55 11 99999-9999". Deixe "" para ocultar. */
     whatsapp: "",
   },
@@ -77,7 +77,7 @@ export const brand = {
     /** Nome do encarregado pelo tratamento de dados pessoais (DPO). */
     dpoName: "Bruno Fernandes",
     /** E-mail do encarregado — canal oficial para pedidos de titulares. */
-    dpoEmail: "bruno@instafluxo.com.br",
+    dpoEmail: "bruno@chatintegrai.com.br",
     /** Cidade/UF do foro dos Termos de Uso. Ex.: "São Paulo/SP". */
     jurisdiction: "São Paulo/SP",
     /**
