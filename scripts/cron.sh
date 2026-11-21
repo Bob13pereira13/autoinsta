@@ -66,6 +66,7 @@ while true; do
     last_daily="$today"
     call refresh-tokens
     call snapshot-followers
+    call purge-data
   fi
 
   # Half a minute: short enough never to skip a slot, long enough to stay idle.

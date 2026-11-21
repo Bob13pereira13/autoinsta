@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { getCurrentWorkspaceId } from "@/lib/auth";
+import { auth, getCurrentWorkspaceId } from "@/lib/auth";
+import { missingBrandFields } from "@/config/brand";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import { getWorkerAlerts, getWorkerHealth } from "@/lib/ops/worker-health";
@@ -15,10 +17,20 @@ export async function GET() {
     );
   }
 
+  const session = await auth();
+  const isAdmin = isPlatformAdmin(session?.user?.email);
+  const workspaceAccounts = await prisma.instagramAccount.findMany({
+    where: { workspaceId },
+    select: { id: true, instagramId: true },
+  });
+  const ownAccountIds = new Set(
+    workspaceAccounts.flatMap((account) => [account.id, account.instagramId])
+  );
+
   const [
     queueCounts,
     workerHealth,
-    workerAlerts,
+    allWorkerAlerts,
     webhookFailures,
     dmFailures,
     tokenRefreshFailures,
@@ -26,7 +38,7 @@ export async function GET() {
   ] = await Promise.all([
     getDMQueue().getJobCounts("waiting", "active", "delayed", "failed"),
     getWorkerHealth(),
-    getWorkerAlerts(10),
+    getWorkerAlerts(isAdmin ? 10 : 25),
     prisma.webhookEvent.findMany({
       where: { workspaceId, status: "FAILED" },
       orderBy: { createdAt: "desc" },
@@ -75,9 +87,8 @@ export async function GET() {
       },
     }),
     prisma.operationalEvent.findMany({
-      where: {
-        OR: [{ workspaceId }, { workspaceId: null }],
-      },
+      // Events without a workspace are platform-wide: operator only.
+      where: isAdmin ? { OR: [{ workspaceId }, { workspaceId: null }] } : { workspaceId },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: {
@@ -91,9 +102,18 @@ export async function GET() {
     }),
   ]);
 
+  // Worker alerts live in one global Redis list; customers only see their own.
+  const workerAlerts = isAdmin
+    ? allWorkerAlerts
+    : allWorkerAlerts
+        .filter((alert) => alert.instagramAccountId && ownAccountIds.has(alert.instagramAccountId))
+        .slice(0, 10);
+
   return NextResponse.json({
     success: true,
     data: {
+      isAdmin,
+      brandMissingFields: isAdmin ? missingBrandFields() : [],
       queueCounts,
       workerHealth,
       workerAlerts,

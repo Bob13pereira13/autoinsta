@@ -381,6 +381,34 @@ model OperationalEvent {
   @@index([createdAt])
 }
 
+/// A data deletion request received from Meta's Data Deletion Request
+/// Callback (POST /api/webhooks/meta/data-deletion). The confirmation code is
+/// what Meta shows the user; /exclusao-dados?codigo=... displays the status.
+model DataDeletionRequest {
+  id               String             @id @default(cuid())
+  confirmationCode String             @unique
+  /// SHA-256 of the user id Meta sent. Kept after completion for audit.
+  metaUserIdHash   String
+  /// The raw user id, kept only while the deletion is pending so a failed
+  /// attempt can be retried. Cleared once the request is finished.
+  metaUserId       String?
+  status           DataDeletionStatus @default(RECEIVED)
+  accountsDeleted  Int                @default(0)
+  errorMessage     String?
+  requestedAt      DateTime           @default(now())
+  completedAt      DateTime?
+
+  @@index([metaUserIdHash])
+  @@index([status])
+}
+
+enum DataDeletionStatus {
+  RECEIVED
+  COMPLETED
+  NOT_FOUND
+  FAILED
+}
+
 enum WorkspaceRole {
   OWNER
   ADMIN

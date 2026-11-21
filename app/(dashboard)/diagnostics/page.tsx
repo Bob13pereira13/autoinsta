@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import StatusBadge from "@/components/status-badge";
 
 interface DiagnosticsData {
+  isAdmin?: boolean;
+  brandMissingFields?: string[];
   queueCounts: Record<string, number>;
   workerHealth: {
     healthy: boolean;
@@ -130,6 +132,7 @@ export default function DiagnosticsPage() {
           </h1>
           <p className="mt-1 text-sm text-muted">
             {t("Health, queues, webhook failures, billing events, and worker alerts.")}
+            {data?.isAdmin ? ` ${t("Platform administrator view: includes events from all workspaces.")}` : ""}
           </p>
         </div>
         <button
@@ -139,6 +142,18 @@ export default function DiagnosticsPage() {
           {t("Refresh")}
         </button>
       </div>
+
+      {data?.isAdmin && (data.brandMissingFields?.length ?? 0) > 0 && (
+        <div role="alert" className="rounded border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+          <p className="font-semibold">{t("Brand configuration incomplete")}</p>
+          <p className="mt-1">
+            {t("Fill these fields in config/brand.ts before going live and before submitting to Meta App Review:")}
+          </p>
+          <ul className="mt-2 space-y-1 font-mono text-xs">
+            {data.brandMissingFields?.map((field) => <li key={field}>{field}</li>)}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
         <div className="panel rounded p-4 sm:p-5">
