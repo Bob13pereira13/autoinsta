@@ -1,15 +1,13 @@
 "use client";
 
 /**
- * Campaign Builder
+ * Automation editor
  *
- * Two-pane campaign editor: a control panel on the left and a live phone
- * preview on the right. Used for both creating and editing a campaign.
- *
- * Turn 1 wires the fully-functional pieces: trigger scope (specific / any /
- * next post), match mode (specific words / any word), the opening + reveal DM
- * text, public reply, and the tracked link. Button-driven delivery and the
- * follow / email / follow-up steps arrive in later turns.
+ * Two panes: the steps on the left (1. When, 2. Keyword, 3. What the person
+ * receives, 4. Extras — Comments only) and a live phone preview on the right,
+ * with a plain-language summary on top. One editor for the three automation
+ * types (Comments, Stories, Direct); each step only shows what works for the
+ * chosen type. Used for both creating and editing.
  */
 
 import { useI18n } from "@/lib/i18n/provider";
@@ -18,6 +16,17 @@ import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import PostPicker from "@/components/post-picker";
 import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
+import {
+  Help,
+  MediaPicker,
+  Step,
+  StorageUsage,
+  type AutomationKind,
+  type BuilderMedia,
+  type MediaSlot,
+} from "@/components/automation-builder-parts";
+import { automationSummary } from "@/lib/automation/summary";
+import { automationTypeSlug } from "@/lib/automation/type-slugs";
 import { readCache, writeCache } from "@/lib/client-cache";
 import {
   IMPORT_QUEUE_KEY,
@@ -38,7 +47,11 @@ interface LoadedCampaign {
   keywords: string[];
   matchAnyWord: boolean;
   wholeWordMatch?: boolean;
-  dmTriggerEnabled: boolean;
+  type?: AutomationKind;
+  triggerStoryReplies?: boolean;
+  triggerStoryMentions?: boolean;
+  replyCooldownHours?: number;
+  media?: Array<{ id: string; slot: string | null; kind: "IMAGE" | "VIDEO"; url: string; originalName?: string | null }>;
   dmMessage: string;
   openingDmEnabled: boolean;
   openingDmMessage: string | null;
@@ -61,22 +74,11 @@ interface LoadedCampaign {
 interface CampaignBuilderProps {
   mode: "new" | "edit";
   campaignId?: string;
+  /** New automations: which tab "New automation" was clicked on. */
+  initialType?: AutomationKind;
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {children}
-    </div>
-  );
-}
+const EMPTY_MEDIA: Record<MediaSlot, BuilderMedia[]> = { FOLLOW_PROMPT: [], MAIN: [], FOLLOW_UP: [] };
 
 function Radio({
   checked,
@@ -131,7 +133,7 @@ function Toggle({
   );
 }
 
-export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderProps) {
+export default function CampaignBuilder({ mode, campaignId, initialType = "COMMENTS" }: CampaignBuilderProps) {
   const { t, message } = useI18n();
   const router = useRouter();
 
@@ -161,7 +163,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [matchMode, setMatchMode] = useState<MatchMode>("specific");
   const [keywordText, setKeywordText] = useState("");
   const [wholeWordMatch, setWholeWordMatch] = useState(true);
-  const [dmTriggerEnabled, setDmTriggerEnabled] = useState(false);
+
+  const [automationType, setAutomationType] = useState<AutomationKind>(initialType);
+  const [triggerStoryReplies, setTriggerStoryReplies] = useState(true);
+  const [triggerStoryMentions, setTriggerStoryMentions] = useState(false);
+  const [replyCooldownHours, setReplyCooldownHours] = useState(24);
+  const [media, setMedia] = useState<Record<MediaSlot, BuilderMedia[]>>(EMPTY_MEDIA);
+  const [storageVersion, setStorageVersion] = useState(0);
+  const isComments = automationType === "COMMENTS";
 
   const [publicReplyEnabled, setPublicReplyEnabled] = useState(false);
   const [publicReplyMessages, setPublicReplyMessages] = useState<string[]>([""]);
@@ -263,7 +272,17 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         setMatchMode(c.matchAnyWord ? "any" : "specific");
         setKeywordText(c.keywords.join(", "));
         setWholeWordMatch(c.wholeWordMatch ?? true);
-        setDmTriggerEnabled(c.dmTriggerEnabled ?? false);
+        setAutomationType(c.type ?? "COMMENTS");
+        setTriggerStoryReplies(c.triggerStoryReplies ?? true);
+        setTriggerStoryMentions(c.triggerStoryMentions ?? false);
+        setReplyCooldownHours(c.replyCooldownHours ?? 24);
+        const loaded: Record<MediaSlot, BuilderMedia[]> = { FOLLOW_PROMPT: [], MAIN: [], FOLLOW_UP: [] };
+        for (const m of c.media ?? []) {
+          if (m.slot === "FOLLOW_PROMPT" || m.slot === "MAIN" || m.slot === "FOLLOW_UP") {
+            loaded[m.slot].push({ id: m.id, kind: m.kind, url: m.url, originalName: m.originalName, attached: true });
+          }
+        }
+        setMedia(loaded);
         setPublicReplyEnabled(c.publicReplyEnabled);
         setPublicReplyMessages(
           c.publicReplyMessages?.length
@@ -372,6 +391,37 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const username =
     accounts.find((a) => a.id === selectedAccountId)?.username ?? "yourbrand";
 
+  const typeLabel =
+    automationType === "COMMENTS" ? t("Comments") : automationType === "STORIES" ? t("Stories") : t("Direct");
+  const totalMedia = media.FOLLOW_PROMPT.length + media.MAIN.length + media.FOLLOW_UP.length;
+  const mediaBlockedInComments = isComments && !openingDmEnabled && totalMedia > 0;
+  const commentsMediaNote = isComments && !openingDmEnabled
+    ? t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM in this step to add media.")
+    : null;
+  const summary = automationSummary(
+    { t },
+    {
+      type: automationType,
+      scope: triggerScope,
+      keywords,
+      anyWord: matchMode === "any",
+      storyReplies: triggerStoryReplies,
+      storyMentions: triggerStoryMentions,
+      hasLink: Boolean(trackedDestinationUrl.trim()),
+      requireFollow,
+      images: media.MAIN.filter((m) => m.kind === "IMAGE").length,
+      videos: media.MAIN.filter((m) => m.kind === "VIDEO").length,
+      followUp: followUpEnabled,
+      followUpMinutes: followUpDelayMinutes,
+      publicReply: isComments && publicReplyEnabled,
+      cooldownHours: replyCooldownHours,
+    }
+  );
+  const setSlotMedia = (slot: MediaSlot) => (items: BuilderMedia[]) =>
+    setMedia((prev) => ({ ...prev, [slot]: items }));
+  const bumpStorage = () => setStorageVersion((v) => v + 1);
+  const saveBlocked = saving || mediaBlockedInComments;
+
   function handlePostSelect(
     id: string,
     url?: string,
@@ -392,33 +442,44 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
     setError(null);
 
     if (!selectedAccountId) return setError(t("Connect an Instagram account first."));
-    if (triggerScope === "specific" && !postId)
+    if (isComments && triggerScope === "specific" && !postId)
       return setError(t("Pick a post or reel to trigger the campaign."));
     if (matchMode === "specific" && keywords.length === 0)
       return setError(t("Add at least one keyword, or switch to any word."));
+    if (automationType === "STORIES" && !triggerStoryReplies && !(triggerStoryMentions && matchMode === "any"))
+      return setError(t("Choose at least one: story replies or story mentions"));
     if (!dmMessage.trim()) return setError(t("Add the DM with the link."));
-    if (openingDmEnabled && (!openingDmMessage.trim() || !openingDmButtonLabel.trim()))
+    if (isComments && openingDmEnabled && (!openingDmMessage.trim() || !openingDmButtonLabel.trim()))
       return setError(t("Your opening DM needs a message and a button label."));
+    // Comments: media only goes out after the opening DM's button (Meta sends
+    // the first reply to a comment as text only). Without it, it never would.
+    if (mediaBlockedInComments)
+      return setError(t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media."));
 
     setSaving(true);
 
+    const includedSlots: MediaSlot[] = ["MAIN", ...(requireFollow ? (["FOLLOW_PROMPT"] as const) : []), ...(followUpEnabled ? (["FOLLOW_UP"] as const) : [])];
     const payload = {
-      name: name.trim() || `Campaign for @${username}`,
+      name: name.trim() || t("{type} automation for @{username}", { type: typeLabel, username }),
+      type: automationType,
       instagramAccountId: selectedAccountId,
-      postId: triggerScope === "specific" ? postId : null,
-      postUrl: triggerScope === "specific" ? postUrl : null,
-      matchAnyPost: triggerScope === "any",
-      pendingNextReel: triggerScope === "next",
+      postId: isComments && triggerScope === "specific" ? postId : null,
+      postUrl: isComments && triggerScope === "specific" ? postUrl : null,
+      matchAnyPost: isComments && triggerScope === "any",
+      pendingNextReel: isComments && triggerScope === "next",
       matchAnyWord: matchMode === "any",
       keywords: matchMode === "any" ? [] : keywords,
       wholeWordMatch,
-      dmTriggerEnabled,
+      triggerStoryReplies,
+      triggerStoryMentions: triggerStoryMentions && matchMode === "any",
+      replyCooldownHours,
+      media: includedSlots.flatMap((slot) => media[slot].map((m, position) => ({ id: m.id, slot, position }))),
       dmMessage,
-      openingDmEnabled,
-      openingDmMessage: openingDmEnabled ? openingDmMessage : null,
-      openingDmButtonLabel: openingDmEnabled ? openingDmButtonLabel : null,
-      publicReplyEnabled,
-      publicReplyMessages: publicReplyEnabled
+      openingDmEnabled: isComments && openingDmEnabled,
+      openingDmMessage: isComments && openingDmEnabled ? openingDmMessage : null,
+      openingDmButtonLabel: isComments && openingDmEnabled ? openingDmButtonLabel : null,
+      publicReplyEnabled: isComments && publicReplyEnabled,
+      publicReplyMessages: isComments && publicReplyEnabled
         ? publicReplyMessages.map((m) => m.trim()).filter(Boolean)
         : [],
       trackedDestinationUrl: trackedDestinationUrl.trim() || "",
@@ -485,19 +546,18 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           }
         }
         // refresh() busts the router cache so the list reflects the save
-        // instead of landing on a stale (empty) campaigns page.
-        router.push("/campaigns");
+        // instead of landing on a stale (empty) list.
+        router.push(`/automations?tipo=${automationTypeSlug(automationType)}`);
         router.refresh();
       } else {
-        // Surface the specific field that failed validation instead of a
-        // generic "Invalid input".
+        // Surface the specific rule that failed instead of "Invalid input".
         const fieldErrors = data.details?.fieldErrors as
           | Record<string, string[]>
           | undefined;
         const firstField = fieldErrors && Object.keys(fieldErrors)[0];
         setError(
           firstField
-            ? `${firstField}: ${fieldErrors[firstField][0]}`
+            ? message(fieldErrors[firstField][0])
             : message(data.error, "Failed to save campaign")
         );
         if (typeof window !== "undefined")
@@ -534,7 +594,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
     } catch {
       // ignore
     }
-    router.push("/campaigns");
+    router.push(`/automations?tipo=${automationTypeSlug(automationType)}`);
     router.refresh();
   }
 
@@ -547,10 +607,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       <div className="panel rounded p-8 text-center">
         <p className="text-sm text-muted">{t("Campaign not found.")}</p>
         <button
-          onClick={() => router.push("/campaigns")}
+          onClick={() => router.push(`/automations?tipo=${automationTypeSlug(automationType)}`)}
           className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
         >
-          {t("Back to campaigns")}
+          {t("Back to automations")}
         </button>
       </div>
     );
@@ -575,8 +635,9 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           {mode === "edit" ? (
             <>
               <span className="truncate text-sm font-semibold text-foreground">
-                {name || t("Untitled campaign")}
+                {name || t("Untitled automation")}
               </span>
+              <span className="rounded bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{typeLabel}</span>
               <span
                 className={`rounded px-2 py-0.5 text-xs font-semibold ${
                   isActive ? "bg-success/15 text-success" : "bg-zinc-500/15 text-muted"
@@ -586,7 +647,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               </span>
             </>
           ) : (
-            <span className="text-sm text-muted">{t("New campaign")}</span>
+            <span className="text-sm text-muted">{t("New automation · {type}", { type: typeLabel })}</span>
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -614,7 +675,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               <button
                 type="button"
                 onClick={() => handleSubmit(true)}
-                disabled={saving}
+                disabled={saveBlocked}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
               >
                 {t("Go Live")}
@@ -623,7 +684,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           <button
             type="button"
             onClick={() => handleSubmit(mode === "new" ? true : isActive)}
-            disabled={saving}
+            disabled={saveBlocked}
             className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {saving ? t("Saving…") : mode === "new" ? t("Go Live") : t("Save changes")}
@@ -633,24 +694,30 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
 
       {/* min-w-0 on the cells: a grid item defaults to min-width:auto, so a
           long string widens the whole page instead of wrapping. */}
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr] lg:gap-8">
+      {/* Plain-language summary of what the automation does, live. */}
+      <div className="rounded-lg border border-accent/30 bg-accent/5 px-4 py-3" aria-live="polite">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent">{t("In short")}</p>
+        <p className="mt-1 text-sm text-foreground">{summary}</p>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
       {/* Left: controls */}
       <div className="space-y-8 min-w-0">
         {error && (
-          <div className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
+          <div role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
             {error}
           </div>
         )}
 
         <div className="space-y-3">
           <label className="text-sm font-semibold text-foreground">
-            {t("Campaign name")}{" "}
+            {t("Automation name")}{" "}
             <span className="font-normal text-muted">{t("(optional)")}</span>
           </label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={t("e.g. YC referral")}
+            placeholder={t("e.g. Price list on Direct")}
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
             maxLength={100}
           />
@@ -672,43 +739,86 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           )}
         </div>
 
-        <Section title={t("When someone comments on")}>
-          <Radio
-            checked={triggerScope === "specific"}
-            onSelect={() => setTriggerScope("specific")}
-          >
-            {t("a specific post or reel")}
-          </Radio>
-          {triggerScope === "specific" && (
-            <div className="rounded-lg border border-border p-2">
-              <PostPicker
-                selectedPostId={postId}
-                instagramAccountId={selectedAccountId}
-                usedPostIds={usedPosts}
-                onSelect={handlePostSelect}
-              />
-            </div>
+        {/* 1. When */}
+        <Step number={1} title={t("When")}>
+          {isComments && (
+            <>
+              <p className="text-sm text-muted">
+                {t("Someone comments on")}
+                <Help
+                  text={t("Choose which posts this automation watches. A specific post takes priority over “any post” when both match.")}
+                  example={t("“Next post or reel” attaches itself to the next reel you publish.")}
+                />
+              </p>
+              <Radio checked={triggerScope === "specific"} onSelect={() => setTriggerScope("specific")}>
+                {t("a specific post or reel")}
+              </Radio>
+              {triggerScope === "specific" && (
+                <div className="rounded-lg border border-border p-2">
+                  <PostPicker
+                    selectedPostId={postId}
+                    instagramAccountId={selectedAccountId}
+                    usedPostIds={usedPosts}
+                    onSelect={handlePostSelect}
+                  />
+                </div>
+              )}
+              <Radio checked={triggerScope === "any"} onSelect={() => setTriggerScope("any")}>
+                {t("any post or reel")}
+              </Radio>
+              <Radio checked={triggerScope === "next"} onSelect={() => setTriggerScope("next")}>
+                {t("next post or reel")}
+              </Radio>
+            </>
           )}
-          <Radio
-            checked={triggerScope === "any"}
-            onSelect={() => setTriggerScope("any")}
-          >
-            {t("any post or reel")}
-          </Radio>
-          <Radio
-            checked={triggerScope === "next"}
-            onSelect={() => setTriggerScope("next")}
-          >
-            {t("next post or reel")}
-          </Radio>
-        </Section>
+          {automationType === "STORIES" && (
+            <>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+                <span className="text-sm text-foreground">
+                  {t("Someone replies to one of your stories")}
+                  <Help
+                    text={t("Answers the message a person sends when replying to any of your stories.")}
+                    example={t("Your story says “Reply PRICE”; whoever replies PRICE gets the price list.")}
+                  />
+                </span>
+                <Toggle on={triggerStoryReplies} onToggle={() => setTriggerStoryReplies(!triggerStoryReplies)} />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+                <span className="text-sm text-foreground">
+                  {t("Someone mentions you in their story")}
+                  <Help
+                    text={t("Answers when a person tags your account in their own story. A mention has no text, so it only works without keywords (step 2). Instagram only reports mentions from public accounts.")}
+                    example={t("A customer posts your product and tags you; they get a thank-you with a coupon.")}
+                  />
+                </span>
+                <Toggle on={triggerStoryMentions} onToggle={() => setTriggerStoryMentions(!triggerStoryMentions)} />
+              </div>
+              {triggerStoryMentions && matchMode !== "any" && (
+                <p className="rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
+                  {t("Story mentions have no text, so they only work without keywords. Choose “any reply” in step 2.")}
+                </p>
+              )}
+            </>
+          )}
+          {automationType === "DIRECT" && (
+            <p className="rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+              {t("Someone sends you a direct message")}
+              <Help
+                text={t("Any DM to your account that is not a reply to a story (those go to Stories automations).")}
+                example={t("Someone writes “hi, what are your hours?”.")}
+              />
+            </p>
+          )}
+        </Step>
 
-        <Section title={t("And this comment has")}>
-          <Radio
-            checked={matchMode === "specific"}
-            onSelect={() => setMatchMode("specific")}
-          >
-            {t("a specific word or words")}
+        {/* 2. Keyword */}
+        <Step number={2} title={t("Keyword")}>
+          <Radio checked={matchMode === "specific"} onSelect={() => setMatchMode("specific")}>
+            {t("only when it contains a keyword")}
+            <Help
+              text={t("The automation only answers when the text contains one of these words. With several automations, the one with a keyword wins over one without.")}
+              example={t("LINK, PRICE, COUPON")}
+            />
           </Radio>
           {matchMode === "specific" && (
             <div className="space-y-1">
@@ -716,150 +826,115 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 value={keywordText}
                 onChange={(e) => setKeywordText(e.target.value)}
                 placeholder={t("Enter a word or multiple")}
+                aria-label={t("Keywords")}
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
               />
               <p className="text-xs text-muted">{t("Use commas to separate words")}</p>
               <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-                <span className="text-sm text-foreground">{t("Match part of a word")}</span>
-                <Toggle
-                  on={!wholeWordMatch}
-                  onToggle={() => setWholeWordMatch(!wholeWordMatch)}
-                />
+                <span className="text-sm text-foreground">
+                  {t("Match part of a word")}
+                  <Help
+                    text={t("Off: only the exact word counts. On: also counts when the keyword is part of a longer word.")}
+                    example={t("With “link” on, “links” also matches.")}
+                  />
+                </span>
+                <Toggle on={!wholeWordMatch} onToggle={() => setWholeWordMatch(!wholeWordMatch)} />
               </div>
-              {!wholeWordMatch && (
-                <p className="text-xs text-muted">
-                  {t("Also fires when a keyword is part of a longer word, e.g. “link” in “links”.")}
-                </p>
-              )}
             </div>
           )}
-          <Radio
-            checked={matchMode === "any"}
-            onSelect={() => setMatchMode("any")}
-          >
-            {t("any word")}
+          <Radio checked={matchMode === "any"} onSelect={() => setMatchMode("any")}>
+            {isComments ? t("any comment") : automationType === "STORIES" ? t("any reply") : t("any message")}
+            <Help
+              text={t("Answers everything that arrives, without needing a keyword.")}
+              example={isComments ? t("Every comment on the post gets the DM.") : t("Every new conversation gets a welcome message.")}
+            />
           </Radio>
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-            <span className="text-sm text-foreground">
-              {t("also reply when someone DMs")}{" "}
-              {matchMode === "any" ? t("anything") : t("these words")}
-            </span>
-            <Toggle
-              on={dmTriggerEnabled}
-              onToggle={() => setDmTriggerEnabled(!dmTriggerEnabled)}
-            />
-          </div>
-          {dmTriggerEnabled && (
-            <p className="text-xs text-muted">
-              {matchMode === "any"
-                ? t("Every DM to this account gets the reply below — use with care.")
-                : t("A DM containing any of these words gets the same reply, no comment needed.")}
-            </p>
-          )}
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-            <span className="text-sm text-foreground">
-              {t("reply to their comments under the post")}
-            </span>
-            <Toggle
-              on={publicReplyEnabled}
-              onToggle={() => setPublicReplyEnabled(!publicReplyEnabled)}
-            />
-          </div>
-          {publicReplyEnabled && (
-            <div className="space-y-2">
-              {publicReplyMessages.map((msg, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    value={msg}
-                    onChange={(e) =>
-                      setPublicReplyMessages((prev) =>
-                        prev.map((m, idx) => (idx === i ? e.target.value : m))
-                      )
-                    }
-                    placeholder={t("Sent you a DM! 📩")}
-                    maxLength={1000}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
-                  />
-                  {publicReplyMessages.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPublicReplyMessages((prev) =>
-                          prev.filter((_, idx) => idx !== i)
-                        )
-                      }
-                      className="shrink-0 px-2 text-muted hover:text-error"
-                      aria-label={t("Remove reply")}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-              {publicReplyMessages.length < 10 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPublicReplyMessages((prev) => [...prev, ""])
-                  }
-                  className="text-xs font-medium text-accent hover:underline"
-                >
-                  {t("+ Add another reply")}
-                </button>
-              )}
-              <p className="text-xs text-muted">
-                {t("One is picked at random each time, so replies don't look identical.")}
+          {automationType === "DIRECT" && matchMode === "any" && (
+            <div role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+              <p className="font-semibold">{t("Careful: this answers EVERY direct message")}</p>
+              <p className="mt-1 text-xs">
+                {t("Including customers who already talk to your team. To avoid spam, each person gets at most one automatic reply per interval below, and nothing is sent while someone from your team is talking to them (24 h after their last message).")}
               </p>
             </div>
           )}
-        </Section>
+          {!isComments && matchMode === "any" && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+              <span>{t("Reply to the same person at most once every")}</span>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={replyCooldownHours}
+                aria-label={t("Hours between replies to the same person")}
+                onChange={(e) => setReplyCooldownHours(Math.max(1, Math.min(168, Math.floor(Number(e.target.value) || 24))))}
+                className="w-16 rounded-lg border border-border bg-surface px-2 py-1 text-sm focus:border-accent/40 focus:outline-none"
+              />
+              <span>{t("hours")}</span>
+              <Help text={t("Prevents the same person from getting the automatic reply every time they write. Default: 24 hours.")} />
+            </div>
+          )}
+        </Step>
 
-        <Section title={t("They will get")}>
+        {/* 3. What the person receives */}
+        <Step number={3} title={t("What the person receives")}>
+          <StorageUsage version={storageVersion} />
+
+          {isComments && (
+            <div className="rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-foreground">
+                  {t("an opening DM with a button")}
+                  <Help
+                    text={t("Instagram lets you send only one text message in reply to a comment. With an opening DM, the person taps the button and the conversation opens — then the link, images and videos can be sent.")}
+                    example={t("“Want the link? Tap below 👇” + button “Send me the link”.")}
+                  />
+                </span>
+                <Toggle on={openingDmEnabled} onToggle={() => setOpeningDmEnabled(!openingDmEnabled)} />
+              </div>
+              {openingDmEnabled && (
+                <div className="mt-3 space-y-2">
+                  <textarea
+                    value={openingDmMessage}
+                    onChange={(e) => setOpeningDmMessage(e.target.value)}
+                    placeholder={t("Hey there! I'm so happy you're here 😊")}
+                    rows={3}
+                    aria-label={t("Opening DM text")}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                    maxLength={1000}
+                  />
+                  <input
+                    value={openingDmButtonLabel}
+                    onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
+                    placeholder={t("Send me the link")}
+                    aria-label={t("Button label")}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                    maxLength={64}
+                  />
+                  <p className="text-xs text-muted">{t("This first message is text only: Instagram does not allow images or videos in it.")}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground">{t("an opening DM")}</span>
-              <Toggle
-                on={openingDmEnabled}
-                onToggle={() => setOpeningDmEnabled(!openingDmEnabled)}
-              />
-            </div>
-            {openingDmEnabled && (
-              <div className="mt-3 space-y-2">
-                <textarea
-                  value={openingDmMessage}
-                  onChange={(e) => setOpeningDmMessage(e.target.value)}
-                  placeholder={t("Hey there! I'm so happy you're here 😊")}
-                  rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
-                  maxLength={1000}
-                />
-                <input
-                  value={openingDmButtonLabel}
-                  onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
-                  placeholder={t("Send me the link")}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
-                  maxLength={64}
-                />
-              </div>
-            )}
-          </div>
-          <div className="mt-3 rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
-                {t("a follow requirement first")}
+                {t("follow me to unlock")}
+                <Help
+                  text={t("The content is only sent after the person follows the account and taps the button. If Instagram cannot confirm the follow, it is sent anyway.")}
+                  example={t("“Follow me and tap the button to get the coupon”.")}
+                />
               </span>
-              <Toggle
-                on={requireFollow}
-                onToggle={() => setRequireFollow(!requireFollow)}
-              />
+              <Toggle on={requireFollow} onToggle={() => setRequireFollow(!requireFollow)} />
             </div>
             {requireFollow && (
               <div className="mt-3 space-y-2">
                 <textarea
                   value={followPromptMessage}
                   onChange={(e) => setFollowPromptMessage(e.target.value)}
-                  placeholder={t("quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over")}
+                  placeholder={t("Follow me and tap the button below to get it 💛")}
                   rows={3}
+                  aria-label={t("Follow request text")}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
                   maxLength={1000}
                 />
@@ -867,25 +942,34 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   value={followPromptButtonLabel}
                   onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
                   placeholder={t("i'm following")}
+                  aria-label={t("Button label")}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
                   maxLength={20}
                 />
-                <p className="text-xs text-muted">
-                  {t("We send the link only after they tap the button and Instagram confirms the follow. If it can't be verified, we send it anyway.")}
-                </p>
+                <MediaPicker
+                  items={media.FOLLOW_PROMPT}
+                  onChange={setSlotMedia("FOLLOW_PROMPT")}
+                  onStorageChange={bumpStorage}
+                  blockedReason={media.FOLLOW_PROMPT.length === 0 ? commentsMediaNote : null}
+                />
               </div>
             )}
           </div>
-        </Section>
 
-        <Section title={t("And then, they will get")}>
           <div className="rounded-lg border border-border p-3 space-y-2">
-            <span className="text-sm text-foreground">{t("a DM with a link")}</span>
+            <span className="text-sm text-foreground">
+              {t("the main message")}
+              <Help
+                text={t("Write the message. {link} becomes your tracked link (we count clicks) and {username} becomes the person's name.", { link: "{link}", username: "{username}" })}
+                example={t("“Hi {username}! Here is the catalogue: {link}”", { link: "{link}", username: "{username}" })}
+              />
+            </span>
             <textarea
               value={dmMessage}
               onChange={(e) => setDmMessage(e.target.value)}
               placeholder={t("Write a message")}
               rows={3}
+              aria-label={t("Main message text")}
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
               maxLength={1000}
             />
@@ -896,6 +980,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setTrackedDestinationUrl(e.target.value)}
                   onBlur={ensureLinkToken}
                   placeholder="https://yourlink.com/offer"
+                  aria-label={t("Link")}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
                 />
                 <input
@@ -911,6 +996,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                       value={secondaryDestinationUrl}
                       onChange={(e) => setSecondaryDestinationUrl(e.target.value)}
                       placeholder="https://yourlink.com/second"
+                      aria-label={t("Second link")}
                       className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
                     />
                     <input
@@ -940,19 +1026,24 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 {t("+ Add A Link")}
               </button>
             )}
-            <p className="text-xs text-muted">
-              {"{link}"} {t("inserts the tracked link;")} {"{username}"} {t("personalizes.")}
-            </p>
+            <MediaPicker
+              items={media.MAIN}
+              onChange={setSlotMedia("MAIN")}
+              onStorageChange={bumpStorage}
+              blockedReason={media.MAIN.length === 0 ? commentsMediaNote : null}
+            />
           </div>
-          <div className="mt-3 rounded-lg border border-border p-3">
+
+          <div className="rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
-                {t("a follow-up thank-you message")}
+                {t("a thank-you message")}
+                <Help
+                  text={t("A short extra message sent some minutes after the main one (up to 24 hours, Instagram's messaging window).")}
+                  example={t("“Thanks for the follow, enjoy! 🙌”")}
+                />
               </span>
-              <Toggle
-                on={followUpEnabled}
-                onToggle={() => setFollowUpEnabled(!followUpEnabled)}
-              />
+              <Toggle on={followUpEnabled} onToggle={() => setFollowUpEnabled(!followUpEnabled)} />
             </div>
             {followUpEnabled && (
               <div className="mt-3 space-y-2">
@@ -961,6 +1052,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setFollowUpMessage(e.target.value)}
                   placeholder={t("Btw just wanted to say thanks for following me, I appreciate the support 🙌")}
                   rows={3}
+                  aria-label={t("Thank-you message text")}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
                   maxLength={1000}
                 />
@@ -971,27 +1063,83 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                     min={0}
                     max={1440}
                     value={followUpDelayMinutes}
+                    aria-label={t("Minutes after the main message")}
                     onChange={(e) =>
-                      setFollowUpDelayMinutes(
-                        Math.max(0, Math.min(1440, Math.floor(Number(e.target.value) || 0)))
-                      )
+                      setFollowUpDelayMinutes(Math.max(0, Math.min(1440, Math.floor(Number(e.target.value) || 0))))
                     }
                     className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent/40 focus:outline-none"
                   />
-                  <span className="text-xs text-muted">
-                    {t("minutes after the link")}
-                  </span>
+                  <span className="text-xs text-muted">{t("minutes after the link")}</span>
                 </div>
-                <p className="text-xs text-muted">
-                  {followUpDelayMinutes > 0
-                    ? t("Sent {minutes} min after they tap through.", { minutes: followUpDelayMinutes })
-                    : t("Sent right after they tap through.")}
-                  {" {username}"} {t("personalizes it. Max 24 hours, to stay inside Instagram's messaging window.")}
-                </p>
+                <MediaPicker
+                  items={media.FOLLOW_UP}
+                  onChange={setSlotMedia("FOLLOW_UP")}
+                  onStorageChange={bumpStorage}
+                  blockedReason={media.FOLLOW_UP.length === 0 ? commentsMediaNote : null}
+                />
               </div>
             )}
           </div>
-        </Section>
+
+          {mediaBlockedInComments && (
+            <p role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+              {t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media.")}
+            </p>
+          )}
+        </Step>
+
+        {/* 4. Extras — Comments only */}
+        {isComments && (
+          <Step number={4} title={t("Extras")}>
+            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+              <span className="text-sm text-foreground">
+                {t("reply to the comment publicly")}
+                <Help
+                  text={t("Also answers under the comment, visible to everyone. Add several variations: one is picked at random each time.")}
+                  example={t("“Sent you a DM! 📩”")}
+                />
+              </span>
+              <Toggle on={publicReplyEnabled} onToggle={() => setPublicReplyEnabled(!publicReplyEnabled)} />
+            </div>
+            {publicReplyEnabled && (
+              <div className="space-y-2">
+                {publicReplyMessages.map((msg, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      value={msg}
+                      onChange={(e) =>
+                        setPublicReplyMessages((prev) => prev.map((m, idx) => (idx === i ? e.target.value : m)))
+                      }
+                      placeholder={t("Sent you a DM! 📩")}
+                      aria-label={t("Public reply {number}", { number: i + 1 })}
+                      maxLength={1000}
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                    />
+                    {publicReplyMessages.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setPublicReplyMessages((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="shrink-0 px-2 text-muted hover:text-error"
+                        aria-label={t("Remove reply")}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {publicReplyMessages.length < 10 && (
+                  <button
+                    type="button"
+                    onClick={() => setPublicReplyMessages((prev) => [...prev, ""])}
+                    className="text-xs font-medium text-accent hover:underline"
+                  >
+                    {t("+ Add another reply")}
+                  </button>
+                )}
+              </div>
+            )}
+          </Step>
+        )}
       </div>
 
       {/* Right: preview */}
@@ -1006,10 +1154,12 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             postThumb={postThumb}
             caption={postCaption}
             sampleComment={keywords[0] ?? ""}
-            dmTriggerEnabled={dmTriggerEnabled}
-            publicReplyEnabled={publicReplyEnabled}
+            automationType={automationType}
+            storyMode={triggerStoryReplies || !triggerStoryMentions || matchMode !== "any" ? "reply" : "mention"}
+            media={{ FOLLOW_PROMPT: media.FOLLOW_PROMPT, MAIN: media.MAIN, FOLLOW_UP: media.FOLLOW_UP }}
+            publicReplyEnabled={isComments && publicReplyEnabled}
             publicReplyMessage={publicReplyMessages.find((m) => m.trim()) ?? ""}
-            openingDmEnabled={openingDmEnabled}
+            openingDmEnabled={isComments && openingDmEnabled}
             openingDmMessage={openingDmMessage}
             openingDmButtonLabel={openingDmButtonLabel}
             revealMessage={dmMessage}

@@ -12,7 +12,12 @@ import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
+import CampaignPreview, { type PreviewMedia, type PreviewTab } from "@/components/campaign-preview";
+import { automationSummary } from "@/lib/automation/summary";
+import { automationTypeSlug } from "@/lib/automation/type-slugs";
+
+type AutomationType = "COMMENTS" | "STORIES" | "DIRECT";
+type Slot = "FOLLOW_PROMPT" | "MAIN" | "FOLLOW_UP";
 
 interface Campaign {
   id: string;
@@ -23,7 +28,11 @@ interface Campaign {
   matchAnyPost: boolean;
   keywords: string[];
   matchAnyWord: boolean;
-  dmTriggerEnabled: boolean;
+  type: AutomationType;
+  triggerStoryReplies: boolean;
+  triggerStoryMentions: boolean;
+  replyCooldownHours: number;
+  media?: { id: string; slot: Slot; kind: "IMAGE" | "VIDEO"; url: string; position: number }[];
   dmMessage: string;
   openingDmEnabled: boolean;
   openingDmMessage: string | null;
@@ -135,10 +144,10 @@ export default function CampaignDetailPage() {
       <div className="panel rounded p-8 text-center">
         <p className="text-sm text-muted">{t("Campaign not found.")}</p>
         <button
-          onClick={() => router.push("/campaigns")}
+          onClick={() => router.push("/automations")}
           className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
         >
-          {t("Back to campaigns")}
+          {t("Back to automations")}
         </button>
       </div>
     );
@@ -153,14 +162,51 @@ export default function CampaignDetailPage() {
   const hasLink = Boolean(campaign.trackedLinks?.[0]?.destinationUrl);
   const hasSecondLink = Boolean(campaign.trackedLinks?.[1]?.destinationUrl);
 
+  const type: AutomationType = campaign.type ?? "COMMENTS";
+  const isComments = type === "COMMENTS";
+  const typeLabel = type === "COMMENTS" ? t("Comments") : type === "STORIES" ? t("Stories") : t("Direct");
   const trigger = campaign.matchAnyPost
     ? t("Any post or reel")
     : campaign.pendingNextReel
       ? t("Your next reel")
       : t("A specific post or reel");
+  const storyTrigger = [
+    campaign.triggerStoryReplies ? t("Replies to your stories") : null,
+    campaign.triggerStoryMentions && campaign.matchAnyWord ? t("Mentions of you in stories") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const matchText = campaign.matchAnyWord
-    ? t("Any comment")
+    ? isComments
+      ? t("Any comment")
+      : type === "STORIES"
+        ? t("Any reply")
+        : t("Any message")
     : campaign.keywords.join(", ") || t("No keywords");
+
+  const mediaBySlot: Record<Slot, PreviewMedia[]> = { FOLLOW_PROMPT: [], MAIN: [], FOLLOW_UP: [] };
+  for (const m of [...(campaign.media ?? [])].sort((a, b) => a.position - b.position)) {
+    mediaBySlot[m.slot]?.push({ kind: m.kind, url: m.url });
+  }
+  const summary = automationSummary(
+    { t },
+    {
+      type,
+      scope: campaign.matchAnyPost ? "any" : campaign.pendingNextReel ? "next" : "specific",
+      keywords: campaign.keywords,
+      anyWord: campaign.matchAnyWord,
+      storyReplies: campaign.triggerStoryReplies,
+      storyMentions: campaign.triggerStoryMentions,
+      hasLink,
+      requireFollow: campaign.requireFollow,
+      images: mediaBySlot.MAIN.filter((m) => m.kind === "IMAGE").length,
+      videos: mediaBySlot.MAIN.filter((m) => m.kind === "VIDEO").length,
+      followUp: Boolean(campaign.followUpEnabled && campaign.followUpMessage),
+      followUpMinutes: campaign.followUpDelayMinutes ?? 0,
+      publicReply: isComments && publicReplies.length > 0 && campaign.publicReplyEnabled,
+      cooldownHours: campaign.replyCooldownHours ?? 24,
+    }
+  );
 
   const metrics = [
     { label: t("Sends"), value: campaign.analytics.sent },
@@ -175,10 +221,10 @@ export default function CampaignDetailPage() {
       <div className="space-y-6">
         <div className="flex items-center gap-2">
           <Link
-            href="/campaigns"
+            href={`/automations?tipo=${automationTypeSlug(type)}`}
             className="text-sm text-muted hover:text-foreground"
           >
-            {t("← Campaigns")}
+            {t("← Automations")}
           </Link>
         </div>
         <div className="flex items-center gap-2">
@@ -192,8 +238,23 @@ export default function CampaignDetailPage() {
           >
             {campaign.isActive ? t("LIVE") : t("Paused")}
           </span>
+          <span className="shrink-0 rounded bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{typeLabel}</span>
         </div>
 
+        <p className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-foreground">{summary}</p>
+
+        {type === "STORIES" && (
+          <Summary title={t("When")}>
+            <FieldBox>{storyTrigger || t("No trigger selected")}</FieldBox>
+          </Summary>
+        )}
+        {type === "DIRECT" && (
+          <Summary title={t("When")}>
+            <FieldBox>{t("Someone sends you a direct message")}</FieldBox>
+          </Summary>
+        )}
+
+        {isComments && (
         <Summary title={t("When someone comments on")}>
           <div className="flex items-center gap-3">
             {postThumb ? (
@@ -211,16 +272,18 @@ export default function CampaignDetailPage() {
             <span className="text-sm text-foreground">{trigger}</span>
           </div>
         </Summary>
+        )}
 
-        <Summary title={t("And this comment has")}>
+        <Summary title={isComments ? t("And this comment has") : t("Keyword")}>
           <FieldBox>{matchText}</FieldBox>
-          {campaign.dmTriggerEnabled && (
+          {!isComments && campaign.matchAnyWord && (
             <p className="text-xs text-muted">
-              {t("Also replies when someone DMs")}{" "}
-              {campaign.matchAnyWord ? t("anything") : t("these words")}.
+              {t("At most one automatic reply per person every {hours} h, and none while your team is talking to them.", {
+                hours: campaign.replyCooldownHours ?? 24,
+              })}
             </p>
           )}
-          {publicReplies.length > 0 && (
+          {isComments && campaign.publicReplyEnabled && publicReplies.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-xs text-muted">{t("Public reply under the post")}</p>
               {publicReplies.map((m, i) => (
@@ -230,7 +293,7 @@ export default function CampaignDetailPage() {
           )}
         </Summary>
 
-        {campaign.openingDmEnabled && (
+        {isComments && campaign.openingDmEnabled && (
           <Summary title={t("They will get an opening DM")}>
             <FieldBox>{campaign.openingDmMessage || t("Opening message")}</FieldBox>
             <FieldBox>{campaign.openingDmButtonLabel || t("Button")}</FieldBox>
@@ -246,6 +309,7 @@ export default function CampaignDetailPage() {
             <FieldBox>
               {campaign.followPromptButtonLabel || "i'm following"}
             </FieldBox>
+            <MediaThumbs items={mediaBySlot.FOLLOW_PROMPT} />
           </Summary>
         )}
 
@@ -259,6 +323,7 @@ export default function CampaignDetailPage() {
               {campaign.trackedLinks?.[1]?.label || "Open link"}
             </FieldBox>
           )}
+          <MediaThumbs items={mediaBySlot.MAIN} />
         </Summary>
 
         {hasLink && (
@@ -289,6 +354,7 @@ export default function CampaignDetailPage() {
                 ? t("Sent {minutes} min after the link.", { minutes: campaign.followUpDelayMinutes })
                 : t("Sent right after the link.")}
             </p>
+            <MediaThumbs items={mediaBySlot.FOLLOW_UP} />
           </Summary>
         )}
       </div>
@@ -348,10 +414,12 @@ export default function CampaignDetailPage() {
             postThumb={postThumb}
             caption=""
             sampleComment={campaign.matchAnyWord ? t("nice!") : campaign.keywords[0] ?? "LINK"}
-            dmTriggerEnabled={campaign.dmTriggerEnabled}
-            publicReplyEnabled={campaign.publicReplyEnabled}
+            automationType={type}
+            storyMode={campaign.triggerStoryReplies || !campaign.matchAnyWord ? "reply" : "mention"}
+            media={mediaBySlot}
+            publicReplyEnabled={isComments && campaign.publicReplyEnabled}
             publicReplyMessage={publicReplies[0] ?? ""}
-            openingDmEnabled={campaign.openingDmEnabled}
+            openingDmEnabled={isComments && campaign.openingDmEnabled}
             openingDmMessage={campaign.openingDmMessage ?? ""}
             openingDmButtonLabel={campaign.openingDmButtonLabel ?? ""}
             revealMessage={campaign.dmMessage}
@@ -418,5 +486,21 @@ function TabButton({
     >
       {children}
     </button>
+  );
+}
+
+function MediaThumbs({ items }: { items: PreviewMedia[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((m, i) =>
+        m.kind === "VIDEO" ? (
+          <video key={i} src={m.url} muted playsInline preload="metadata" className="h-16 w-12 rounded object-cover" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={i} src={m.url} alt="" className="h-16 w-12 rounded object-cover" />
+        )
+      )}
+    </div>
   );
 }

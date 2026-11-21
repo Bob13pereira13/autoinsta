@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       skip,
       take: limit,
       include: {
-        automation: { select: { name: true, keywords: true } },
+        automation: { select: { name: true, keywords: true, type: true } },
         instagramAccount: { select: { username: true } },
       },
     }),

@@ -13,7 +13,10 @@ import { useI18n } from "@/lib/i18n/provider";
  * the identical frame so switching tabs never resizes the phone.
  */
 
-export type PreviewTab = "post" | "comments" | "dm" | "dmTrigger";
+export type PreviewTab = "post" | "comments" | "dm" | "conversation";
+
+export type PreviewMedia = { kind: "IMAGE" | "VIDEO"; url: string };
+export type PreviewMediaBySlot = Partial<Record<"FOLLOW_PROMPT" | "MAIN" | "FOLLOW_UP", PreviewMedia[]>>;
 
 interface CampaignPreviewProps {
   tab: PreviewTab;
@@ -23,9 +26,12 @@ interface CampaignPreviewProps {
   postThumb: string | null;
   caption: string;
   sampleComment: string;
-  // The DM keyword trigger gets its own thread: the user messages first, and
-  // the opening DM is skipped because the conversation is already open.
-  dmTriggerEnabled: boolean;
+  // Comments: post → comments → DM. Stories and Direct: a single conversation
+  // that starts with the person's message (no opening DM, no public reply).
+  automationType: "COMMENTS" | "STORIES" | "DIRECT";
+  // Stories: what the person did.
+  storyMode?: "reply" | "mention";
+  media?: PreviewMediaBySlot;
   publicReplyEnabled: boolean;
   publicReplyMessage: string;
   openingDmEnabled: boolean;
@@ -309,6 +315,27 @@ function CommentsScreen({
   );
 }
 
+function MediaBubbles({ items, avatarUrl }: { items?: PreviewMedia[]; avatarUrl: string | null }) {
+  if (!items?.length) return null;
+  return (
+    <div className="flex items-end gap-2">
+      <Avatar url={avatarUrl} size={24} />
+      <div className="flex max-w-[80%] flex-wrap gap-1.5">
+        {items.map((item, i) =>
+          item.kind === "VIDEO" ? (
+            <div key={i} className="relative h-28 w-20 overflow-hidden rounded-xl bg-zinc-800">
+              <video src={item.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+              <span className="absolute inset-0 grid place-items-center text-lg text-white/90" aria-hidden="true">▶</span>
+            </div>
+          ) : (
+            <img key={i} src={item.url} alt="" className="h-28 w-20 rounded-xl object-cover" />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DmScreen({
   username,
   avatarUrl,
@@ -328,6 +355,7 @@ function DmScreen({
   followUpDelayMinutes = 0,
   linkUrl,
   inboundMessage,
+  media,
 }: {
   username: string;
   avatarUrl: string | null;
@@ -346,8 +374,9 @@ function DmScreen({
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes?: number;
-  // Present on the keyword-trigger thread: the DM the user sends to start it.
-  inboundMessage?: string;
+  // Present on Stories/Direct threads: the message that starts them.
+  inboundMessage?: React.ReactNode;
+  media?: PreviewMediaBySlot;
 }) {
   const { t } = useI18n();
   return (
@@ -367,7 +396,7 @@ function DmScreen({
         {inboundMessage !== undefined && (
           <div className="flex justify-end">
             <div className="max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3 py-2 text-sm">
-              {inboundMessage || t("their message")}
+              {inboundMessage ?? t("their message")}
             </div>
           </div>
         )}
@@ -408,6 +437,7 @@ function DmScreen({
                 {followPromptButtonLabel || "i'm following"}
               </div>
             </div>
+            <MediaBubbles items={media?.FOLLOW_PROMPT} avatarUrl={avatarUrl} />
           </>
         )}
         {(() => {
@@ -446,6 +476,7 @@ function DmScreen({
             </div>
           );
         })()}
+        <MediaBubbles items={media?.MAIN} avatarUrl={avatarUrl} />
         {followUpEnabled && (
           <>
             {followUpDelayMinutes > 0 && (
@@ -463,6 +494,7 @@ function DmScreen({
                 </p>
               </div>
             </div>
+            <MediaBubbles items={media?.FOLLOW_UP} avatarUrl={avatarUrl} />
           </>
         )}
       </div>
@@ -482,19 +514,33 @@ function DmScreen({
 export default function CampaignPreview(props: CampaignPreviewProps) {
   const { t } = useI18n();
   const { tab, onTabChange } = props;
-  const tabs: { key: PreviewTab; label: string }[] = [
-    { key: "post", label: t("Post") },
-    { key: "comments", label: t("Comments") },
-    { key: "dm", label: "DM" },
-    ...(props.dmTriggerEnabled
-      ? [{ key: "dmTrigger" as const, label: t("DM trigger") }]
-      : []),
-  ];
+  const isComments = props.automationType === "COMMENTS";
+  const tabs: { key: PreviewTab; label: string }[] = isComments
+    ? [
+        { key: "post", label: t("Post") },
+        { key: "comments", label: t("Comments") },
+        { key: "dm", label: "DM" },
+      ]
+    : [{ key: "conversation", label: t("Conversation") }];
 
-  // The DM-trigger tab disappears when the trigger is switched off; fall back
-  // to the comment thread rather than rendering an empty phone.
-  const activeTab: PreviewTab =
-    tab === "dmTrigger" && !props.dmTriggerEnabled ? "dm" : tab;
+  // Switching type changes the screens; fall back to the first one.
+  const activeTab: PreviewTab = tabs.some((x) => x.key === tab) ? tab : tabs[0].key;
+
+  const inbound =
+    props.automationType === "STORIES" ? (
+      <span className="block">
+        <span className="mb-1 block text-[11px] opacity-80">
+          {props.storyMode === "mention" ? t("Mentioned you in their story") : t("Replied to your story")}
+        </span>
+        {props.storyMode === "mention" ? (
+          <span className="block h-16 w-12 rounded-md bg-white/20" aria-hidden="true" />
+        ) : (
+          props.sampleComment || t("their message")
+        )}
+      </span>
+    ) : (
+      props.sampleComment || t("their message")
+    );
 
   return (
     <div className="flex flex-col items-center gap-5">
@@ -535,13 +581,14 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             followUpMessage={props.followUpMessage}
             followUpDelayMinutes={props.followUpDelayMinutes}
             linkUrl={props.linkUrl}
+            media={props.media}
           />
         )}
-        {activeTab === "dmTrigger" && (
+        {activeTab === "conversation" && (
           <DmScreen
             username={props.username}
             avatarUrl={props.avatarUrl}
-            // The user opened the conversation, so no opening DM is sent.
+            // The person opened the conversation, so no opening DM is sent.
             openingDmEnabled={false}
             openingDmMessage=""
             openingDmButtonLabel=""
@@ -557,7 +604,8 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             followUpMessage={props.followUpMessage}
             followUpDelayMinutes={props.followUpDelayMinutes}
             linkUrl={props.linkUrl}
-            inboundMessage={props.sampleComment}
+            inboundMessage={inbound}
+            media={props.media}
           />
         )}
       </Phone>

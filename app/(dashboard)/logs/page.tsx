@@ -19,7 +19,7 @@ interface DmLog {
   status: string;
   errorMessage: string | null;
   createdAt: string;
-  automation: { name: string; keywords: string[] };
+  automation: { name: string; keywords: string[]; type?: "COMMENTS" | "STORIES" | "DIRECT" };
   instagramAccount: { username: string };
 }
 
@@ -38,10 +38,12 @@ const STATUS_FILTERS = [
   "SKIPPED_RATE_LIMIT",
   "SKIPPED_PLAN_LIMIT",
   "SKIPPED_DEDUP",
+  "SKIPPED_COOLDOWN",
+  "SKIPPED_HUMAN_ACTIVE",
 ];
 
 export default function LogsPage() {
-  const { t, label, locale } = useI18n();
+  const { t, label, locale, message } = useI18n();
   const [logs, setLogs] = useState<DmLog[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,9 +140,9 @@ export default function LogsPage() {
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Commenter")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Comment")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Campaign")}</th>
+                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Person")}</th>
+                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Message received")}</th>
+                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Automation")}</th>
                 <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Account")}</th>
                 <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Status")}</th>
                 <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Time")}</th>
@@ -178,12 +180,18 @@ export default function LogsPage() {
                     </td>
                     <td className="px-4 py-4 sm:px-6">
                       <span className="text-muted">{log.automation.name}</span>
+                      <span className="block text-xs text-zinc-500">
+                        {log.automation.type === "STORIES" ? t("Stories") : log.automation.type === "DIRECT" ? t("Direct") : t("Comments")}
+                      </span>
                     </td>
                     <td className="px-4 py-4 sm:px-6">
                       <span className="text-muted">@{log.instagramAccount.username}</span>
                     </td>
                     <td className="px-4 py-4 sm:px-6">
                       <StatusBadge status={log.status} />
+                      {log.errorMessage && log.status !== "SENT" && (
+                        <span className="mt-1 block max-w-[220px] text-xs text-muted">{message(log.errorMessage)}</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-muted whitespace-nowrap sm:px-6">
                       {new Date(log.createdAt).toLocaleString(locale, {

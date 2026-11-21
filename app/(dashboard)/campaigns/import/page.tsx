@@ -148,7 +148,7 @@ export default function ImportCampaignsPage() {
           {t("Review and import")}
         </button>
         <button
-          onClick={() => router.push("/campaigns")}
+          onClick={() => router.push("/automations")}
           className="px-5 py-2 rounded text-sm text-muted hover:text-foreground border border-border"
         >
           {t("Cancel")}

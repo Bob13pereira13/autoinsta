@@ -56,7 +56,7 @@ export async function generateMetadata({
 
   return {
     title: t("{name} Campaign Report", { name: report.campaign.name }),
-    description: t("Read-only Instagram comment-to-DM campaign report for {name}.", { name: report.campaign.name }),
+    description: t("Read-only automation report for {name}.", { name: report.campaign.name }),
     robots: { index: false, follow: false },
   };
 }
@@ -275,6 +275,12 @@ export default async function ReportPage({ params }: ReportPageProps) {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                {t("Channel")}
+              </p>
+              <p className="mt-3 text-sm text-zinc-300">
+                {report.campaign.type === "STORIES" ? t("Stories") : report.campaign.type === "DIRECT" ? t("Direct") : t("Comments")}
+              </p>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 {t("Created")}
               </p>
               <p className="mt-3 text-sm text-zinc-300">

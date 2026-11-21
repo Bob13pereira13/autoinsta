@@ -17,7 +17,9 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Overview", href: "/overview" },
   { label: "Inbox", href: "/inbox" },
-  { label: "Campaigns", href: "/campaigns" },
+  // Editing an automation still lives under /campaigns/..., so that menu item
+  // stays highlighted there too.
+  { label: "Automations", href: "/automations", also: "/campaigns" },
   { label: "DM Logs", href: "/logs" },
   { label: "Settings", href: "/settings" },
   { label: "API & MCP", href: "/integrations" },
@@ -76,8 +78,8 @@ export default function Sidebar({
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+            const prefixes: string[] = "also" in item ? [item.href, item.also] : [item.href];
+            const isActive = prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
             return (
               <Link
                 key={item.href}
