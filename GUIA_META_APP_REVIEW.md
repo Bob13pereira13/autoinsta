@@ -23,6 +23,10 @@ Em todo o guia, troque `https://app.suaempresa.com.br` pelo domínio real (o mes
       `ADMIN_EMAILS`).
 - [ ] `/privacidade`, `/termos` e `/exclusao-dados` abrindo sem login.
 - [ ] Worker rodando (`npm run worker`) e rotina diária rodando (Vercel Cron ou `scripts/cron.sh`).
+- [ ] Nenhum valor de exemplo do `.env.example` nos segredos: em produção o app web e o worker **se
+      recusam a iniciar** se `NEXTAUTH_SECRET`, `CRON_SECRET`, `ENCRYPTION_KEY`, `FACEBOOK_APP_SECRET`,
+      `INSTAGRAM_APP_SECRET` ou `WEBHOOK_VERIFY_TOKEN` estiverem com o valor de exemplo (a mensagem no log
+      diz qual variável trocar).
 - [ ] Variáveis da Meta configuradas: `META_UNIFIED_LOGIN_URL` (ou `META_APP_ID` + `META_LOGIN_CONFIG_ID`),
       `FACEBOOK_APP_SECRET` e `WEBHOOK_VERIFY_TOKEN`.
 - [ ] **Verificação da empresa** concluída no portfólio empresarial (Configurações do negócio → Central de

@@ -1,8 +1,12 @@
 import { createDMWorker } from "@/lib/queue/dm-worker";
+import { runStartupChecks } from "@/lib/startup-check";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import { attachPendingNextReels } from "@/lib/automation/attach-next-reel";
 import os from "node:os";
+
+// Refuse to run with the example secrets from .env.example (production).
+runStartupChecks("worker");
 
 const worker = createDMWorker();
 const startedAt = new Date().toISOString();

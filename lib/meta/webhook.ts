@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { usableSecret } from "@/lib/env-safety";
 
 /**
  * Validates Meta's `X-Hub-Signature-256` header: `sha256=` + hex HMAC-SHA256 of
@@ -34,16 +35,20 @@ export function verifyWebhookSignature(
   });
 }
 
-/** App secrets Meta may sign with, Instagram app secret first. */
+/**
+ * App secrets Meta may sign with, Instagram app secret first. A placeholder
+ * (e.g. "your-instagram-app-secret" from .env.example) is never used: it is
+ * public, so anyone could sign a webhook or a data deletion request with it.
+ */
 export function getAppSecrets(): string[] {
-  return [process.env.INSTAGRAM_APP_SECRET, process.env.FACEBOOK_APP_SECRET].filter(
-    (s): s is string => Boolean(s)
-  );
+  return [process.env.INSTAGRAM_APP_SECRET, process.env.FACEBOOK_APP_SECRET]
+    .map(usableSecret)
+    .filter((s): s is string => Boolean(s));
 }
 
 /** Constant-time check of the `hub.verify_token` sent when Meta registers the webhook. */
 export function verifyWebhookVerifyToken(token: string | null): boolean {
-  const expected = process.env.WEBHOOK_VERIFY_TOKEN;
+  const expected = usableSecret(process.env.WEBHOOK_VERIFY_TOKEN);
   if (!expected || !token) return false;
   const a = Buffer.from(token);
   const b = Buffer.from(expected);

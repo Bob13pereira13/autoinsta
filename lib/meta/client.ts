@@ -1,4 +1,4 @@
-import { getMetaGraphApiVersion, requireEnv } from "@/lib/env";
+import { getMetaGraphApiVersion, requireSecret } from "@/lib/env";
 
 /**
  * A Meta access token and the setup that issued it. A bare string is an
@@ -920,7 +920,7 @@ export async function getLongLivedToken(
 ): Promise<{ accessToken: string; expiresIn: number }> {
   const url = new URL(`${instagramGraphBase(shortLivedToken)}/access_token`);
   url.searchParams.set("grant_type", "ig_exchange_token");
-  url.searchParams.set("client_secret", requireEnv("INSTAGRAM_APP_SECRET"));
+  url.searchParams.set("client_secret", requireSecret("INSTAGRAM_APP_SECRET"));
   url.searchParams.set("access_token", shortLivedToken);
 
   const response = await fetch(url.toString());

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isPlaceholderValue } from "@/lib/env-safety";
 
 const HEX_32_BYTE = /^[a-f0-9]{64}$/i;
 
@@ -12,6 +13,15 @@ function readEnv(name: string): string {
 
 export function requireEnv(name: string): string {
   return readEnv(name);
+}
+
+/** Like requireEnv, but also refuses the public example values (lib/env-safety.ts). */
+export function requireSecret(name: string): string {
+  const value = readEnv(name);
+  if (isPlaceholderValue(value)) {
+    throw new Error(`${name} still has its example value from .env.example`);
+  }
+  return value;
 }
 
 export function getBaseUrl(): string {
@@ -54,6 +64,9 @@ export function getMissingInstagramOAuthEnv(): string[] {
     if (name === "META_LOGIN_CONFIG_ID" && unifiedUrl?.configId) return false;
     const value = process.env[name];
     if (!value) return true;
+    // A public example secret is as good as none: report it before the user
+    // round-trips through Meta (see lib/env-safety.ts).
+    if (name.endsWith("_SECRET") && isPlaceholderValue(value)) return true;
     // A malformed key fails later inside encryptToken, after the user has
     // already round-tripped through Meta — catch the bad format here instead.
     return name === "ENCRYPTION_KEY" && !HEX_32_BYTE.test(value);

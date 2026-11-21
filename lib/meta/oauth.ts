@@ -12,6 +12,7 @@ import {
   isUnifiedLogin,
   requireEnv,
   requireMetaAppId,
+  requireSecret,
   requireMetaLoginConfigId,
 } from "@/lib/env";
 import { getInstagramScopes } from "@/lib/meta/scopes";
@@ -42,7 +43,7 @@ function base64UrlDecode(value: string): string {
 }
 
 function signState(payload: string): string {
-  return createHmac("sha256", requireEnv("NEXTAUTH_SECRET"))
+  return createHmac("sha256", requireSecret("NEXTAUTH_SECRET"))
     .update(payload)
     .digest("base64url");
 }
@@ -142,7 +143,7 @@ export async function exchangeCodeForToken(
       `https://graph.facebook.com/${getMetaGraphApiVersion()}/oauth/access_token`
     );
     url.searchParams.set("client_id", requireMetaAppId());
-    url.searchParams.set("client_secret", requireEnv("FACEBOOK_APP_SECRET"));
+    url.searchParams.set("client_secret", requireSecret("FACEBOOK_APP_SECRET"));
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("code", code);
     const response = await fetch(url.toString());
@@ -157,7 +158,7 @@ export async function exchangeCodeForToken(
 
   const body = new URLSearchParams({
     client_id: requireEnv("INSTAGRAM_APP_ID"),
-    client_secret: requireEnv("INSTAGRAM_APP_SECRET"),
+    client_secret: requireSecret("INSTAGRAM_APP_SECRET"),
     grant_type: "authorization_code",
     redirect_uri: redirectUri,
     code,

@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+import { usableSecret } from "@/lib/env-safety";
 
 /**
  * Shared guard for /api/cron/* routes.
@@ -12,7 +13,9 @@ import { NextResponse } from "next/server";
  * refuse every request.
  */
 export function isAuthorizedCronRequest(authorization: string | null): boolean {
-  const secret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET;
+  // Placeholders from .env.example are public and never accepted.
+  const secret =
+    usableSecret(process.env.CRON_SECRET) || usableSecret(process.env.NEXTAUTH_SECRET);
   if (!secret || !authorization) return false;
 
   // Hash both sides so the comparison is constant-time regardless of length.

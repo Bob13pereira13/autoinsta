@@ -4,6 +4,7 @@ import Nodemailer from "next-auth/providers/nodemailer";
 import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { brand } from "@/config/brand";
+import { usableSecret } from "@/lib/env-safety";
 import { prisma } from "@/lib/db/client";
 import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
 import { canReceiveMagicLink, isSessionStillValid } from "@/lib/account/access";
@@ -114,7 +115,9 @@ export const authConfig = {
     maxAge: 30 * 24 * 60 * 60,
   },
   trustHost: true,
-  secret: process.env.NEXTAUTH_SECRET,
+  // A placeholder is treated as unset, so Auth.js refuses to sign sessions
+  // with a public key instead of silently accepting forged ones.
+  secret: usableSecret(process.env.NEXTAUTH_SECRET),
   theme: { brandColor: brand.colors.primary },
 } satisfies NextAuthConfig;
 

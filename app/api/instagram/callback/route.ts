@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { getBaseUrl, isUnifiedLogin, requireEnv, requireMetaAppId } from "@/lib/env";
+import { getBaseUrl, isUnifiedLogin, requireMetaAppId, requireSecret } from "@/lib/env";
 import { canConnectInstagramAccount } from "@/lib/instagram-accounts";
 import {
   getAssignedInstagramAccounts,
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       const tokenInfo = await getUnifiedTokenInfo(
         accessToken,
         requireMetaAppId(),
-        requireEnv("FACEBOOK_APP_SECRET")
+        requireSecret("FACEBOOK_APP_SECRET")
       ).catch((expiryError) => {
         console.warn("[Instagram Callback] Token details unknown:", expiryError);
         return null;
