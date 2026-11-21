@@ -85,7 +85,7 @@ export default function PrivacidadePage() {
               </td>
               <td>
                 Identificar a conta conectada (ID, nome de usuário, nome e número de seguidores) e listar os
-                seus posts e reels para você escolher onde a campanha vai funcionar.
+                seus posts e reels para você escolher onde a automação vai funcionar.
               </td>
             </tr>
             <tr>
@@ -106,8 +106,10 @@ export default function PrivacidadePage() {
                 (ou instagram_business_manage_messages)
               </td>
               <td>
-                Enviar a resposta privada (DM) para quem comentou a palavra-chave, responder mensagens diretas
-                que contenham a palavra-chave e exibir as conversas na caixa de entrada do painel.
+                Enviar a resposta privada (DM) para quem comentou a palavra-chave; responder por DM quem
+                respondeu a um story da conta, marcou a conta no próprio story ou mandou uma mensagem direta,
+                conforme as automações que você configurou; enviar as imagens e vídeos dessas mensagens; e
+                exibir as conversas na caixa de entrada do painel.
               </td>
             </tr>
             <tr>
@@ -125,7 +127,16 @@ export default function PrivacidadePage() {
           o token de acesso (criptografado com AES-256-GCM) e sua data de expiração, quando houver, e o número
           diário de seguidores. Posts, reels e conversas são consultados na Meta no momento em que você abre o
           painel e não são copiados para o nosso banco de dados, exceto a referência ao post escolhido em cada
-          campanha.
+          automação.
+        </p>
+
+        <h3>3.2.1 Imagens e vídeos enviados por você</h3>
+        <p>
+          As imagens e vídeos que você envia no painel para usar nas mensagens das automações ficam guardados
+          no nosso servidor e são publicados em um endereço com identificador aleatório, porque a Meta baixa o
+          arquivo por esse endereço no momento de entregar a DM. Quem tiver o endereço consegue abrir o
+          arquivo, então não envie material confidencial. Guardamos o arquivo, o nome original, o tipo e o
+          tamanho.
         </p>
 
         <h3>3.3 Dados de quem interage com a conta do cliente</h3>
@@ -137,6 +148,15 @@ export default function PrivacidadePage() {
           <li>
             Registro de cada envio automático: palavra-chave reconhecida, status (enviado, ignorado ou falha)
             e o motivo, para evitar envios duplicados e para o cliente acompanhar os resultados.
+          </li>
+          <li>
+            Quando alguém responde a um story da conta ou marca a conta no próprio story: o identificador do
+            story e o tipo de interação, para escolher a automação certa. Não copiamos o story.
+          </li>
+          <li>
+            Para não atropelar o atendimento humano: os identificadores das mensagens enviadas pelas automações
+            e a data da última mensagem que alguém da conta mandou para cada pessoa. Com isso, automações sem
+            palavra-chave ficam em silêncio por 24 horas depois que um atendente conversou com a pessoa.
           </li>
           <li>
             Cliques em links rastreáveis enviados por DM: data e hora, navegador (user agent), página de
@@ -226,11 +246,30 @@ export default function PrivacidadePage() {
           </thead>
           <tbody>
             <tr>
-              <td>Conta do Instagram conectada, token, campanhas, registros de envio e cliques</td>
+              <td>
+                Conta do Instagram conectada, token, automações, imagens e vídeos enviados, registros de envio e
+                cliques
+              </td>
               <td>
                 Enquanto a conta estiver conectada. São apagados imediatamente quando o cliente desconecta a
                 conta no painel ou quando recebemos um pedido de exclusão da Meta.
               </td>
+            </tr>
+            <tr>
+              <td>Imagens e vídeos removidos de uma automação ou de uma automação excluída</td>
+              <td>Apagados do servidor no momento em que são removidos (ou ao salvar a automação).</td>
+            </tr>
+            <tr>
+              <td>Imagens e vídeos enviados, mas nunca usados em uma automação</td>
+              <td>1 dia</td>
+            </tr>
+            <tr>
+              <td>Identificadores das mensagens enviadas pelas automações</td>
+              <td>{RETENTION_DAYS.botMessages} dias</td>
+            </tr>
+            <tr>
+              <td>Data da última mensagem de um atendente para cada pessoa</td>
+              <td>{RETENTION_DAYS.humanActivity} dias</td>
             </tr>
             <tr>
               <td>Notificações (webhooks) recebidas da Meta</td>
@@ -277,7 +316,8 @@ export default function PrivacidadePage() {
         <ul>
           <li>
             <strong>No painel:</strong> em Configurações, clique em &quot;Desconectar&quot; na conta do
-            Instagram. A conta, o token, as campanhas, os registros de envio e os links são apagados na hora.
+            Instagram. A conta, o token, as automações (com as imagens e vídeos delas), os registros de envio
+            e os links são apagados na hora.
           </li>
           <li>
             <strong>Pela Meta:</strong> remova o {brand.name} nas configurações de apps do Instagram ou do

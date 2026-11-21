@@ -39,6 +39,10 @@ Em todo o guia, troque `https://app.suaempresa.com.br` pelo domínio real (o mes
       Controles de mensagens → **Ferramentas conectadas → Permitir acesso às mensagens** ativado.
       Sem isso, a DM não é enviada.
 - [ ] Uma conta de acesso para os revisores (seção 4).
+- [ ] Volume persistente de mídia montado no app web (`UPLOADS_DIR`, ver README) e o domínio servindo
+      `/media/...` sem login: a Meta baixa as imagens e vídeos das DMs por essa URL pública.
+- [ ] Para gravar o vídeo de Stories: a segunda conta deve ser **pública** (a Meta só avisa menções em
+      stories de contas públicas) e a conta de demonstração deve ter um story publicado nas últimas 24 h.
 
 ---
 
@@ -107,7 +111,7 @@ como referência para você.
 > posts and reels in our dashboard, so the business owner can choose which post or reel an automation
 > applies to. We only read the connecting account's own profile and media; we never read other users'
 > profiles or media. The screencast shows the account appearing in Settings after login and the post
-> picker listing the account's reels when a campaign is created.
+> picker listing the account's reels when an automation is created.
 
 **PT**
 
@@ -115,7 +119,7 @@ como referência para você.
 > nosso login (ID, nome de usuário, nome e número de seguidores) e para listar os posts e reels da própria
 > conta no painel, para o dono escolher em qual post ou reel a automação vai funcionar. Lemos apenas o
 > perfil e as mídias da própria conta conectada, nunca de outros usuários. O vídeo mostra a conta
-> aparecendo em Configurações após o login e o seletor de posts listando os reels ao criar uma campanha.
+> aparecendo em Configurações após o login e o seletor de posts listando os reels ao criar uma automação.
 
 ### `instagram_manage_comments`
 
@@ -143,25 +147,46 @@ como referência para você.
 
 **EN**
 
-> After a person comments the configured keyword on the business's post, we send that person a single
-> private reply (Instagram private replies API, using the comment ID) with the content the business
-> configured, usually the link the person asked for. The same applies when a person sends the business a
-> direct message (or a Story reply) containing the keyword. Messages are only sent in response to an
-> action of the recipient and within Meta's messaging windows; we send one reply per matching comment,
-> deduplicate retries and respect Meta's rate limits. The business can also read its Instagram
-> conversations and reply manually from our inbox. The screencast shows the second account receiving
-> the DM, the delivery log, and a manual reply from the inbox.
+> We use instagram_manage_messages to answer people who start a conversation with the business, with
+> content the business configured in our dashboard. There are three cases, each set up as a separate
+> automation: (1) Comments: after a person comments the configured keyword on the business's post or
+> reel, we send that person a single private reply (private replies API, using the comment ID); if the
+> person taps the button in that reply, we send the requested link and, optionally, images or a video the
+> business uploaded. (2) Stories: when a person replies to one of the business's stories (message webhook
+> with reply_to.story) or mentions the business in their own story (story_mention attachment), we reply
+> by DM with the configured message. (3) Direct: when a person sends the business a direct message that
+> contains a configured keyword, or optionally any message, we reply with the configured message.
+> Images and videos are sent as message attachments by public URL, only inside the conversation the
+> person opened and within the 24-hour messaging window. To avoid spam, each incoming comment or message
+> triggers at most one automation; automations without a keyword answer the same person at most once per
+> configurable interval (24 hours by default) and stay silent for 24 hours after a human from the business
+> replies to that person (detected from message echoes), so automation never talks over a person. We
+> deduplicate retries and count every API call (text, each image, each video) against an hourly rate
+> limit per account. The business can also read its Instagram conversations and reply manually from our
+> inbox. The screencast shows each case: the DM after a comment (with an image after the button), a reply
+> to a story, a story mention, a direct message with a keyword, the delivery log, and a manual reply from
+> the inbox.
 
 **PT**
 
-> Depois que uma pessoa comenta a palavra-chave no post da empresa, enviamos a essa pessoa uma única
-> resposta privada (API de respostas privadas do Instagram, usando o ID do comentário) com o conteúdo
-> configurado pela empresa, normalmente o link que a pessoa pediu. O mesmo vale quando a pessoa manda uma
-> DM (ou responde um Story) com a palavra-chave. As mensagens só são enviadas em resposta a uma ação de
-> quem recebe e dentro das janelas de mensagens da Meta; enviamos uma resposta por comentário, eliminamos
-> duplicidades e respeitamos os limites da Meta. A empresa também pode ler as conversas do Instagram e
-> responder manualmente pela caixa de entrada. O vídeo mostra a segunda conta recebendo a DM, o registro
-> de envio e uma resposta manual pela caixa de entrada.
+> Usamos instagram_manage_messages para responder pessoas que iniciam uma conversa com a empresa, com o
+> conteúdo que a empresa configurou no painel. São três casos, cada um configurado como uma automação
+> separada: (1) Comentários: depois que a pessoa comenta a palavra-chave no post ou reel da empresa,
+> enviamos uma única resposta privada (API de respostas privadas, com o ID do comentário); se a pessoa tocar
+> no botão dessa resposta, enviamos o link pedido e, se configurado, imagens ou um vídeo enviados pela
+> empresa. (2) Stories: quando a pessoa responde a um story da empresa (webhook de mensagem com
+> reply_to.story) ou marca a empresa no story dela (anexo story_mention), respondemos por DM com a mensagem
+> configurada. (3) Direct: quando a pessoa manda uma DM com uma palavra-chave configurada, ou opcionalmente
+> qualquer mensagem, respondemos com a mensagem configurada. Imagens e vídeos são enviados como anexos de
+> mensagem por URL pública, só dentro da conversa que a pessoa abriu e na janela de 24 horas. Para evitar
+> spam, cada comentário ou mensagem dispara no máximo uma automação; automações sem palavra-chave respondem
+> a mesma pessoa no máximo uma vez por intervalo configurável (24 horas por padrão) e ficam em silêncio por
+> 24 horas depois que alguém da empresa responde essa pessoa (detectado pelos echoes de mensagem), para a
+> automação nunca atropelar um atendente. Eliminamos duplicidades e contamos cada chamada à API (texto,
+> cada imagem, cada vídeo) no limite por hora de cada conta. A empresa também pode ler as conversas e
+> responder manualmente pela caixa de entrada. O vídeo mostra cada caso: a DM depois do comentário (com uma
+> imagem depois do botão), a resposta a um story, a menção em story, uma DM com palavra-chave, o registro de
+> envios e uma resposta manual pela caixa de entrada.
 
 ### `business_management` (obrigatória no Unified login)
 
@@ -208,13 +233,22 @@ encontra tudo pronto). No campo **App Review → Instructions** cole (em inglês
 > E-mail: revisor.meta@suaempresa.com.br — Password: (the password you set)
 >
 > The Instagram professional account @SUA_CONTA_DEMO is already connected (Settings → Instagram
-> connection). To test: open Campaigns → New campaign, pick a recent post or reel, set the keyword LINK,
-> write a DM message with a link, enable "Public reply under the post" and save. Then, from any other Instagram account,
-> comment LINK on that post: the commenter receives the DM and a public reply is posted under the comment.
+> connection). Automations has three tabs, one per channel; three automations are already active:
+> - Comments: keyword LINK on any post. From any other Instagram account, comment LINK on a post of
+>   @SUA_CONTA_DEMO: the commenter receives a DM with a button; after tapping it they receive the link and
+>   an image, and a public reply is posted under the comment.
+> - Stories: keyword PRICE. Reply PRICE to the current story of @SUA_CONTA_DEMO: you receive a DM.
+>   A second Stories automation answers mentions: mention @SUA_CONTA_DEMO in a story from a public
+>   account and you receive a thank-you DM (once per person every 24 hours).
+> - Direct: keyword HOURS. Send HOURS by DM to @SUA_CONTA_DEMO: you receive the opening hours.
 > Every send is listed under DM Logs. Inbox shows the account's conversations and allows replying.
 > The interface language can be switched to English in Settings → Interface language.
 
-Lembre de **remover essa conta** depois da aprovação (`npm run user -- disable revisor.meta@...`).
+Antes de enviar, deixe criadas e ativas na conta de demonstração as três automações citadas acima
+(Comentários com `LINK` e uma imagem; Stories com duas automações — uma com a palavra-chave `PRICE` para
+respostas ao story e outra **sem palavra-chave, só com menções** ligadas; Direct com `HOURS`) e um story
+publicado. Automações sem palavra-chave respondem a mesma pessoa uma vez a cada 24 h e ficam quietas por
+24 h se alguém da conta conversou com ela: para regravar, use outra conta de teste ou espere. Lembre de **remover essa conta** depois da aprovação (`npm run user -- disable revisor.meta@...`).
 
 ---
 
@@ -236,18 +270,24 @@ instagram.com) pronto.
 | 2 | 0:20 | **Login** com e-mail e senha da conta de demonstração. Em Configurações, trocar o idioma para **English** | "The business owner signs in to the dashboard. The UI is switched to English for this review." | — |
 | 3 | 0:40 | Settings → **Connect Instagram**. Mostrar a janela da Meta: login, **lista de permissões** e **seleção da conta do Instagram** (ativo) no portfólio. Conceder tudo | "The owner connects the Instagram professional account through Meta's login. The requested permissions and the selected Instagram account are shown here." | instagram_basic, business_management |
 | 4 | 1:20 | De volta em Settings: a conta **@SUA_CONTA_DEMO** conectada, "Webhook ready" | "The assigned Instagram account is now connected to this workspace." | instagram_basic, business_management |
-| 5 | 1:35 | Campaigns → **New campaign**: o seletor lista os **posts/reels da conta**; escolher um; palavra-chave `LINK`; mensagem da DM com um link; ativar **Public reply under the post** ("Sent you a DM! 📩"); salvar | "The owner creates an automation on one of the account's own reels: keyword LINK, a DM with the requested link and an optional public reply." | instagram_basic |
-| 6 | 2:20 | **Na segunda conta** (celular/outro navegador), comentar `LINK` no reel | "A different Instagram user comments LINK on that reel." | instagram_manage_comments |
-| 7 | 2:35 | Na segunda conta: a **DM chegando** com o link; abrir a DM | "The commenter receives a private reply with the link they asked for." | instagram_manage_messages |
-| 8 | 2:55 | No reel: a **resposta pública** sob o comentário | "The public reply is posted under the comment." | instagram_manage_comments |
-| 9 | 3:10 | No painel: **DM Logs** mostrando a linha **Sent** (palavra-chave, comentário, data) | "Every send is logged with its status." | instagram_manage_messages |
-| 10 | 3:25 | **Inbox**: abrir a conversa com a segunda conta e enviar uma resposta manual; mostrar que chegou | "The owner can read Instagram conversations and reply manually from the inbox." | instagram_manage_messages |
-| 11 | 3:50 | Settings → **Disconnect** na conta (confirmar) e abrir `/exclusao-dados` | "The owner can disconnect at any time; the account's data is deleted. Data deletion requests from Meta are handled automatically." | — |
+| 5 | 1:35 | **Automations** → aba **Comments** → **New automation**: o seletor lista os **posts/reels da conta**; escolher um; palavra-chave `LINK`; ligar **opening DM with a button**; mensagem principal com um link e **uma imagem** enviada pelo botão "+ Add image or video"; ligar **reply to the comment publicly**; mostrar o resumo no topo e a prévia; salvar | "The owner creates a Comments automation on one of the account's own reels: keyword LINK, an opening DM with a button, then the link and an image, plus an optional public reply." | instagram_basic |
+| 6 | 2:30 | **Na segunda conta** (celular/outro navegador), comentar `LINK` no reel | "A different Instagram user comments LINK on that reel." | instagram_manage_comments |
+| 7 | 2:45 | Na segunda conta: a **DM de abertura** chegando; tocar no botão; chegam o **link e a imagem** | "The commenter receives a private reply; after tapping the button, the link and the image are delivered." | instagram_manage_messages |
+| 8 | 3:10 | No reel: a **resposta pública** sob o comentário | "The public reply is posted under the comment." | instagram_manage_comments |
+| 9 | 3:20 | No painel: aba **Stories** → mostrar a automação com `PRICE` (respostas a stories) e a de menções. Na segunda conta: **responder `PRICE` ao story** da conta de demonstração → a DM chega | "Stories automations answer replies to the business's stories. A reply with PRICE receives the price list by DM." | instagram_manage_messages |
+| 10 | 3:50 | Na segunda conta (pública): publicar um story **marcando @SUA_CONTA_DEMO** → a DM de agradecimento chega | "When someone mentions the business in their story, they receive a thank-you DM." | instagram_manage_messages |
+| 11 | 4:15 | Aba **Direct** → mostrar a automação `HOURS`. Na segunda conta: mandar **HOURS** por DM → a resposta chega | "Direct automations answer direct messages that contain a keyword." | instagram_manage_messages |
+| 12 | 4:35 | **DM Logs**: as linhas **Sent** de cada caso (canal, pessoa, mensagem, data) | "Every send is logged with its channel and status." | instagram_manage_messages |
+| 13 | 4:50 | **Inbox**: abrir a conversa com a segunda conta e enviar uma resposta manual; mostrar que chegou | "The owner can read Instagram conversations and reply manually from the inbox. While a person from the business is talking to someone, keyword-free automations stay silent for 24 hours." | instagram_manage_messages |
+| 14 | 5:15 | Settings → **Disconnect** na conta (confirmar) e abrir `/exclusao-dados` | "The owner can disconnect at any time; the account's data, including uploaded images and videos, is deleted. Data deletion requests from Meta are handled automatically." | — |
 
 Dicas que evitam reprovação:
 
-- **Não corte** entre o comentário (passo 6) e a DM chegando (passo 7): o revisor quer ver a causa e o
-  efeito. Se a DM demorar, deixe o vídeo rodando.
+- **Não corte** entre a ação da segunda conta e a DM chegando (passos 6–7, 9, 10 e 11): o revisor quer
+  ver a causa e o efeito. Se a DM demorar, deixe o vídeo rodando. A menção em story (passo 10) costuma
+  levar alguns segundos a mais.
+- A duração passa de 5 minutos com os três canais. Se preferir, grave um vídeo por canal (Comentários,
+  Stories, Direct), sempre começando pelo login (passo 3).
 - Mostre o **nome da permissão** na tela de consentimento (passo 3). Se a tela não listar nomes, use uma
   legenda com os nomes.
 - Use um **vídeo por permissão**, se o formulário pedir separado, recortando os passos indicados na

@@ -70,7 +70,7 @@ async function RequestStatus({ code }: { code: string }) {
             request.accountsDeleted === 1
               ? "a conta do Instagram conectada"
               : `${request.accountsDeleted} contas do Instagram conectadas`
-          } e todos os dados vinculados: token de acesso, campanhas, registros de envio, comentários, links e cliques.`}
+          } e todos os dados vinculados: token de acesso, automações, imagens e vídeos enviados, registros de envio, comentários, links e cliques.`}
         {request.status === "NOT_FOUND" &&
           "Não havia dados armazenados vinculados a esta conta do Instagram, portanto não restou nada a apagar."}
         {!done &&
@@ -131,7 +131,7 @@ export default async function ExclusaoDadosPage({
         <ul>
           <li>
             <strong>Pelo painel:</strong> acesse Configurações e clique em &quot;Desconectar&quot; ao lado da
-            conta. A conta conectada, o token de acesso, as campanhas, os registros de envio e os links
+            conta. A conta conectada, o token de acesso, as automações (com imagens e vídeos), os registros de envio e os links
             rastreáveis são apagados imediatamente.
           </li>
           <li>
@@ -162,6 +162,7 @@ export default async function ExclusaoDadosPage({
           <li>Identificadores, nome de usuário e token de acesso da conta do Instagram conectada.</li>
           <li>Campanhas, palavras-chave e mensagens configuradas para essa conta.</li>
           <li>Comentários e mensagens recebidos, registros de envio e cliques em links.</li>
+          <li>Imagens e vídeos enviados para as automações da conta.</li>
           <li>Notificações da Meta e registros operacionais ligados à conta.</li>
         </ul>
         <p>

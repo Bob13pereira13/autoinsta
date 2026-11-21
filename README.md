@@ -1,9 +1,15 @@
 # Automação de comentário → DM para Instagram (white-label)
 
-Plataforma multi-cliente que responde automaticamente no Instagram: quando alguém comenta uma
-palavra-chave em um post ou reel (ou manda uma DM / responde um Story com ela), a plataforma envia a
-resposta por mensagem direta e, se configurado, responde publicamente o comentário. Funciona
-**exclusivamente pela API oficial da Meta**.
+Plataforma multi-cliente que responde automaticamente no Instagram, com automações separadas por canal:
+
+- **Comentários**: alguém comenta uma palavra-chave (ou qualquer coisa) em um post ou reel e recebe a
+  resposta por DM; opcionalmente o comentário também é respondido em público.
+- **Stories**: alguém responde a um story da conta ou marca a conta no próprio story e recebe uma DM.
+- **Direct**: alguém manda uma DM com uma palavra-chave (ou qualquer mensagem) e recebe a resposta.
+
+As mensagens podem levar link rastreado, botão, pedido para seguir, agradecimento e **imagens e
+vídeos**. Cada comentário ou mensagem dispara no máximo uma automação. Funciona **exclusivamente pela API
+oficial da Meta**.
 
 O nome, o logotipo, as cores e os dados legais da marca ficam em **[`config/brand.ts`](config/brand.ts)**.
 
@@ -49,7 +55,22 @@ São sempre **três processos** em produção:
 |---|---|---|
 | Web | `npm run start` (após `npm run build`) | painel, OAuth e webhooks |
 | Worker | `npm run worker` | envia DMs e respostas, respeitando os limites da Meta |
-| Rotinas diárias | Vercel Cron (`vercel.json`) ou `sh scripts/cron.sh` | renova tokens do Login do Instagram, aplica a retenção de dados, reprocessa exclusões |
+| Rotinas diárias | Vercel Cron (`vercel.json`) ou `sh scripts/cron.sh` | renova tokens do Login do Instagram, aplica a retenção de dados, reprocessa exclusões, apaga mídias abandonadas |
+
+### Imagens e vídeos (armazenamento)
+
+As imagens e vídeos das automações são gravados no disco do **app web**, na pasta `UPLOADS_DIR`, e
+servidos publicamente em `/media/<chave aleatória>` (a Meta baixa o arquivo por essa URL ao enviar a DM).
+
+- Em produção, monte um **volume persistente** nessa pasta (no Docker: `/data/uploads`, já criada no
+  build e definida como `UPLOADS_DIR` no `Dockerfile`). Sem volume, os arquivos somem a cada deploy.
+- O **worker não precisa** do volume: ele só envia a URL pública para a Meta.
+- Cota por espaço de trabalho: `MEDIA_WORKSPACE_QUOTA_MB` (padrão 500). Limites da Meta, validados pelo
+  conteúdo do arquivo: PNG/JPEG até 8 MB (até 5 por mensagem), MP4/MOV/WEBM até 25 MB (1 por mensagem).
+- Se houver proxy reverso na frente do app, ele precisa aceitar corpos de pelo menos ~26 MB em
+  `/api/media`.
+- Os arquivos são apagados ao remover a mídia, excluir a automação, desconectar a conta ou receber um
+  pedido de exclusão da Meta.
 
 ## Personalizando a marca
 
@@ -100,7 +121,8 @@ Resumo das rotas que a Meta usa:
 | Rota | Uso |
 |---|---|
 | `/api/instagram/callback` | OAuth Redirect URI |
-| `/api/webhook` | Webhook (comentários e mensagens) |
+| `/api/webhook` | Webhook (comentários, mensagens, respostas e menções em stories) |
+| `/media/<chave>` | Imagens e vídeos das DMs (públicos; a Meta baixa daqui) |
 | `/api/webhooks/meta/data-deletion` | Data Deletion Request Callback |
 | `/api/webhooks/meta/deauthorize` | Deauthorize Callback |
 | `/privacidade`, `/termos`, `/exclusao-dados` | Páginas públicas exigidas |
