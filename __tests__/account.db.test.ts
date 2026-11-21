@@ -143,7 +143,8 @@ describe.skipIf(!databaseUrl)("password accounts on real PostgreSQL", () => {
     const email = `login-${randomBytes(3).toString("hex")}@loja.test`;
     await state.db.user.create({ data: { email, passwordHash: await hashPassword("senha-certa-2026") } });
     const request = new Request("https://app.test/api/auth/callback/credentials", {
-      headers: { "x-forwarded-for": `10.0.${Math.floor(Math.random() * 250)}.1` },
+      // Unique per run: the throttle state lives in Redis across runs.
+      headers: { "x-forwarded-for": `10.${randomBytes(3).join(".")}` },
     });
 
     expect(await authorize({ email: email.toUpperCase(), password: "senha-certa-2026" }, request)).toMatchObject({ email });
@@ -153,6 +154,8 @@ describe.skipIf(!databaseUrl)("password accounts on real PostgreSQL", () => {
     await expect(authorize({ email, password: "senha-certa-2026" }, request)).rejects.toBeInstanceOf(
       LoginRateLimitedError
     );
-    expect(await authorize({ email: "ninguem@loja.test", password: "x" }, request)).toBeNull();
+    const unknown = `ninguem-${randomBytes(3).toString("hex")}@loja.test`;
+    const otherIp = new Request("https://app.test/x", { headers: { "x-forwarded-for": `10.${randomBytes(3).join(".")}` } });
+    expect(await authorize({ email: unknown, password: "x" }, otherIp)).toBeNull();
   });
 });
