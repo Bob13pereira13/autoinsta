@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@/lib/db/client";
 import { getBaseUrl } from "@/lib/env";
+import { deleteMediaFiles, mediaKeysForAccounts } from "@/lib/media/storage";
 
 /**
  * Handles Meta's Data Deletion Request Callback for Instagram users who
@@ -49,6 +50,7 @@ export function findAccountsForMetaUser(userId: string) {
 }
 
 async function deleteInstagramAccountData(account: { id: string; instagramId: string }) {
+  const mediaKeys = await mediaKeysForAccounts([account.id]);
   await prisma.$transaction(async (tx) => {
     // JSONB containment (@>): any webhook entry addressed to this account.
     await tx.webhookEvent.deleteMany({
@@ -60,9 +62,13 @@ async function deleteInstagramAccountData(account: { id: string; instagramId: st
     await tx.processedComment.deleteMany({
       where: { instagramAccountId: { in: [account.instagramId, account.id] } },
     });
-    // Cascades to Automation, DmLog, TrackedLink, LinkClick, FollowerSnapshot.
+    await tx.botMessage.deleteMany({ where: { instagramId: account.instagramId } });
+    // Cascades to Automation, DmLog, TrackedLink, LinkClick, FollowerSnapshot,
+    // AutomationMedia and ConversationActivity.
     await tx.instagramAccount.deleteMany({ where: { id: account.id } });
   });
+  // Uploaded images/videos of the account's automations.
+  await deleteMediaFiles(mediaKeys);
 }
 
 /** Runs (or re-runs) one stored request. Never throws. */

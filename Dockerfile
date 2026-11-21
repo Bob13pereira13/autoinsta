@@ -39,6 +39,12 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends wget ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
+# Images/videos uploaded for automation messages. Mount a persistent volume
+# here on the web service (the worker does not need it: it only sends the
+# public URL to Meta). The app also creates the directory if it is missing.
+ENV UPLOADS_DIR=/data/uploads
+RUN mkdir -p /data/uploads
+
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/app/generated ./app/generated

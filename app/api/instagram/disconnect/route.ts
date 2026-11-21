@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
+import { deleteMediaFiles, mediaKeysForAccounts } from "@/lib/media/storage";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -25,12 +26,24 @@ export async function POST(request: NextRequest) {
   const instagramAccountId =
     typeof body.instagramAccountId === "string" ? body.instagramAccountId : null;
 
-  await prisma.instagramAccount.deleteMany({
+  const accounts = await prisma.instagramAccount.findMany({
     where: {
       workspaceId: context.workspaceId,
       ...(instagramAccountId ? { id: instagramAccountId } : {}),
     },
+    select: { id: true, instagramId: true },
   });
+  // Disconnecting deletes the account's automations (cascade); their media
+  // files and the bot-message bookkeeping go with them.
+  const mediaKeys = await mediaKeysForAccounts(accounts.map((a) => a.id));
+
+  await prisma.instagramAccount.deleteMany({
+    where: { id: { in: accounts.map((a) => a.id) }, workspaceId: context.workspaceId },
+  });
+  await prisma.botMessage.deleteMany({
+    where: { instagramId: { in: accounts.map((a) => a.instagramId) } },
+  });
+  await deleteMediaFiles(mediaKeys);
 
   return NextResponse.json({ success: true });
 }

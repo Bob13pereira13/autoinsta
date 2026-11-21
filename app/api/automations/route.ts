@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
+import { deleteMediaFiles, mediaKeysForAutomations } from "@/lib/media/storage";
 import {
   calculateCtr,
   CLICK_ROW_SELECT,
@@ -602,7 +603,10 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
+  // Media files go with the automation (records cascade; files are removed here).
+  const mediaKeys = await mediaKeysForAutomations([automationId]);
   await prisma.automation.delete({ where: { id: automationId } });
+  await deleteMediaFiles(mediaKeys);
 
   return NextResponse.json({ success: true, data: { deleted: true } });
 }
