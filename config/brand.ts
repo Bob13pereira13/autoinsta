@@ -58,7 +58,7 @@ export const brand = {
 
   /** Contato exibido para clientes e para titulares de dados. */
   support: {
-    email: "suporte@chatintegrai.com.br",
+    email: "suporte@chatintegrai.com",
     /** Opcional. Ex.: "+55 11 99999-9999". Deixe "" para ocultar. */
     whatsapp: "",
   },
@@ -77,7 +77,7 @@ export const brand = {
     /** Nome do encarregado pelo tratamento de dados pessoais (DPO). */
     dpoName: "Bruno Fernandes",
     /** E-mail do encarregado — canal oficial para pedidos de titulares. */
-    dpoEmail: "bruno@chatintegrai.com.br",
+    dpoEmail: "bruno@chatintegrai.com",
     /** Cidade/UF do foro dos Termos de Uso. Ex.: "São Paulo/SP". */
     jurisdiction: "São Paulo/SP",
     /**
