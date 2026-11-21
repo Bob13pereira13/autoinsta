@@ -1,3 +1,9 @@
+> **Nota deste fork.** Este é o guia técnico do projeto original (OpenReply), em inglês, mantido como
+> referência para detalhes da Meta (passos do app, migração do ManyChat, testes locais). Neste fork:
+> **o provedor Zernio foi removido** (ignore as seções sobre ele), as páginas legais ficam em
+> `/privacidade`, `/termos` e `/exclusao-dados`, o cadastro é fechado (`npm run user -- create`) e o passo a
+> passo atualizado da Meta está em [`GUIA_META_APP_REVIEW.md`](../GUIA_META_APP_REVIEW.md).
+
 # Setup
 
 Get OpenReply running end to end: choose your Instagram connection, deploy the web app and worker, configure the databases, and test a campaign. OpenReply is self-hosted with either provider.

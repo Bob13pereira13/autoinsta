@@ -950,26 +950,42 @@ export async function refreshLongLivedToken(
   };
 }
 
+/**
+ * Account-level webhook fields. Besides comments and DMs the app handles
+ * button taps (follow gate, opening DM) and read receipts (the opening-DM
+ * fallback), which Meta delivers as separate fields.
+ */
+export const WEBHOOK_FIELDS = ["comments", "messages", "messaging_postbacks", "messaging_seen"] as const;
+const MINIMAL_WEBHOOK_FIELDS = ["comments", "messages"] as const;
+
 export async function subscribeInstagramAccountToWebhooks(
   instagramAccountId: string,
   auth: MetaAuth
 ): Promise<{ success: boolean }> {
   const accessToken = tokenOf(auth);
-  const response = await fetch(
-    `${instagramGraphBase(auth)}/${instagramAccountId}/subscribed_apps`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        subscribed_fields: ["comments", "messages"],
-      }),
-    }
-  );
+  const subscribe = async (fields: readonly string[]) =>
+    handleResponse<{ success: boolean }>(
+      await fetch(`${instagramGraphBase(auth)}/${instagramAccountId}/subscribed_apps`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ subscribed_fields: fields }),
+      })
+    );
 
-  return handleResponse(response);
+  try {
+    return await subscribe(WEBHOOK_FIELDS);
+  } catch (err) {
+    // An app whose webhook product lacks one of the extra fields gets an
+    // invalid-parameter error; keep comments and DMs working regardless.
+    if (err instanceof MetaApiError && err.code === 100 && !(err instanceof TokenExpiredError)) {
+      console.warn("[Instagram] Extra webhook fields rejected, subscribing comments+messages only:", err.message);
+      return subscribe(MINIMAL_WEBHOOK_FIELDS);
+    }
+    throw err;
+  }
 }
 
 /**

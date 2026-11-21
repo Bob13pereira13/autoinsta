@@ -64,9 +64,10 @@ export default function PrivacidadePage() {
 
         <h3>3.2 Dados da conta do Instagram conectada</h3>
         <p>
-          A conexão é feita exclusivamente pelo login oficial do Instagram (Instagram API com login do
-          Instagram). <strong>Nunca pedimos nem armazenamos a senha do Instagram.</strong> Solicitamos apenas
-          as permissões abaixo, e você pode revogá-las a qualquer momento:
+          A conexão é feita exclusivamente pelo login oficial da Meta — o login unificado (Facebook Login
+          para Empresas com ativos do Instagram) ou o login do Instagram, conforme a configuração do
+          aplicativo. <strong>Nunca pedimos nem armazenamos a senha do Instagram ou do Facebook.</strong>{" "}
+          Solicitamos apenas as permissões abaixo, e você pode revogá-las a qualquer momento:
         </p>
         <table>
           <thead>
@@ -77,33 +78,53 @@ export default function PrivacidadePage() {
           </thead>
           <tbody>
             <tr>
-              <td>instagram_business_basic</td>
+              <td>
+                instagram_basic
+                <br />
+                (ou instagram_business_basic)
+              </td>
               <td>
                 Identificar a conta conectada (ID, nome de usuário, nome e número de seguidores) e listar os
                 seus posts e reels para você escolher onde a campanha vai funcionar.
               </td>
             </tr>
             <tr>
-              <td>instagram_business_manage_comments</td>
+              <td>
+                instagram_manage_comments
+                <br />
+                (ou instagram_business_manage_comments)
+              </td>
               <td>
                 Receber os comentários feitos nos posts e reels da conta conectada, identificar a
                 palavra-chave configurada e, se você ativar, publicar uma resposta pública ao comentário.
               </td>
             </tr>
             <tr>
-              <td>instagram_business_manage_messages</td>
+              <td>
+                instagram_manage_messages
+                <br />
+                (ou instagram_business_manage_messages)
+              </td>
               <td>
                 Enviar a resposta privada (DM) para quem comentou a palavra-chave, responder mensagens diretas
                 que contenham a palavra-chave e exibir as conversas na caixa de entrada do painel.
               </td>
             </tr>
+            <tr>
+              <td>business_management</td>
+              <td>
+                Somente no login unificado: localizar a conta do Instagram que você atribuiu ao nosso
+                aplicativo no seu portfólio empresarial durante o login. Não lemos nem alteramos outros
+                ativos do seu portfólio.
+              </td>
+            </tr>
           </tbody>
         </table>
         <p>
-          Armazenamos: ID da conta profissional, ID da conta com escopo do aplicativo, nome de usuário, nome,
-          o token de acesso (criptografado com AES-256-GCM) e sua data de expiração, e o número diário de
-          seguidores. Posts, reels e conversas são consultados na Meta no momento em que você abre o painel e
-          não são copiados para o nosso banco de dados, exceto a referência ao post escolhido em cada
+          Armazenamos: ID da conta profissional, identificadores técnicos do login, nome de usuário, nome,
+          o token de acesso (criptografado com AES-256-GCM) e sua data de expiração, quando houver, e o número
+          diário de seguidores. Posts, reels e conversas são consultados na Meta no momento em que você abre o
+          painel e não são copiados para o nosso banco de dados, exceto a referência ao post escolhido em cada
           campanha.
         </p>
 
@@ -259,9 +280,10 @@ export default function PrivacidadePage() {
             Instagram. A conta, o token, as campanhas, os registros de envio e os links são apagados na hora.
           </li>
           <li>
-            <strong>Pelo Instagram:</strong> em Configurações → Apps e sites, remova o {brand.name}. A Meta
-            nos envia um pedido de exclusão e apagamos automaticamente os dados da conta. Você recebe um código
-            para acompanhar o pedido em <Link href="/exclusao-dados">/exclusao-dados</Link>.
+            <strong>Pela Meta:</strong> remova o {brand.name} nas configurações de apps do Instagram ou do
+            Facebook (Apps e sites / Integrações empresariais). A Meta nos envia um pedido de exclusão e
+            apagamos automaticamente os dados da conta. Você recebe um código para acompanhar o pedido em{" "}
+            <Link href="/exclusao-dados">/exclusao-dados</Link>.
           </li>
           <li>
             <strong>Por e-mail:</strong> escreva para <a href={`mailto:${legal.dpoEmail}`}>{legal.dpoEmail}</a>

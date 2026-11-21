@@ -1,3 +1,9 @@
+> **Nota deste fork.** A interface usa **Português (Brasil) por padrão** e oferece apenas pt-BR e inglês
+> (o inglês fica disponível para a gravação do vídeo do Meta App Review). O catálogo é
+> `lib/i18n/pt-BR.json`; `{brand}` nas mensagens é preenchido com o nome de `config/brand.ts`, e
+> `message()` traduz mensagens que chegam da API quando elas existem no catálogo. O restante deste
+> documento descreve o projeto original.
+
 # Interface languages
 
 OpenReply defaults to English. Choose **English**, **繁體中文**, **Português (Brasil)** or **Русский** in the dashboard

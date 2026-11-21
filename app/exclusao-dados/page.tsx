@@ -135,9 +135,11 @@ export default async function ExclusaoDadosPage({
             rastreáveis são apagados imediatamente.
           </li>
           <li>
-            <strong>Pelo Instagram:</strong> no aplicativo, vá em Configurações e privacidade → Permissões de
-            apps e sites (ou Apps e sites), encontre o {brand.name} e remova-o. A Meta nos envia o pedido,
-            apagamos os dados automaticamente e você recebe um código para consultar nesta página.
+            <strong>Pela Meta:</strong> remova o {brand.name} das integrações da sua conta — no Instagram, em
+            Configurações e privacidade → Permissões de apps e sites; no Facebook, em Configurações →
+            Integrações empresariais (ou no portfólio empresarial, em Integrações → Apps conectados). A Meta
+            nos envia o pedido, apagamos os dados automaticamente e você recebe um código para consultar nesta
+            página.
           </li>
           <li>
             <strong>Para encerrar também o cadastro de acesso</strong> (e-mail e espaço de trabalho), escreva
