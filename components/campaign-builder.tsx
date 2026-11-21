@@ -84,41 +84,57 @@ function Radio({
   checked,
   onSelect,
   children,
+  help,
 }: {
   checked: boolean;
   onSelect: () => void;
   children: React.ReactNode;
+  /** Rendered beside the option, outside its button (no nested buttons). */
+  help?: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+    <div
+      className={`flex w-full flex-wrap items-start gap-x-1 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
         checked ? "border-accent bg-accent/5" : "border-border hover:border-border-hover"
       }`}
     >
-      <span
-        className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
-          checked ? "border-accent" : "border-zinc-500"
-        }`}
+      <button
+        type="button"
+        role="radio"
+        aria-checked={checked}
+        onClick={onSelect}
+        className="flex flex-1 items-center gap-3 text-left"
       >
-        {checked && <span className="h-2 w-2 rounded-full bg-accent" />}
-      </span>
-      <span className="flex-1 text-foreground">{children}</span>
-    </button>
+        <span
+          className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
+            checked ? "border-accent" : "border-zinc-500"
+          }`}
+        >
+          {checked && <span className="h-2 w-2 rounded-full bg-accent" />}
+        </span>
+        <span className="flex-1 text-foreground">{children}</span>
+      </button>
+      {help}
+    </div>
   );
 }
 
 function Toggle({
   on,
   onToggle,
+  label,
 }: {
   on: boolean;
   onToggle: () => void;
+  /** Accessible name; the visible text sits next to the switch. */
+  label: string;
 }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
       onClick={onToggle}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
         on ? "bg-accent" : "bg-zinc-300"
@@ -781,7 +797,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     example={t("Your story says “Reply PRICE”; whoever replies PRICE gets the price list.")}
                   />
                 </span>
-                <Toggle on={triggerStoryReplies} onToggle={() => setTriggerStoryReplies(!triggerStoryReplies)} />
+                <Toggle label={t("Someone replies to one of your stories")} on={triggerStoryReplies} onToggle={() => setTriggerStoryReplies(!triggerStoryReplies)} />
               </div>
               <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
                 <span className="text-sm text-foreground">
@@ -791,7 +807,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     example={t("A customer posts your product and tags you; they get a thank-you with a coupon.")}
                   />
                 </span>
-                <Toggle on={triggerStoryMentions} onToggle={() => setTriggerStoryMentions(!triggerStoryMentions)} />
+                <Toggle label={t("Someone mentions you in their story")} on={triggerStoryMentions} onToggle={() => setTriggerStoryMentions(!triggerStoryMentions)} />
               </div>
               {triggerStoryMentions && matchMode !== "any" && (
                 <p className="rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
@@ -813,12 +829,17 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
         {/* 2. Keyword */}
         <Step number={2} title={t("Keyword")}>
-          <Radio checked={matchMode === "specific"} onSelect={() => setMatchMode("specific")}>
+          <Radio
+            checked={matchMode === "specific"}
+            onSelect={() => setMatchMode("specific")}
+            help={
+              <Help
+                text={t("The automation only answers when the text contains one of these words. With several automations, the one with a keyword wins over one without.")}
+                example={t("LINK, PRICE, COUPON")}
+              />
+            }
+          >
             {t("only when it contains a keyword")}
-            <Help
-              text={t("The automation only answers when the text contains one of these words. With several automations, the one with a keyword wins over one without.")}
-              example={t("LINK, PRICE, COUPON")}
-            />
           </Radio>
           {matchMode === "specific" && (
             <div className="space-y-1">
@@ -838,16 +859,21 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     example={t("With “link” on, “links” also matches.")}
                   />
                 </span>
-                <Toggle on={!wholeWordMatch} onToggle={() => setWholeWordMatch(!wholeWordMatch)} />
+                <Toggle label={t("Match part of a word")} on={!wholeWordMatch} onToggle={() => setWholeWordMatch(!wholeWordMatch)} />
               </div>
             </div>
           )}
-          <Radio checked={matchMode === "any"} onSelect={() => setMatchMode("any")}>
+          <Radio
+            checked={matchMode === "any"}
+            onSelect={() => setMatchMode("any")}
+            help={
+              <Help
+                text={t("Answers everything that arrives, without needing a keyword.")}
+                example={isComments ? t("Every comment on the post gets the DM.") : t("Every new conversation gets a welcome message.")}
+              />
+            }
+          >
             {isComments ? t("any comment") : automationType === "STORIES" ? t("any reply") : t("any message")}
-            <Help
-              text={t("Answers everything that arrives, without needing a keyword.")}
-              example={isComments ? t("Every comment on the post gets the DM.") : t("Every new conversation gets a welcome message.")}
-            />
           </Radio>
           {automationType === "DIRECT" && matchMode === "any" && (
             <div role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
@@ -889,7 +915,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     example={t("“Want the link? Tap below 👇” + button “Send me the link”.")}
                   />
                 </span>
-                <Toggle on={openingDmEnabled} onToggle={() => setOpeningDmEnabled(!openingDmEnabled)} />
+                <Toggle label={t("an opening DM with a button")} on={openingDmEnabled} onToggle={() => setOpeningDmEnabled(!openingDmEnabled)} />
               </div>
               {openingDmEnabled && (
                 <div className="mt-3 space-y-2">
@@ -925,7 +951,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   example={t("“Follow me and tap the button to get the coupon”.")}
                 />
               </span>
-              <Toggle on={requireFollow} onToggle={() => setRequireFollow(!requireFollow)} />
+              <Toggle label={t("follow me to unlock")} on={requireFollow} onToggle={() => setRequireFollow(!requireFollow)} />
             </div>
             {requireFollow && (
               <div className="mt-3 space-y-2">
@@ -950,7 +976,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   items={media.FOLLOW_PROMPT}
                   onChange={setSlotMedia("FOLLOW_PROMPT")}
                   onStorageChange={bumpStorage}
-                  blockedReason={media.FOLLOW_PROMPT.length === 0 ? commentsMediaNote : null}
+                  blockedReason={commentsMediaNote}
                 />
               </div>
             )}
@@ -1030,7 +1056,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               items={media.MAIN}
               onChange={setSlotMedia("MAIN")}
               onStorageChange={bumpStorage}
-              blockedReason={media.MAIN.length === 0 ? commentsMediaNote : null}
+              blockedReason={commentsMediaNote}
             />
           </div>
 
@@ -1043,7 +1069,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   example={t("“Thanks for the follow, enjoy! 🙌”")}
                 />
               </span>
-              <Toggle on={followUpEnabled} onToggle={() => setFollowUpEnabled(!followUpEnabled)} />
+              <Toggle label={t("a thank-you message")} on={followUpEnabled} onToggle={() => setFollowUpEnabled(!followUpEnabled)} />
             </div>
             {followUpEnabled && (
               <div className="mt-3 space-y-2">
@@ -1075,7 +1101,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   items={media.FOLLOW_UP}
                   onChange={setSlotMedia("FOLLOW_UP")}
                   onStorageChange={bumpStorage}
-                  blockedReason={media.FOLLOW_UP.length === 0 ? commentsMediaNote : null}
+                  blockedReason={commentsMediaNote}
                 />
               </div>
             )}
@@ -1099,7 +1125,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   example={t("“Sent you a DM! 📩”")}
                 />
               </span>
-              <Toggle on={publicReplyEnabled} onToggle={() => setPublicReplyEnabled(!publicReplyEnabled)} />
+              <Toggle label={t("reply to the comment publicly")} on={publicReplyEnabled} onToggle={() => setPublicReplyEnabled(!publicReplyEnabled)} />
             </div>
             {publicReplyEnabled && (
               <div className="space-y-2">

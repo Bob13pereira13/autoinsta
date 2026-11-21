@@ -24,29 +24,32 @@ export interface SummaryInput {
 }
 
 export function automationSummary({ t }: Pick<I18n, "t">, s: SummaryInput): string {
-  const words = s.keywords.map((k) => `"${k}"`).join(t(" or "));
-  const keyworded = !s.anyWord && s.keywords.length > 0;
+  // With "only with a keyword" chosen but nothing typed yet, say "your
+  // keyword" rather than describing it as answering everything.
+  const words = s.keywords.length > 0 ? s.keywords.map((k) => `"${k}"`).join(t(" or ")) : t("your keyword");
 
   let trigger: string;
   if (s.type === "COMMENTS") {
+    // The preposition lives in the scope ("on the selected post" → "na
+    // publicação escolhida"), since Portuguese contracts it with the article.
     const scope =
-      s.scope === "any" ? t("any of your posts") : s.scope === "next" ? t("your next post or reel") : t("the selected post");
-    trigger = keyworded
-      ? t("When someone comments {words} on {scope}", { words, scope })
-      : t("When someone comments anything on {scope}", { scope });
+      s.scope === "any" ? t("on any of your posts") : s.scope === "next" ? t("on your next post or reel") : t("on the selected post");
+    trigger = s.anyWord
+      ? t("When someone comments anything {scope}", { scope })
+      : t("When someone comments {words} {scope}", { words, scope });
   } else if (s.type === "STORIES") {
     if (s.storyReplies) {
-      trigger = keyworded
-        ? t("When someone replies {words} to one of your stories", { words })
-        : t("When someone replies to one of your stories");
+      trigger = s.anyWord
+        ? t("When someone replies to one of your stories")
+        : t("When someone replies {words} to one of your stories", { words });
       if (s.storyMentions && s.anyWord) trigger += t(" or mentions you in their story");
     } else {
       trigger = t("When someone mentions you in their story");
     }
   } else {
-    trigger = keyworded
-      ? t("When someone sends you a direct message with {words}", { words })
-      : t("When someone sends you any direct message");
+    trigger = s.anyWord
+      ? t("When someone sends you any direct message")
+      : t("When someone sends you a direct message with {words}", { words });
   }
 
   const base = s.hasLink ? t("your link") : t("your message");
