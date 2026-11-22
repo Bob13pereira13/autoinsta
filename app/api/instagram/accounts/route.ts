@@ -24,7 +24,7 @@ export async function GET() {
     );
   }
 
-  const instagramAccounts = await prisma.instagramAccount.findMany({
+  const [instagramAccounts, workspace] = await Promise.all([prisma.instagramAccount.findMany({
     where: { workspaceId: context.workspaceId },
     orderBy: { connectedAt: "desc" },
     select: {
@@ -37,7 +37,8 @@ export async function GET() {
       connectedAt: true,
       _count: { select: { automations: true } },
     },
-  });
+  }),
+  prisma.workspace.findUnique({ where: { id: context.workspaceId }, select: { instagramAccountLimit: true } })]);
 
   return NextResponse.json({
     success: true,
@@ -48,6 +49,8 @@ export async function GET() {
       })),
       selectedInstagramAccountId: instagramAccounts[0]?.id ?? null,
       canManage: canManageWorkspace(context.role),
+      // How many accounts this client may connect (set in the admin area).
+      accountLimit: workspace?.instagramAccountLimit ?? 1,
     },
   });
 }

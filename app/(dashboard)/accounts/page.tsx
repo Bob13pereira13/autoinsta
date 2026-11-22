@@ -29,6 +29,7 @@ export default function AccountsPage() {
   const { t, message } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [canManage, setCanManage] = useState(false);
+  const [accountLimit, setAccountLimit] = useState(1);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function AccountsPage() {
       if (data.success) {
         setAccounts(data.data.instagramAccounts);
         setCanManage(Boolean(data.data.canManage));
+        setAccountLimit(Number(data.data.accountLimit) || 1);
       } else {
         setError(message(data.error, "Could not load accounts"));
       }
@@ -93,6 +95,12 @@ export default function AccountsPage() {
     }
   }
 
+  const atLimit = accounts.length >= accountLimit;
+  const limitText = t(
+    accountLimit === 1 ? "Your plan allows {max} account. Contact support to increase it." : "Your plan allows {max} accounts. Contact support to increase it.",
+    { max: accountLimit }
+  );
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* ?instagram= codes the login routes redirect back with. useSearchParams
@@ -106,8 +114,11 @@ export default function AccountsPage() {
           <p className="text-sm text-foreground">
             {t("The Instagram accounts your automations answer from. Turn an account off to pause all of its automations at once, without deleting anything.")}
           </p>
+          {!loading && (
+            <p className="mt-1 text-xs text-muted">{t("{count} of {max} accounts", { count: accounts.length, max: accountLimit })}</p>
+          )}
         </div>
-        {canManage && (
+        {canManage && !loading && !atLimit && (
           <a
             href={CONNECT_URL}
             className="shrink-0 rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"
@@ -121,6 +132,10 @@ export default function AccountsPage() {
         <p role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
           {error}
         </p>
+      )}
+
+      {canManage && !loading && atLimit && accounts.length > 0 && (
+        <p className="rounded border border-border bg-surface px-3 py-2 text-sm text-muted">{limitText}</p>
       )}
 
       {!canManage && !loading && accounts.length > 0 && (

@@ -47,6 +47,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
   }
 
+  // Only ACTIVE clients connect accounts, up to the limit the admin set.
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: state.workspaceId },
+    select: { status: true, instagramAccountLimit: true },
+  });
+  if (!workspace || workspace.status !== "ACTIVE") {
+    return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
+  }
+
   try {
     const redirectUri = `${baseUrl}/api/instagram/callback`;
     const unifiedLogin = isUnifiedLogin();
@@ -90,6 +99,9 @@ export async function GET(request: NextRequest) {
     const metaLogin = unifiedLogin ? "UNIFIED" : "INSTAGRAM";
     const encryptedToken = encryptToken(accessToken);
     let connected = 0;
+    // A new account beyond the client's limit is skipped (reconnecting one
+    // it already has is always allowed).
+    let limited = false;
 
     for (const accountId of accountIds) {
       const userInfo = await getUserInfo(auth, accountId);
@@ -103,6 +115,14 @@ export async function GET(request: NextRequest) {
         instagramId,
       });
       if (!connection.allowed) continue;
+      const alreadyHere = await prisma.instagramAccount.count({ where: { instagramId, workspaceId: state.workspaceId } });
+      if (!alreadyHere) {
+        const current = await prisma.instagramAccount.count({ where: { workspaceId: state.workspaceId } });
+        if (current >= workspace.instagramAccountLimit) {
+          limited = true;
+          continue;
+        }
+      }
 
       let webhookSubscribed = false;
       try {
@@ -145,6 +165,11 @@ export async function GET(request: NextRequest) {
       connected++;
     }
 
+    if (limited) {
+      return NextResponse.redirect(
+        `${baseUrl}/accounts?instagram=limit&max=${workspace.instagramAccountLimit}&connected=${connected}`
+      );
+    }
     if (!connected) {
       return NextResponse.redirect(
         `${baseUrl}/accounts?instagram=already_connected`

@@ -391,11 +391,13 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         { matchAnyPost: true },
       ],
       isActive: true,
-      // A deactivated account (Accounts tab) answers nothing.
+      // A deactivated account (Accounts tab) answers nothing, and neither
+      // does a client that is not ACTIVE (pending, rejected or disabled).
       instagramAccount: {
         instagramId: instagramAccountId,
         automationsEnabled: true,
       },
+      workspace: { status: "ACTIVE" },
     },
     include: {
       instagramAccount: true,
@@ -1002,7 +1004,13 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   const automation = await prisma.automation.findFirst({
     // Paused automation or deactivated account: button taps and scheduled
     // thank-you messages are dropped too.
-    where: { id: automationId, isActive: true, instagramAccount: { automationsEnabled: true }, ...connectionScope(job.data) },
+    where: {
+      id: automationId,
+      isActive: true,
+      instagramAccount: { automationsEnabled: true },
+      workspace: { status: "ACTIVE" },
+      ...connectionScope(job.data),
+    },
     include: {
       instagramAccount: true,
       workspace: true,
@@ -1343,7 +1351,13 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
   const automation = await prisma.automation.findFirst({
     // Paused automation or deactivated account: button taps and scheduled
     // thank-you messages are dropped too.
-    where: { id: automationId, isActive: true, instagramAccount: { automationsEnabled: true }, ...connectionScope(job.data) },
+    where: {
+      id: automationId,
+      isActive: true,
+      instagramAccount: { automationsEnabled: true },
+      workspace: { status: "ACTIVE" },
+      ...connectionScope(job.data),
+    },
     include: { instagramAccount: true, media: MEDIA_INCLUDE },
   });
 
@@ -1414,6 +1428,8 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
       isActive: true,
       // A deactivated account (Accounts tab) answers nothing.
       instagramAccount: { instagramId: instagramAccountId, automationsEnabled: true },
+      // A client that is not ACTIVE answers nothing either.
+      workspace: { status: "ACTIVE" },
     },
     include: {
       instagramAccount: true,

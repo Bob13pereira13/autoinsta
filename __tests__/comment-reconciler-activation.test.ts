@@ -78,6 +78,14 @@ describe("commentCutoffMs", () => {
     expect(recent).toBe(ago(172).getTime());
   });
 
+  it("never goes before the client's approval or reactivation", () => {
+    const cutoff = commentCutoffMs(
+      { ...campaign({ activeSince: ago(48), replyToRecentComments: true }), workspace: { automationsResumedAt: ago(2) } },
+      lookback
+    );
+    expect(cutoff).toBe(ago(2).getTime());
+  });
+
   it("never goes before the account's reactivation, even with replyToRecentComments", () => {
     const cutoff = commentCutoffMs(
       campaign({ activeSince: ago(5), replyToRecentComments: true }, { automationsResumedAt: ago(1) }),
@@ -93,7 +101,7 @@ describe("reconcileComments respects activation", () => {
     await reconcileComments();
     expect(mockPrisma.automation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { isActive: true, type: "COMMENTS", instagramAccount: { automationsEnabled: true } },
+        where: { isActive: true, type: "COMMENTS", instagramAccount: { automationsEnabled: true }, workspace: { status: "ACTIVE" } },
       })
     );
   });

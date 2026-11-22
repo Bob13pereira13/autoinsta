@@ -57,8 +57,8 @@ const HOUR_MS = 60 * 60 * 1000;
 
 /**
  * The oldest comment a campaign may answer. Comments made before the campaign
- * became active (created or resumed) or before its account was reactivated
- * are ignored, so pausing never queues up a backlog that floods people when
+ * became active (created or resumed), before its account was reactivated or
+ * before the client itself was approved or reactivated are ignored, so pausing never queues up a backlog that floods people when
  * it is switched back on. With replyToRecentComments, the campaign also takes
  * comments made up to 72 hours before it was activated (the account's pause
  * is still respected).
@@ -68,6 +68,7 @@ export function commentCutoffMs(
     activeSince?: Date | null;
     replyToRecentComments?: boolean | null;
     instagramAccount: { automationsResumedAt?: Date | null };
+    workspace?: { automationsResumedAt?: Date | null } | null;
   },
   lookbackSinceMs: number
 ): number {
@@ -76,7 +77,8 @@ export function commentCutoffMs(
     ? activeSince - RECENT_COMMENTS_BACKFILL_HOURS * HOUR_MS
     : activeSince;
   const accountResumed = automation.instagramAccount.automationsResumedAt?.getTime() ?? 0;
-  return Math.max(lookbackSinceMs, fromActivation, accountResumed);
+  const clientResumed = automation.workspace?.automationsResumedAt?.getTime() ?? 0;
+  return Math.max(lookbackSinceMs, fromActivation, accountResumed, clientResumed);
 }
 
 interface SweepStat {
@@ -100,7 +102,12 @@ export async function reconcileComments(): Promise<void> {
   const automations = await prisma.automation.findMany({
     // Only Comments automations watch posts; Stories/Direct have no media. A
     // deactivated account (Accounts tab) is not swept at all.
-    where: { isActive: true, type: "COMMENTS", instagramAccount: { automationsEnabled: true } },
+    where: {
+      isActive: true,
+      type: "COMMENTS",
+      instagramAccount: { automationsEnabled: true },
+      workspace: { status: "ACTIVE" },
+    },
     select: {
       id: true,
       name: true,
@@ -131,6 +138,8 @@ export async function reconcileComments(): Promise<void> {
           automationsResumedAt: true,
         },
       },
+      // The client's reactivation (or approval) is a cutoff too.
+      workspace: { select: { automationsResumedAt: true } },
     },
   });
 

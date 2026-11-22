@@ -4,10 +4,12 @@ import { NextRequest } from "next/server";
 const { mockPrisma, mockExchange } = vi.hoisted(() => ({
   mockPrisma: {
     workspaceMember: { findFirst: vi.fn() },
+    workspace: { findUnique: vi.fn() },
     instagramAccount: {
       findUnique: vi.fn(),
       updateMany: vi.fn(),
       create: vi.fn(),
+      count: vi.fn(),
     },
     operationalEvent: { create: vi.fn() },
   },
@@ -42,6 +44,8 @@ function callback() {
   );
 }
 const urls = () => fetchMock.mock.calls.map(([url]) => String(url));
+// Instagram ids already connected to the workspace (simulated).
+let workspaceAccounts: string[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -50,6 +54,15 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("NEXTAUTH_URL", "https://app.test");
   mockPrisma.workspaceMember.findFirst.mockResolvedValue({ role: "OWNER" });
+  mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 10 });
+  workspaceAccounts = [];
+  mockPrisma.instagramAccount.count.mockImplementation(async ({ where }: { where: { instagramId?: string; workspaceId: string } }) =>
+    where.instagramId ? workspaceAccounts.filter((id) => id === where.instagramId).length : workspaceAccounts.length
+  );
+  mockPrisma.instagramAccount.create.mockImplementation(async ({ data }: { data: { instagramId: string } }) => {
+    workspaceAccounts.push(data.instagramId);
+    return data;
+  });
   mockPrisma.instagramAccount.findUnique.mockResolvedValue(null);
   mockPrisma.operationalEvent.create.mockResolvedValue({});
 });
@@ -163,5 +176,60 @@ describe("Instagram OAuth callback", () => {
       "business_management"
     );
     expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
+  });
+
+  describe("account limit", () => {
+    function unified(accountIds: string[]) {
+      vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+      vi.stubEnv("META_APP_ID", "app");
+      vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+      mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+      respond({ data: { expires_at: 0, user_id: "122000000000001" } });
+      respond({ data: accountIds.map((id) => ({ id })) });
+      for (const id of accountIds) {
+        respond({ id, username: id });
+        respond({ success: true });
+      }
+    }
+
+    it("blocks a new account beyond the limit and says how many the plan allows", async () => {
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 1 });
+      workspaceAccounts = ["ig_existing"];
+      unified(["ig_new"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=1&connected=0");
+      expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
+      // The webhook subscription for the refused account is never made.
+      expect(urls().some((url) => url.includes("/ig_new/subscribed_apps"))).toBe(false);
+    });
+
+    it("connects up to the limit and reports the rest", async () => {
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 2 });
+      workspaceAccounts = ["ig_existing"];
+      unified(["ig_a", "ig_b"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=2&connected=1");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a"]);
+    });
+
+    it("always lets the client reconnect an account it already has", async () => {
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 1 });
+      workspaceAccounts = ["ig_existing"];
+      mockPrisma.instagramAccount.findUnique.mockResolvedValue({ id: "row", workspaceId: "workspace", provider: "META" });
+      mockPrisma.instagramAccount.updateMany.mockResolvedValue({ count: 1 });
+      unified(["ig_existing"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+      expect(mockPrisma.instagramAccount.updateMany).toHaveBeenCalled();
+    });
+
+    it("a client that is not ACTIVE cannot connect accounts", async () => {
+      for (const status of ["PENDING_APPROVAL", "REJECTED", "DISABLED"]) {
+        mockPrisma.workspace.findUnique.mockResolvedValue({ status, instagramAccountLimit: 5 });
+        const response = await callback();
+        expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=forbidden");
+      }
+      expect(mockExchange).not.toHaveBeenCalled();
+    });
   });
 });

@@ -52,6 +52,19 @@ export function InstagramConnectNotice() {
 
   if (!status) return null;
 
+  if (status === "limit") {
+    const max = Number(searchParams.get("max")) || 1;
+    const connected = Number(searchParams.get("connected")) || 0;
+    return (
+      <Notice tone="warning" title={t("Account limit reached")}>
+        <p>
+          {t(max === 1 ? "Your plan allows {max} account. Contact support to increase it." : "Your plan allows {max} accounts. Contact support to increase it.", { max })}
+        </p>
+        {connected > 0 && <p className="mt-1">{t("Connected now: {count}.", { count: connected })}</p>}
+      </Notice>
+    );
+  }
+
   if (status === "misconfigured") {
     const missing = (searchParams.get("missing") ?? "")
       .split(",")

@@ -356,8 +356,9 @@ describe("DM Worker — Full Pipeline", () => {
           { matchAnyPost: true },
         ],
         isActive: true,
-        // A deactivated account answers nothing.
+        // A deactivated account answers nothing, nor a client that is not ACTIVE.
         instagramAccount: { instagramId: "ig_456", automationsEnabled: true },
+        workspace: { status: "ACTIVE" },
       },
       include: {
         instagramAccount: true,
