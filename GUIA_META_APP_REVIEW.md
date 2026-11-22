@@ -19,8 +19,8 @@ Em todo o guia, troque `https://app.suaempresa.com.br` pelo domínio real (o mes
 
 - [ ] App publicado em um domínio **HTTPS** próprio, com `NEXTAUTH_URL` apontando para ele.
 - [ ] `config/brand.ts` preenchido: razão social, CNPJ, endereço, e-mail de suporte e e-mail do encarregado.
-      A página **Diagnóstico** lista o que ainda está como `[PREENCHER]` (só aparece para os e-mails de
-      `ADMIN_EMAILS`).
+      Na área de gestão (`/admin` → **Diagnóstico**, só para os e-mails de `ADMIN_EMAILS`) aparece o que
+      ainda está como `[PREENCHER]`.
 - [ ] `/privacidade`, `/termos` e `/exclusao-dados` abrindo sem login.
 - [ ] Worker rodando (`npm run worker`) e rotina diária rodando (Vercel Cron ou `scripts/cron.sh`).
 - [ ] Nenhum valor de exemplo do `.env.example` nos segredos: em produção o app web e o worker **se
@@ -68,7 +68,7 @@ O app também assina esses campos em cada conta conectada; os dois últimos faze
 DM (seguir para receber o link, botão de abrir) e o envio automático após a leitura.
 
 **Teste do webhook:** clique em *Test* ao lado de `comments` e depois em **Send to My Server**. Um evento
-aparece na página Diagnóstico. Em modo de desenvolvimento, a Meta só entrega eventos reais de contas com
+aparece em `/admin` → Diagnóstico. Em modo de desenvolvimento, a Meta só entrega eventos reais de contas com
 função no app.
 
 ---
@@ -320,8 +320,8 @@ Dicas que evitam reprovação:
   Access. Normaliza após o Advanced Access em `instagram_manage_messages`.
 - **Pedido de exclusão "não encontrado"**: a Meta não documenta qual ID chega no callback de exclusão
   para esse tipo de login. O app compara com o ID da conta, o ID com escopo do app e o usuário do token;
-  um pedido que não bate com nada fica registrado e gera um alerta na página Diagnóstico, para você
-  verificar manualmente.
+  um pedido que não bate com nada fica registrado e gera um alerta em `/admin` → Diagnóstico, para
+  você verificar manualmente.
 
 ---
 

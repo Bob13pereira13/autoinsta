@@ -19,7 +19,7 @@ import { Icon, type IconName } from "@/components/ui/icons";
 import { buttonClass } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
 
-const navItems: { label: "Dashboard" | "Automations" | "Accounts" | "DM Logs" | "Settings" | "API & MCP" | "Diagnostics"; href: string; icon: IconName; also?: string }[] = [
+const navItems: { label: "Dashboard" | "Automations" | "Accounts" | "DM Logs" | "Settings"; href: string; icon: IconName; also?: string }[] = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   // Editing an automation still lives under /campaigns/..., so that menu item
   // stays highlighted there too.
@@ -27,8 +27,6 @@ const navItems: { label: "Dashboard" | "Automations" | "Accounts" | "DM Logs" | 
   { label: "Accounts", href: "/accounts", icon: "accounts" },
   { label: "DM Logs", href: "/logs", icon: "logs" },
   { label: "Settings", href: "/settings", icon: "settings" },
-  { label: "API & MCP", href: "/integrations", icon: "api" },
-  { label: "Diagnostics", href: "/diagnostics", icon: "diagnostics" },
 ];
 
 interface SidebarProps {

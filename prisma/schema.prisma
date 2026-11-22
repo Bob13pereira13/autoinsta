@@ -175,7 +175,6 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
-  serviceKeys       ServiceKey[]
   automationMedia   AutomationMedia[]
   adminAuditLogs    AdminAuditLog[]
 
@@ -231,21 +230,6 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@index([userId])
-}
-
-model ServiceKey {
-  id          String    @id @default(cuid())
-  workspaceId String
-  name        String
-  tokenHash   String    @unique
-  scopes      String[]
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  lastUsedAt  DateTime?
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@index([workspaceId])
 }
 
 model WorkspaceInvitation {

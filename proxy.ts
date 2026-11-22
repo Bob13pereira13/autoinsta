@@ -9,16 +9,13 @@ const PROTECTED_PREFIXES = [
   "/accounts",
   "/logs",
   "/settings",
-  "/integrations",
-  "/diagnostics",
   "/admin",
 ];
 
-// The admin area (operators in ADMIN_EMAILS only). The customer-facing
-// Diagnostics page uses /api/admin/diagnostics, so that one stays open.
+// The admin area (operators in ADMIN_EMAILS only), Diagnostics included.
 function isAdminPath(pathname: string): boolean {
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
-  return pathname.startsWith("/api/admin/") && pathname !== "/api/admin/diagnostics";
+  return pathname.startsWith("/api/admin/");
 }
 
 async function adminEmailFromSession(request: NextRequest): Promise<string | null> {
@@ -61,7 +58,7 @@ export async function proxy(request: NextRequest) {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
   }
-  if (pathname.startsWith("/api/admin/") && pathname !== "/api/admin/diagnostics" && !hasSessionCookie(request)) {
+  if (pathname.startsWith("/api/admin/") && !hasSessionCookie(request)) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
   const isProtected = PROTECTED_PREFIXES.some(
@@ -93,10 +90,6 @@ export const config = {
     "/logs/:path*",
     "/settings",
     "/settings/:path*",
-    "/integrations",
-    "/integrations/:path*",
-    "/diagnostics",
-    "/diagnostics/:path*",
     "/admin",
     "/admin/:path*",
     "/api/admin/:path*",

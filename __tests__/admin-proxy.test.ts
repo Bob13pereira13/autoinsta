@@ -51,8 +51,13 @@ describe("admin area in proxy.ts", () => {
     expect((await proxy(request("/api/admin/clients"))).status).toBe(403);
   });
 
-  it("keeps the customers' Diagnostics API open", async () => {
-    const cookie = await sessionCookie("cliente@loja.test");
-    expect(passes(await proxy(request("/api/admin/diagnostics", cookie)))).toBe(true);
+  it("Diagnostics is admin-only now: 403 for a customer and for no session, the admin gets in", async () => {
+    const customer = await sessionCookie("cliente@loja.test");
+    expect((await proxy(request("/api/admin/diagnostics", customer))).status).toBe(403);
+    expect((await proxy(request("/admin/diagnostics", customer))).status).toBe(403);
+    expect((await proxy(request("/api/admin/diagnostics"))).status).toBe(403);
+    const admin = await sessionCookie("dono@plataforma.test");
+    expect(passes(await proxy(request("/api/admin/diagnostics", admin)))).toBe(true);
+    expect(passes(await proxy(request("/admin/diagnostics", admin)))).toBe(true);
   });
 });

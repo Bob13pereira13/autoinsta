@@ -20,6 +20,12 @@ const nextConfig: NextConfig = {
       // shortcuts, whose start_url used to be /overview) land on the Dashboard.
       { source: "/overview", destination: "/dashboard", permanent: false },
       { source: "/overview/:path*", destination: "/dashboard", permanent: false },
+      // API & MCP was removed, and Diagnostics moved to the admin area
+      // (/admin/diagnostics): their old links land on the Dashboard.
+      { source: "/integrations", destination: "/dashboard", permanent: false },
+      { source: "/integrations/:path*", destination: "/dashboard", permanent: false },
+      { source: "/diagnostics", destination: "/dashboard", permanent: false },
+      { source: "/diagnostics/:path*", destination: "/dashboard", permanent: false },
     ];
   },
 };

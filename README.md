@@ -50,8 +50,10 @@ O nome, o logotipo, as cores e os dados legais da marca ficam em **[`config/bran
 - **Conformidade com a Meta e a LGPD**: `/privacidade`, `/termos`, `/exclusao-dados`, callback de
   exclusão de dados (`signed_request`) e de desautorização, retenção automática de dados.
 - **Segurança**: tokens criptografados (AES-256-GCM), assinatura `X-Hub-Signature-256` verificada sobre o
-  corpo bruto, rotas de cron protegidas, limite de tentativas de login, isolamento entre clientes no
-  Diagnóstico.
+  corpo bruto, rotas de cron protegidas, limite de tentativas de login. O espaço de cada cliente tem só o
+  que é das automações (Painel, Automações, Contas, Logs de DMs e Configurações); não há API pública,
+  MCP nem chaves de serviço, e o **Diagnóstico** (eventos de todos os clientes, com filtro por cliente)
+  fica na área de gestão, só para `ADMIN_EMAILS`.
 
 ## Requisitos
 
@@ -100,8 +102,8 @@ servidos publicamente em `/media/<chave aleatória>` (a Meta baixa o arquivo por
 Edite `config/brand.ts`: nome, frase, descrição, logotipo (`public/brand/`), cores e dados legais.
 Troque também os ícones `public/icon-192.png`, `public/icon-512.png` e `public/apple-touch-icon.png`.
 Os campos marcados com `[PREENCHER]` (razão social, CNPJ, endereço, e-mail de suporte, encarregado de
-dados) aparecem na Política de Privacidade e nos Termos — **preencha antes de publicar**. A página
-**Diagnóstico** lista os campos pendentes para os e-mails configurados em `ADMIN_EMAILS`.
+dados) aparecem na Política de Privacidade e nos Termos — **preencha antes de publicar**. Na área de
+gestão, **`/admin` → Diagnóstico** lista os campos pendentes (só para os e-mails de `ADMIN_EMAILS`).
 
 ## Contas dos clientes
 

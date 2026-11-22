@@ -3,31 +3,16 @@
 import LanguageSwitcher from "@/components/language-switcher";
 import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useState } from "react";
-import type { AccountOption } from "@/components/account-select";
 import ChangePasswordCard from "@/components/change-password-card";
-import { ButtonLink, buttonClass } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 
+/** The part of /api/dashboard/stats this page shows. */
 interface SettingsData {
   workspace: {
     name: string;
     dmsSentThisPeriod: number;
   };
-  instagramAccount: {
-    id: string;
-    username: string;
-    instagramId: string;
-    tokenExpiresAt: string | null;
-    webhookSubscribed: boolean;
-  } | null;
-  instagramAccounts: Array<
-    AccountOption & {
-      tokenExpiresAt: string | null;
-      tokenInvalidAt?: string | null;
-      metaLogin?: "INSTAGRAM" | "UNIFIED";
-      webhookSubscribed: boolean;
-    }
-  >;
 }
 
 interface WorkspaceMembersData {
@@ -121,7 +106,6 @@ export default function SettingsPage() {
     );
   }
 
-  const accounts = data?.instagramAccounts ?? [];
   const canManageMembers =
     membersData?.currentUserRole === "OWNER" ||
     membersData?.currentUserRole === "ADMIN";
@@ -134,17 +118,6 @@ export default function SettingsPage() {
         <h2 className="title-section">{t("Interface language")}</h2>
         <LanguageSwitcher />
         <p className="text-sm text-muted">{t("Saved in this browser. Campaign messages stay unchanged.")}</p>
-      </section>
-
-      <section className="card p-5 sm:p-6">
-        <h2 className="title-section">{t("Instagram accounts")}</h2>
-        <p className="mt-2 text-sm text-muted">
-          {t(accounts.length === 1 ? "{count} connected Instagram profile" : "{count} connected Instagram profiles", { count: accounts.length })}.{" "}
-          {t("Connect, turn off or remove accounts in the Accounts tab.")}
-        </p>
-        <ButtonLink href="/accounts" className="mt-4" icon="accounts">
-          {t("Open Accounts")}
-        </ButtonLink>
       </section>
 
       <ChangePasswordCard />
@@ -255,14 +228,7 @@ export default function SettingsPage() {
       <section className="card p-5 sm:p-6">
         <h2 className="title-section mb-2">{t("Usage")}</h2>
         <div className="flex items-center justify-between gap-3 py-3">
-          <div>
-            <p className="font-medium text-heading">
-              {t("DMs sent this month")}
-            </p>
-            <p className="mt-0.5 text-[13px] text-faint">
-              {t("Self-hosted — no plan limits.")}
-            </p>
-          </div>
+          <p className="font-medium text-heading">{t("DMs sent this month")}</p>
           <span className="font-display text-2xl font-semibold text-heading">
             {data?.workspace.dmsSentThisPeriod ?? 0}
           </span>
