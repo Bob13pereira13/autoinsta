@@ -2,9 +2,13 @@
  * What the end customer receives by default is in Portuguese and never
  * mentions GitHub, a repository, OpenReply or the original author. Checked on
  * the default values themselves and on every file that sends or shows them
- * (worker, link handling, editor, preview, detail page, import sample).
+ * (worker, link handling, editor, preview, detail page, import sample); the
+ * translations (lib/i18n) and every text literal of the code that reaches the
+ * browser are checked for those mentions too, since they end up in the public
+ * JavaScript. The fonts' licence files (app/fonts) are not code and are left
+ * out.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CUSTOMER_DEFAULTS } from "@/lib/campaigns/defaults";
@@ -73,3 +77,47 @@ describe("no old English default is left in the code that sends or shows them", 
     });
   }
 });
+
+// "repo" as a word: "Report" and "Relatório" are fine.
+const MENTIONS = /github|\brepos?\b|repository|reposit[oó]rio|openreply/i;
+
+describe("translations (lib/i18n) mention no GitHub, repository or OpenReply", () => {
+  const dir = path.join(__dirname, "..", "lib", "i18n");
+  for (const name of readdirSync(dir)) {
+    it(`lib/i18n/${name}`, () => {
+      const text = readFileSync(path.join(dir, name), "utf8");
+      if (name.endsWith(".json")) {
+        const catalog = JSON.parse(text) as Record<string, string>;
+        const bad = Object.entries(catalog).filter(([key, value]) => MENTIONS.test(key) || MENTIONS.test(value));
+        expect(bad).toEqual([]);
+      } else {
+        expect(text.match(MENTIONS)).toBeNull();
+      }
+    });
+  }
+});
+
+describe("no text literal in the code that reaches the browser mentions them", () => {
+  const root = path.join(__dirname, "..");
+  const skip = (rel: string) => rel.startsWith("app/generated") || rel.startsWith("app/fonts");
+  function walk(rel: string): string[] {
+    if (skip(rel)) return [];
+    const full = path.join(root, rel);
+    if (statSync(full).isDirectory()) return readdirSync(full).flatMap((name) => walk(path.join(rel, name)));
+    return /\.(tsx?|json|css)$/.test(rel) ? [rel] : [];
+  }
+  const literals = (source: string) =>
+    source
+      .split("\n")
+      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .join("\n")
+      .match(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g) ?? [];
+
+  it("app, components, lib and config", () => {
+    const bad = ["app", "components", "lib", "config"]
+      .flatMap(walk)
+      .flatMap((file) => literals(readFileSync(path.join(root, file), "utf8")).filter((s) => MENTIONS.test(s)).map((s) => `${file}: ${s.slice(0, 80)}`));
+    expect(bad).toEqual([]);
+  });
+});
+

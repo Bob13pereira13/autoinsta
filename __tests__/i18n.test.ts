@@ -14,8 +14,8 @@ describe("interface translations", () => {
   });
 
   it("renders both interface languages from the same keys", () => {
-    expect(createI18n("en").t("Campaigns")).toBe("Campaigns");
-    expect(createI18n("pt-BR").t("Campaigns")).toBe("Campanhas");
+    expect(createI18n("en").t("Automations")).toBe("Automations");
+    expect(createI18n("pt-BR").t("Automations")).toBe("Automações");
     expect(createI18n("pt-BR").t("Settings")).toBe("Configurações");
   });
 
@@ -39,8 +39,8 @@ describe("interface translations", () => {
     expect(t("Hello, {name}!", { name: "{count} <b>Alex</b> $&" })).toBe(
       "Hello, {count} <b>Alex</b> $&!",
     );
-    expect(createI18n("pt-BR").t("{count} campaigns", { count: 0 })).toBe(
-      ptBR["{count} campaigns"].replace("{count}", "0"),
+    expect(createI18n("pt-BR").t("{count} checked posts", { count: 0 })).toBe(
+      ptBR["{count} checked posts"].replace("{count}", "0"),
     );
   });
 
