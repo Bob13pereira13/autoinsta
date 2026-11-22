@@ -630,21 +630,26 @@ select:focus-visible {
   }
 
   /* Theme button: the label that applies to the current theme shows. */
+  .show-in-light,
+  .show-in-dark {
+    align-items: center;
+    gap: 10px;
+  }
   .show-in-light {
-    display: contents;
+    display: inline-flex;
   }
   .show-in-dark {
     display: none;
   }
   :root[data-theme="dark"] .show-in-dark {
-    display: contents;
+    display: inline-flex;
   }
   :root[data-theme="dark"] .show-in-light {
     display: none;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .show-in-dark {
-      display: contents;
+      display: inline-flex;
     }
     :root:not([data-theme="light"]) .show-in-light {
       display: none;

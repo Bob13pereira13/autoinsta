@@ -13,9 +13,19 @@ import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
 import { automationTypeSlug } from "@/lib/automation/type-slugs";
+import { Alert } from "@/components/ui/alert";
+import { Button, ButtonAnchor, ButtonLink, buttonClass } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
+import { Icon, type IconName } from "@/components/ui/icons";
+import { PageHeader } from "@/components/ui/page-header";
+import { SegmentedControl } from "@/components/ui/segmented";
+import { StatusDot, type StatusTone } from "@/components/ui/status";
+import { Switch } from "@/components/ui/switch";
 
 type AutomationType = "COMMENTS" | "STORIES" | "DIRECT";
 const TABS: AutomationType[] = ["COMMENTS", "STORIES", "DIRECT"];
+const CHANNEL_ICON: Record<AutomationType, IconName> = { COMMENTS: "comments", STORIES: "stories", DIRECT: "direct" };
 
 interface Campaign {
   id: string;
@@ -93,6 +103,7 @@ export default function AutomationsList({ initialType }: { initialType: Automati
   } | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">(
     "all"
@@ -195,16 +206,6 @@ export default function AutomationsList({ initialType }: { initialType: Automati
     };
   }, [automations]);
 
-  // Close the reel lightbox on Escape.
-  useEffect(() => {
-    if (!playingVideo) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPlayingVideo(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [playingVideo]);
-
   function handleAccountChange(accountId: string) {
     setLoading(true);
     setSelectedAccountId(accountId);
@@ -226,15 +227,15 @@ export default function AutomationsList({ initialType }: { initialType: Automati
   }
 
   async function copyReelUrl(auto: Campaign) {
-    setMenuOpenId(null);
     if (!auto.postUrl) return;
     try {
       await navigator.clipboard.writeText(auto.postUrl);
       setCopiedId(auto.id);
-      window.setTimeout(
-        () => setCopiedId((cur) => (cur === auto.id ? null : cur)),
-        1500
-      );
+      // The menu stays open a moment so "Copied!" can be read.
+      window.setTimeout(() => {
+        setCopiedId((cur) => (cur === auto.id ? null : cur));
+        setMenuOpenId((cur) => (cur === auto.id ? null : cur));
+      }, 1200);
     } catch (err) {
       console.error("Failed to copy reel URL:", err);
     }
@@ -247,7 +248,7 @@ export default function AutomationsList({ initialType }: { initialType: Automati
   }
 
   async function deleteAutomation(id: string) {
-    if (!confirm(t("Delete this automation? Its images and videos are deleted too. This cannot be undone."))) return;
+    setConfirmDeleteId(null);
     try {
       await fetch(`/api/automations?id=${id}`, { method: "DELETE" });
       setAutomations((prev) => prev.filter((a) => a.id !== id));
@@ -278,10 +279,14 @@ export default function AutomationsList({ initialType }: { initialType: Automati
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="panel rounded p-6 h-36" />
-        ))}
+      <div className="space-y-6" aria-busy="true">
+        <div className="h-20 max-w-md rounded-card bg-surface" />
+        <div className="h-12 max-w-sm rounded-control bg-surface" />
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="card h-[84px]" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -323,367 +328,242 @@ export default function AutomationsList({ initialType }: { initialType: Automati
       a.dmMessage.toLowerCase().includes(query)
     );
   });
+  const confirmTarget = automations.find((a) => a.id === confirmDeleteId) ?? null;
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title={t("Automations")}
+        description={
+          <>
+            <p>{tabText[activeType].sentence}</p>
+            <p className="mt-1 text-[13px] text-faint">
+              {t("Example:")} {tabText[activeType].example}
+            </p>
+          </>
+        }
+        actions={
+          <>
+            <ButtonLink href="/campaigns/import" variant="secondary" icon="upload">
+              {t("Import")}
+            </ButtonLink>
+            <ButtonLink href={newHref} variant="primary" icon="plus">
+              {t("New automation")}
+            </ButtonLink>
+          </>
+        }
+      />
+
       {pausedAccounts.length > 0 && (
-        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <span>
-            {t(pausedAccounts.length === 1 ? "@{accounts} is turned off: none of its automations is answering." : "@{accounts} are turned off: none of their automations is answering.", {
-              accounts: pausedAccounts.join(", @"),
-            })}
-          </span>
-          <Link href="/accounts" className="font-semibold underline underline-offset-4">
-            {t("Open Accounts")}
-          </Link>
-        </div>
+        <Alert
+          tone="warning"
+          role="status"
+          action={
+            <Link href="/accounts" className="font-semibold underline underline-offset-4">
+              {t("Open Accounts")}
+            </Link>
+          }
+        >
+          {t(pausedAccounts.length === 1 ? "@{accounts} is turned off: none of its automations is answering." : "@{accounts} are turned off: none of their automations is answering.", {
+            accounts: pausedAccounts.join(", @"),
+          })}
+        </Alert>
       )}
 
-      {/* Channel tabs */}
-      <div role="tablist" aria-label={t("Automation channels")} className="flex gap-1 overflow-x-auto border-b border-border">
-        {TABS.map((type) => (
-          <button
-            key={type}
-            type="button"
-            role="tab"
-            aria-selected={activeType === type}
-            onClick={() => selectTab(type)}
-            className={`-mb-px shrink-0 border-b-2 px-4 py-2 text-sm transition-colors ${
-              activeType === type
-                ? "border-accent font-semibold text-foreground"
-                : "border-transparent text-muted hover:text-foreground"
-            }`}
-          >
-            {tabText[type].label}
-            <span className="ml-1.5 rounded-full bg-surface px-1.5 text-xs text-muted">{countFor(type)}</span>
-          </button>
-        ))}
+      {/* Channel tabs, then search, status and account */}
+      <div className="flex flex-wrap items-end justify-between gap-3.5">
+        <SegmentedControl
+          kind="tabs"
+          label={t("Automation channels")}
+          value={activeType}
+          onChange={(type) => selectTab(type)}
+          items={TABS.map((type) => ({ value: type, label: tabText[type].label, icon: CHANNEL_ICON[type], count: countFor(type) }))}
+        />
+        {accounts.length > 1 && <AccountSelect accounts={accounts} value={selectedAccountId} onChange={handleAccountChange} />}
       </div>
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-xl">
-          <p className="text-sm text-foreground">{tabText[activeType].sentence}</p>
-          <p className="mt-1 text-xs text-muted">
-            {t("Example:")} {tabText[activeType].example}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          {accounts.length > 1 && (
-            <AccountSelect
-              accounts={accounts}
-              value={selectedAccountId}
-              onChange={handleAccountChange}
-            />
-          )}
-          <Link
-            href="/campaigns/import"
-            className="flex-1 rounded border border-border px-4 py-2 text-center text-sm font-medium text-muted hover:text-foreground sm:flex-none"
-          >
-            {t("Import")}
-          </Link>
-          <Link
-            href={newHref}
-            className="flex-1 rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover sm:flex-none"
-          >
-            {t("New automation")}
-          </Link>
-        </div>
-      </div>
-
-      {/* Search + status filter */}
       {ofType.length > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("Search by name, keyword or message…")}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="relative block w-full sm:max-w-sm">
+            <span className="sr-only">{t("Search by name, keyword or message…")}</span>
+            <Icon name="search" size={16} strokeWidth={2} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("Search by name, keyword or message…")}
+              className="field !pl-10"
+            />
+          </label>
+          <SegmentedControl
+            size="sm"
+            label={t("Status")}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            items={(["all", "active", "paused"] as const).map((s) => ({ value: s, label: label(s) }))}
           />
-          <div className="inline-flex shrink-0 rounded-lg bg-surface p-1">
-            {(["all", "active", "paused"] as const).map((s) => (
-              <button
-                key={label(s)}
-                type="button"
-                onClick={() => setStatusFilter(s)}
-                className={`rounded-md px-3 py-1.5 text-sm capitalize transition-colors ${
-                  statusFilter === s
-                    ? "bg-background font-medium text-foreground ring-1 ring-accent/40"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                {label(s)}
-              </button>
-            ))}
-          </div>
         </div>
       )}
 
       {/* Empty state */}
       {ofType.length === 0 && (
-        <div className="panel rounded p-8 text-center sm:p-12">
-          <h3 className="text-lg font-semibold mb-2">{t("No {channel} automations yet", { channel: tabText[activeType].label })}</h3>
-          <p className="text-sm text-muted mb-6 max-w-sm mx-auto">{tabText[activeType].sentence}</p>
-          <Link
-            href={newHref}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-accent text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
-          >
+        <Card className="flex flex-col items-center gap-3 p-8 text-center sm:p-12">
+          <span className="grid h-12 w-12 place-items-center rounded-control border border-accent-soft-border bg-accent-soft text-accent-soft-icon">
+            <Icon name={CHANNEL_ICON[activeType]} size={22} />
+          </span>
+          <h2 className="title-section">{t("No {channel} automations yet", { channel: tabText[activeType].label })}</h2>
+          <p className="max-w-sm text-sm text-muted">{tabText[activeType].sentence}</p>
+          <ButtonLink href={newHref} variant="primary" icon="plus" className="mt-2">
             {t("New automation")}
-          </Link>
-        </div>
+          </ButtonLink>
+        </Card>
       )}
 
       {/* No matches for the current filter */}
       {ofType.length > 0 && filtered.length === 0 && (
-        <div className="panel rounded p-8 text-center text-sm text-muted">
-          {t("No automations match your search.")}
-        </div>
+        <Card className="p-8 text-center text-sm text-muted">{t("No automations match your search.")}</Card>
       )}
 
-      {/* Campaign cards */}
-      <div className="space-y-3">
+      {/* Automation cards */}
+      <ul className="space-y-3">
         {filtered.map((auto) => {
           const videoUrl = auto.postId ? videos[auto.postId] : undefined;
+          const thumb = auto.postId ? thumbnails[auto.postId] : undefined;
+          const type = typeOf(auto);
+          const accountOff = auto.instagramAccount.automationsEnabled === false;
+          const nameId = `automation-${auto.id}`;
+          const status: { tone: StatusTone; text: string } = !auto.isActive
+            ? { tone: "neutral", text: t("Paused") }
+            : accountOff
+              ? { tone: "warning", text: t("Account turned off") }
+              : auto.pendingNextReel
+                ? { tone: "warning", text: t("Waiting for next reel") }
+                : { tone: "success", text: t("Active") };
+          const facts = [
+            type === "COMMENTS" && auto.matchAnyPost ? t("All posts") : null,
+            type === "COMMENTS" && (auto.postIds?.length ?? 0) > 1 ? t("{count} checked posts", { count: auto.postIds?.length ?? 0 }) : null,
+            auto.requireFollow ? t("Follow gate") : null,
+            type === "STORIES" && auto.triggerStoryReplies ? t("Story replies") : null,
+            type === "STORIES" && auto.triggerStoryMentions && auto.matchAnyWord ? t("Mentions") : null,
+            (auto.media?.length ?? 0) > 0 ? t("Media: {count}", { count: auto.media?.length ?? 0 }) : null,
+            auto.trackedLinks.length >= 2 ? t("2 links") : null,
+          ].filter(Boolean);
           return (
-          <div
-            key={auto.id}
-            onClick={() => router.push(`/campaigns/${auto.id}`)}
-            className="panel rounded p-4 hover:border-border-hover transition-all cursor-pointer"
-          >
-            {/* Wraps rather than compressing: on a phone the action buttons drop
-                to their own line instead of squeezing the campaign summary. */}
-            <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
-              {auto.postId && thumbnails[auto.postId] && (
-                <div className="relative shrink-0">
-                {(auto.postIds?.length ?? 0) > 1 && (
-                  <span className="absolute -right-1.5 -top-1.5 z-10 rounded-full bg-accent px-1.5 text-[10px] font-semibold text-white">
-                    +{(auto.postIds?.length ?? 1) - 1}
-                  </span>
-                )}
-                {videoUrl ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPlayingVideo({ url: videoUrl, postUrl: auto.postUrl });
-                    }}
-                    aria-label={t("Play reel preview")}
-                    className="shrink-0"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={thumbnails[auto.postId]}
-                      alt={t("Campaign reel")}
-                      className="w-12 h-12 rounded object-cover border border-border hover:border-border-hover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  </button>
-                ) : (
-                  <a
-                    href={auto.postUrl ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="shrink-0"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={thumbnails[auto.postId]}
-                      alt={t("Campaign post")}
-                      className="w-12 h-12 rounded object-cover border border-border"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  </a>
-                )}
-                </div>
-              )}
-              <div className="min-w-[12rem] flex-1">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <h3 className="text-sm font-semibold truncate">{auto.name}</h3>
-                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted">
-                    @{auto.instagramAccount.username}
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      auto.isActive
-                        ? "bg-success/10 text-success"
-                        : "bg-zinc-500/10 text-muted"
-                    }`}
-                  >
-                    {auto.isActive ? t("Active") : t("Paused")}
-                  </span>
-                  {typeOf(auto) === "COMMENTS" && auto.matchAnyPost && (
-                    <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted border border-border">
-                      {t("All posts")}
+            <li
+              key={auto.id}
+              onClick={() => router.push(`/campaigns/${auto.id}`)}
+              className="card card-interactive flex cursor-pointer flex-wrap items-center gap-x-7 gap-y-4 px-5 py-[18px]"
+            >
+              {/* Post thumbnail (plays the reel) or the channel icon */}
+              <div className="flex min-w-0 flex-[1_1_300px] items-center gap-3.5">
+                <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {(auto.postIds?.length ?? 0) > 1 && thumb && (
+                    <span className="absolute -right-1.5 -top-1.5 z-10 rounded-full bg-gradient-accent px-1.5 text-[10px] font-semibold text-on-accent">
+                      +{(auto.postIds?.length ?? 1) - 1}
                     </span>
                   )}
-                  {typeOf(auto) === "COMMENTS" && (auto.postIds?.length ?? 0) > 1 && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      {t("{count} checked posts", { count: auto.postIds?.length ?? 0 })}
-                    </span>
-                  )}
-                  {auto.instagramAccount.automationsEnabled === false && (
-                    <span className="shrink-0 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-                      {t("Account turned off")}
-                    </span>
-                  )}
-                  {auto.pendingNextReel && (
-                    <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-warning">
-                      {t("Waiting for next reel")}
-                    </span>
-                  )}
-                  {auto.requireFollow && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      {t("Follow gate")}
-                    </span>
-                  )}
-                  {typeOf(auto) === "STORIES" && auto.triggerStoryReplies && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      {t("Story replies")}
-                    </span>
-                  )}
-                  {typeOf(auto) === "STORIES" && auto.triggerStoryMentions && auto.matchAnyWord && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      {t("Mentions")}
-                    </span>
-                  )}
-                  {(auto.media?.length ?? 0) > 0 && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      {t("Media: {count}", { count: auto.media?.length ?? 0 })}
-                    </span>
-                  )}
-                  {auto.trackedLinks.length >= 2 && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      {t("2 links")}
+                  {thumb && videoUrl ? (
+                    <button type="button" onClick={() => setPlayingVideo({ url: videoUrl, postUrl: auto.postUrl })} aria-label={t("Play reel preview")} className="block rounded-control">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={thumb} alt={t("Campaign reel")} className="h-[42px] w-[42px] rounded-control border border-card-border object-cover" />
+                    </button>
+                  ) : thumb ? (
+                    <a href={auto.postUrl ?? "#"} target="_blank" rel="noreferrer" className="block rounded-control">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={thumb} alt={t("Campaign post")} className="h-[42px] w-[42px] rounded-control border border-card-border object-cover" />
+                    </a>
+                  ) : (
+                    <span aria-hidden="true" className="grid h-[42px] w-[42px] place-items-center rounded-control border border-accent-soft-border bg-accent-soft text-accent-soft-icon">
+                      <Icon name={CHANNEL_ICON[type]} size={19} strokeWidth={1.9} />
                     </span>
                   )}
                 </div>
-
-                {/* Keywords */}
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {auto.matchAnyWord && (
-                    <span className="px-2 py-0.5 rounded-md bg-surface text-muted text-xs font-medium border border-border">
-                      {typeOf(auto) === "COMMENTS" ? t("Any comment") : typeOf(auto) === "STORIES" ? t("Any reply") : t("Any message")}
-                    </span>
-                  )}
-                  {auto.keywords.map((kw) => (
-                    <span
-                      key={kw}
-                      className="px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs font-medium border border-accent/10"
-                    >
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-
-                {/* DM preview */}
-                <p className="text-sm text-muted truncate">&ldquo;{auto.dmMessage}{t("”")}</p>
-
-                {/* Tracked link sent */}
-                {auto.trackedLinks[0]?.trackedUrl && (
-                  <p className="mt-2 truncate font-mono text-xs text-zinc-500">
-                    {auto.trackedLinks[0].trackedUrl}
-                  </p>
-                )}
-
-                {/* Stats */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-zinc-500">
-                  <span className="font-medium text-foreground">
-                    {auto._count.dmLogs} {t("runs")}
-                  </span>
-                  <span>·</span>
-                  <span className="font-medium text-foreground">
-                    {auto.analytics.ctr}{t("% CTR")}
-                  </span>
-                  <span>·</span>
-                  <span>{auto.analytics.sent} {t("sent")}</span>
-                  <span>·</span>
-                  <span>{auto.analytics.skipped} {t("skipped")}</span>
-                  <span>·</span>
-                  <span>{auto.analytics.failed} {t("failed")}</span>
-                  <span>·</span>
-                  <span>{auto.analytics.clicks} {t("clicks")}</span>
-                </div>
-
-                {auto.analytics.topKeywords.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {auto.analytics.topKeywords.map((keyword) => (
-                      <span
-                        key={keyword.keyword}
-                        className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted"
-                      >
-                        {keyword.keyword}: {keyword.count}
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                    <h2 id={nameId} className="truncate font-display text-base font-semibold text-heading">
+                      <Link href={`/campaigns/${auto.id}`} onClick={(e) => e.stopPropagation()} className="rounded-sm hover:text-accent-fg">
+                        {auto.name}
+                      </Link>
+                    </h2>
+                    <span className="text-xs text-faint">@{auto.instagramAccount.username}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-muted">
+                    {auto.matchAnyWord && (
+                      <span className="chip">{type === "COMMENTS" ? t("Any comment") : type === "STORIES" ? t("Any reply") : t("Any message")}</span>
+                    )}
+                    {auto.keywords.slice(0, 4).map((kw) => (
+                      <span key={kw} className="chip">
+                        {kw}
                       </span>
                     ))}
+                    {auto.keywords.length > 4 && <span className="text-xs text-faint">+{auto.keywords.length - 4}</span>}
+                    {facts.length > 0 && <span className="ml-0.5">{facts.join(" · ")}</span>}
                   </div>
-                )}
+                  <p className="truncate text-[13px] text-faint">&ldquo;{auto.dmMessage}{t("”")}</p>
+                </div>
               </div>
 
-              {/* Actions */}
-              <div
-                className="ml-auto flex items-center gap-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Copy reel URL */}
-                {auto.postUrl && (
-                  <button
-                    onClick={() => void copyReelUrl(auto)}
-                    className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
-                  >
-                    {copiedId === auto.id ? t("Copied!") : t("Copy URL")}
-                  </button>
+              {/* Numbers */}
+              <dl className="flex flex-none items-center gap-6">
+                <div className="flex flex-col-reverse gap-0.5">
+                  <dt className="text-xs text-faint">{t("sent")}</dt>
+                  <dd className="font-display text-[17px] font-semibold text-heading">{auto.analytics.sent}</dd>
+                </div>
+                <div className="flex flex-col-reverse gap-0.5">
+                  <dt className="text-xs text-faint">{t("clicks")}</dt>
+                  <dd className="font-display text-[17px] font-semibold text-heading">{auto.analytics.clicks}</dd>
+                </div>
+                <div className="flex flex-col-reverse gap-0.5">
+                  <dt className="text-xs text-faint">{t("CTR")}</dt>
+                  <dd className="font-display text-[17px] font-semibold text-heading">{auto.analytics.ctr}%</dd>
+                </div>
+                {auto.analytics.failed > 0 && (
+                  <div className="flex flex-col-reverse gap-0.5">
+                    <dt className="text-xs text-faint">{t("failed")}</dt>
+                    <dd className="font-display text-[17px] font-semibold text-error">{auto.analytics.failed}</dd>
+                  </div>
                 )}
-                {/* Toggle */}
-                <button
-                  onClick={() => toggleActive(auto.id, auto.isActive)}
-                  className={`
-                    relative w-11 h-6 rounded-full transition-colors
-                    ${auto.isActive ? "bg-accent" : "bg-zinc-300"}
-                  `}
-                >
-                  <span
-                    className={`
-                      absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm
-                      ${auto.isActive ? "left-6" : "left-1"}
-                    `}
-                  />
-                </button>
+              </dl>
 
-                {/* Kebab menu */}
+              {/* Status, switch and more actions */}
+              <div className="ml-auto flex flex-none items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <StatusDot tone={status.tone} className="min-w-[116px]">
+                  {status.text}
+                </StatusDot>
+                <Switch checked={auto.isActive} onChange={() => void toggleActive(auto.id, auto.isActive)} labelledBy={nameId} />
                 <div className="relative">
                   <button
-                    onClick={() =>
-                      setMenuOpenId((cur) => (cur === auto.id ? null : auto.id))
-                    }
+                    type="button"
+                    onClick={() => setMenuOpenId((cur) => (cur === auto.id ? null : auto.id))}
                     aria-label={t("More actions")}
-                    className="px-2 py-1 rounded text-lg leading-none text-muted hover:text-foreground"
+                    aria-expanded={menuOpenId === auto.id}
+                    className={buttonClass("ghost", "icon")}
                   >
-                    ⋯
+                    <Icon name="more" size={18} strokeWidth={3} />
                   </button>
                   {menuOpenId === auto.id && (
                     <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setMenuOpenId(null)}
-                      />
-                      <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
-                        <button
-                          onClick={() => void duplicateAutomation(auto.id)}
-                          className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-surface-hover"
-                        >
+                      <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                      <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-control border border-border bg-dialog p-1 shadow-dialog">
+                        {auto.postUrl && (
+                          <button type="button" onClick={() => void copyReelUrl(auto)} className="flex min-h-10 w-full items-center gap-2 rounded-item px-3 text-left text-sm text-foreground hover:bg-surface-hover">
+                            <Icon name="copy" size={16} />
+                            {copiedId === auto.id ? t("Copied!") : t("Copy URL")}
+                          </button>
+                        )}
+                        <button type="button" onClick={() => void duplicateAutomation(auto.id)} className="flex min-h-10 w-full items-center gap-2 rounded-item px-3 text-left text-sm text-foreground hover:bg-surface-hover">
+                          <Icon name="copy" size={16} />
                           {t("Duplicate")}
                         </button>
                         <button
+                          type="button"
                           onClick={() => {
                             setMenuOpenId(null);
-                            void deleteAutomation(auto.id);
+                            setConfirmDeleteId(auto.id);
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm text-error hover:bg-surface-hover"
+                          className="flex min-h-10 w-full items-center gap-2 rounded-item px-3 text-left text-sm text-error hover:bg-error-soft"
                         >
+                          <Icon name="trash" size={16} />
                           {t("Delete")}
                         </button>
                       </div>
@@ -691,52 +571,50 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                   )}
                 </div>
               </div>
-            </div>
-          </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
-      {/* Reel lightbox */}
-      {playingVideo && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setPlayingVideo(null)}
-        >
-          <div
-            className="relative flex max-w-full flex-col items-end gap-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-4 text-sm">
-              {playingVideo.postUrl && (
-                <a
-                  href={playingVideo.postUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-zinc-300 hover:text-white"
-                >
-                  {t("Open on Instagram")}
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => setPlayingVideo(null)}
-                className="text-zinc-300 hover:text-white"
-              >
-                {t("Close")}
-              </button>
-            </div>
-            <video
-              src={playingVideo.url}
-              controls
-              autoPlay
-              loop
-              playsInline
-              className="max-h-[80vh] max-w-full rounded-lg"
-            />
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={confirmTarget !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        tone="danger"
+        title={confirmTarget?.name ?? ""}
+        description={t("Delete this automation? Its images and videos are deleted too. This cannot be undone.")}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmDeleteId(null)}>
+              {t("Cancel")}
+            </Button>
+            <Button variant="danger" onClick={() => confirmTarget && void deleteAutomation(confirmTarget.id)}>
+              {t("Delete")}
+            </Button>
+          </>
+        }
+      />
+
+      {/* Reel preview */}
+      <Dialog
+        open={playingVideo !== null}
+        onClose={() => setPlayingVideo(null)}
+        size="lg"
+        title={t("Play reel preview")}
+        footer={
+          <>
+            {playingVideo?.postUrl && (
+              <ButtonAnchor href={playingVideo.postUrl} target="_blank" rel="noreferrer" variant="secondary" icon="external">
+                {t("Open on Instagram")}
+              </ButtonAnchor>
+            )}
+            <Button variant="secondary" onClick={() => setPlayingVideo(null)}>
+              {t("Close")}
+            </Button>
+          </>
+        }
+      >
+        {playingVideo && <video src={playingVideo.url} controls autoPlay loop playsInline className="max-h-[70vh] w-full rounded-control bg-scrim" />}
+      </Dialog>
     </div>
   );
 }
