@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { parseCsv } from "@/lib/utils/csv";
 import { IMPORT_QUEUE_KEY, IMPORT_ACCOUNT_KEY } from "@/lib/import-queue";
+import Link from "next/link";
+import { Alert } from "@/components/ui/alert";
 
 const SAMPLE = `keywords,dm_message,public_reply,tracked_url,opening_dm,opening_dm_button
 "yc","here it is: {link}","sent. check dms","https://events.ycombinator.com/startup-school-2026","hey! click below for the referral","send link"
@@ -85,33 +87,33 @@ export default function ImportCampaignsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">{t("Import campaigns")}</h1>
-        <p className="text-sm text-muted mt-1">
+        <p className="mb-2 text-[13px] text-faint">
+          <Link href="/automations" className="rounded-sm text-accent-fg hover:text-accent-fg-hover">
+            {t("Automations")}
+          </Link>
+        </p>
+        <h1 className="title-page">{t("Import campaigns")}</h1>
+        <p className="mt-2 leading-relaxed text-muted">
           {t("Paste a CSV with one row per campaign. Each row opens in the builder prefilled and editable, so you can review it and pick the reel before saving. Required columns are")}{" "}
-          <code className="text-accent">keywords</code> {t("and")}{" "}
-          <code className="text-accent">dm_message</code>{t(". Optional:")}{" "}
-          <code className="text-accent">name</code>,{" "}
-          <code className="text-accent">public_reply</code>,{" "}
-          <code className="text-accent">tracked_url</code>,{" "}
-          <code className="text-accent">opening_dm</code>,{" "}
-          <code className="text-accent">opening_dm_button</code>{t(". Keywords go in one cell, separated by commas. Use")}{" "}
-          <code className="text-accent">{"{link}"}</code> {t("in the message to insert the tracked link.")}
+          <code className="code text-accent-fg">keywords</code> {t("and")}{" "}
+          <code className="code text-accent-fg">dm_message</code>{t(". Optional:")}{" "}
+          <code className="code text-accent-fg">name</code>,{" "}
+          <code className="code text-accent-fg">public_reply</code>,{" "}
+          <code className="code text-accent-fg">tracked_url</code>,{" "}
+          <code className="code text-accent-fg">opening_dm</code>,{" "}
+          <code className="code text-accent-fg">opening_dm_button</code>{t(". Keywords go in one cell, separated by commas. Use")}{" "}
+          <code className="code text-accent-fg">{"{link}"}</code> {t("in the message to insert the tracked link.")}
         </p>
       </div>
 
       {error && (
-        <div className="p-4 rounded bg-error/10 border border-error/20 text-error text-sm">
-          {error}
-        </div>
+        <Alert tone="error">{error}</Alert>
       )}
 
       {accounts.length > 1 && (
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-foreground">
-            {t("Instagram account")}
-          </label>
+        <div className="card space-y-2 p-5">
           <AccountSelect
             accounts={accounts}
             value={selectedAccountId}
@@ -122,34 +124,35 @@ export default function ImportCampaignsPage() {
         </div>
       )}
 
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-foreground">CSV</label>
+      <div className="card space-y-2.5 p-5">
+        <label htmlFor="import-csv" className="label">CSV</label>
         <textarea
+          id="import-csv"
           value={csv}
           onChange={(e) => setCsv(e.target.value)}
           placeholder={SAMPLE}
           rows={10}
-          className="w-full px-4 py-3 rounded bg-surface border border-border text-sm font-mono text-foreground placeholder:text-zinc-600 focus:border-accent/40 focus:outline-none resize-y"
+          className="field font-mono"
         />
         <button
           type="button"
           onClick={() => setCsv(SAMPLE)}
-          className="text-xs text-muted hover:text-foreground"
+          className="text-[13px] font-medium text-accent-fg hover:text-accent-fg-hover hover:underline"
         >
           {t("Fill with a sample")}
         </button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2.5">
         <button
           onClick={startImport}
-          className="px-5 py-2 rounded bg-accent text-sm font-medium text-white hover:bg-accent-hover"
+          className="btn btn-primary"
         >
           {t("Review and import")}
         </button>
         <button
           onClick={() => router.push("/automations")}
-          className="px-5 py-2 rounded text-sm text-muted hover:text-foreground border border-border"
+          className="btn btn-secondary"
         >
           {t("Cancel")}
         </button>

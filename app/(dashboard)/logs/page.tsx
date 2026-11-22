@@ -10,6 +10,9 @@ import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useState, useCallback } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import StatusBadge from "@/components/status-badge";
+import { buttonClass } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { SegmentedControl } from "@/components/ui/segmented";
 
 interface DmLog {
   id: string;
@@ -103,58 +106,43 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((status) => (
-            <button
-              key={status}
-              onClick={() => handleFilterChange(status)}
-              className={`
-                px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                ${
-                  statusFilter === status
-                    ? "bg-accent/15 text-accent border border-accent/20"
-                    : "bg-surface text-muted border border-border hover:border-border-hover hover:text-foreground"
-                }
-              `}
-            >
-              {label(status)}
-            </button>
-          ))}
-        </div>
-        {accounts.length > 1 && (
-          <AccountSelect
-            accounts={accounts}
-            value={selectedAccountId}
-            onChange={handleAccountChange}
-          />
-        )}
-      </div>
+      <PageHeader
+        title={t("DM Logs")}
+        actions={accounts.length > 1 ? <AccountSelect accounts={accounts} value={selectedAccountId} onChange={handleAccountChange} /> : undefined}
+      />
+
+      {/* Status filter */}
+      <SegmentedControl
+        size="sm"
+        label={t("Status")}
+        value={statusFilter}
+        onChange={(status) => handleFilterChange(status)}
+        items={STATUS_FILTERS.map((status) => ({ value: status, label: label(status) }))}
+      />
 
       {/* Table */}
-      <div className="panel rounded overflow-hidden">
+      <div className="card overflow-hidden">
         {/* Six columns don't fit a phone; the table keeps its width and scrolls
-            horizontally inside the panel rather than crushing every cell. */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
+            horizontally inside the card rather than crushing every cell. */}
+        <div className="table-scroll">
+          <table className="data-table min-w-[760px]">
             <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Person")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Message received")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Automation")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Account")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Status")}</th>
-                <th className="px-4 py-4 text-xs font-semibold text-muted uppercase tracking-wider sm:px-6">{t("Time")}</th>
+              <tr>
+                <th scope="col">{t("Person")}</th>
+                <th scope="col">{t("Message received")}</th>
+                <th scope="col">{t("Automation")}</th>
+                <th scope="col">{t("Account")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Time")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {loading && (
                 <>
                   {[...Array(5)].map((_, i) => (
                     <tr key={i}>
-                      <td colSpan={6} className="px-4 py-4 sm:px-6">
-                        <div className="h-4 bg-surface-hover rounded" />
+                      <td colSpan={6}>
+                        <div className="h-4 rounded bg-surface-hover" />
                       </td>
                     </tr>
                   ))}
@@ -162,38 +150,38 @@ export default function LogsPage() {
               )}
               {!loading && logs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-muted sm:px-6">
+                  <td colSpan={6} className="!py-12 text-center text-muted">
                     {t("No logs found")}
                   </td>
                 </tr>
               )}
               {!loading &&
                 logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-surface-hover/50 transition-colors">
-                    <td className="px-4 py-4 sm:px-6">
-                      <span className="font-medium text-foreground">
+                  <tr key={log.id}>
+                    <td>
+                      <span className="font-medium text-heading">
                         @{log.commenterName ?? log.commenterId.slice(0, 8)}
                       </span>
                     </td>
-                    <td className="px-4 py-4 max-w-[200px] sm:px-6">
-                      <span className="text-muted truncate block">{log.commentText}</span>
+                    <td className="max-w-[220px]">
+                      <span className="block truncate text-muted">{log.commentText}</span>
                     </td>
-                    <td className="px-4 py-4 sm:px-6">
-                      <span className="text-muted">{log.automation.name}</span>
-                      <span className="block text-xs text-zinc-500">
+                    <td>
+                      <span className="text-foreground">{log.automation.name}</span>
+                      <span className="block text-xs text-faint">
                         {log.automation.type === "STORIES" ? t("Stories") : log.automation.type === "DIRECT" ? t("Direct") : t("Comments")}
                       </span>
                     </td>
-                    <td className="px-4 py-4 sm:px-6">
+                    <td>
                       <span className="text-muted">@{log.instagramAccount.username}</span>
                     </td>
-                    <td className="px-4 py-4 sm:px-6">
+                    <td>
                       <StatusBadge status={log.status} />
                       {log.errorMessage && log.status !== "SENT" && (
-                        <span className="mt-1 block max-w-[220px] text-xs text-muted">{message(log.errorMessage)}</span>
+                        <span className="mt-1 block max-w-[220px] text-xs text-faint">{message(log.errorMessage)}</span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-muted whitespace-nowrap sm:px-6">
+                    <td className="whitespace-nowrap text-muted">
                       {new Date(log.createdAt).toLocaleString(locale, {
                         month: "short",
                         day: "numeric",
@@ -209,8 +197,8 @@ export default function LogsPage() {
 
         {/* Pagination */}
         {pagination && pagination.totalPages > 1 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 border-t border-border sm:px-6">
-            <p className="text-xs text-muted">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-3.5 sm:px-5">
+            <p className="text-[13px] text-faint">
               {t("Showing {start}–{end} of {total}", {
                 start: (pagination.page - 1) * pagination.limit + 1,
                 end: Math.min(pagination.page * pagination.limit, pagination.total),
@@ -224,11 +212,11 @@ export default function LogsPage() {
                   setLoading(true);
                   setPage(page - 1);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted border border-border hover:text-foreground hover:border-border-hover transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className={buttonClass("secondary", "sm")}
               >
                 {t("Previous")}
               </button>
-              <span className="text-xs text-muted px-2">
+              <span className="px-2 text-[13px] text-muted">
                 {page} / {pagination.totalPages}
               </span>
               <button
@@ -237,7 +225,7 @@ export default function LogsPage() {
                   setLoading(true);
                   setPage(page + 1);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted border border-border hover:text-foreground hover:border-border-hover transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className={buttonClass("secondary", "sm")}
               >
                 {t("Next")}
               </button>

@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/provider";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatusDot } from "@/components/ui/status";
 
 type Key = { id: string; name: string; expiresAt: string; revokedAt: string | null };
 
@@ -51,34 +55,83 @@ export default function IntegrationsPage() {
     finally { setBusy(false); }
   }
 
-  return <div className="mx-auto max-w-4xl space-y-6 p-6">
-    <h1 className="text-2xl font-semibold">{t("API & MCP")}</h1>
-    <p className="text-muted">{t("Workspace-scoped, read-only keys. No key can modify campaigns or send messages. Only admins and owners can manage keys.")}</p>
-    {notice && <p role="status">{message(notice)}</p>}
-    <section className="space-y-3 rounded border border-border p-4">
-      <label className="block">{t("Key name")}<input maxLength={100} disabled={busy} className="w-full rounded border border-border p-2" value={name} onChange={e => setName(e.target.value)} /></label>
-      <label className="block">{t("Key lifetime")}<select disabled={busy} value={days} onChange={e => setDays(Number(e.target.value))} className="ml-3 rounded border border-border p-2">
-        {[30, 60, 90].map(value => <option key={value} value={value}>{t("{days} days", { days: value })}</option>)}
-      </select></label>
-      <p className="text-sm text-muted">{t("Applies only to new keys. Existing expiration dates do not change.")}</p>
-      <button disabled={busy || !name.trim()} onClick={create} className="rounded bg-accent px-4 py-2 text-white disabled:opacity-50">{t("Create key for {days} days", { days })}</button>
-      {token && <div role="status" className="space-y-2">
-        <p>{t("Shown once. Store securely; never put keys in URLs, screenshots or GitHub.")}</p>
-        <input aria-label={t("New service key")} type="password" readOnly value={token} className="w-full rounded border border-border p-2" />
-        <button onClick={() => navigator.clipboard.writeText(token).catch(() => setNotice(t("Could not copy key. Use a secure HTTPS connection.")))}>{t("Copy")}</button>
-        <button className="ml-4" onClick={() => setToken("")}>{t("Hide key")}</button>
-      </div>}
-    </section>
-    <section className="space-y-3">{keys.map(key => <div key={key.id} className="rounded border border-border p-4">
-      <strong>{key.name}</strong>
-      <p className="text-sm">campaigns:read · {t("Expires: {date}", { date: new Date(key.expiresAt).toLocaleDateString(locale) })}</p>
-      {key.revokedAt ? <span>{t("Revoked")}</span> : <button disabled={busy} onClick={() => revoke(key)} className="text-red-500">{t("Revoke key")}</button>}
-    </div>)}</section>
-    <section className="space-y-2 text-sm">
-      <h2 className="font-semibold">{t("Connection")}</h2>
-      <p>MCP: <code>/api/mcp</code> · REST: <code>/api/v1/campaigns</code></p>
-      <p>{t("Streamable HTTP with an Authorization: Bearer header. This server does not provide OAuth; use a client that supports custom headers.")}</p>
-      <p>{t("Campaign lists are limited to 100. Use get_campaign for complete settings and destination links; clicks are raw requests, not unique recipients.")}</p>
-    </section>
-  </div>;
+  return (
+    <div className="max-w-4xl space-y-5">
+      <PageHeader
+        title={t("API & MCP")}
+        description={t("Workspace-scoped, read-only keys. No key can modify campaigns or send messages. Only admins and owners can manage keys.")}
+      />
+      {notice && (
+        <Alert tone="info" role="status">
+          {message(notice)}
+        </Alert>
+      )}
+      <section className="card space-y-4 p-5 sm:p-6">
+        <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
+          <label className="block space-y-1.5">
+            <span className="label">{t("Key name")}</span>
+            <input maxLength={100} disabled={busy} className="field" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="label">{t("Key lifetime")}</span>
+            <select disabled={busy} value={days} onChange={(e) => setDays(Number(e.target.value))} className="field">
+              {[30, 60, 90].map((value) => (
+                <option key={value} value={value}>
+                  {t("{days} days", { days: value })}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="hint">{t("Applies only to new keys. Existing expiration dates do not change.")}</p>
+        <Button variant="primary" icon="key" disabled={busy || !name.trim()} onClick={create}>
+          {t("Create key for {days} days", { days })}
+        </Button>
+        {token && (
+          <div role="status" className="space-y-2.5 rounded-control border border-warning-border bg-warning-soft p-4">
+            <p className="text-sm text-warning">{t("Shown once. Store securely; never put keys in URLs, screenshots or GitHub.")}</p>
+            <input aria-label={t("New service key")} type="password" readOnly value={token} className="field font-mono" />
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" icon="copy" onClick={() => navigator.clipboard.writeText(token).catch(() => setNotice(t("Could not copy key. Use a secure HTTPS connection.")))}>
+                {t("Copy")}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setToken("")}>
+                {t("Hide key")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </section>
+      {keys.length > 0 && (
+        <ul className="space-y-3">
+          {keys.map((key) => (
+            <li key={key.id} className="card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <div className="min-w-0">
+                <p className="font-display text-base font-semibold text-heading">{key.name}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+                  <span className="chip">campaigns:read</span>
+                  {t("Expires: {date}", { date: new Date(key.expiresAt).toLocaleDateString(locale) })}
+                </p>
+              </div>
+              {key.revokedAt ? (
+                <StatusDot tone="neutral">{t("Revoked")}</StatusDot>
+              ) : (
+                <Button size="sm" disabled={busy} onClick={() => revoke(key)} className="!border-error-border !text-error hover:!bg-error-soft">
+                  {t("Revoke key")}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <section className="card space-y-2.5 p-5 text-sm leading-relaxed sm:p-6">
+        <h2 className="title-section">{t("Connection")}</h2>
+        <p>
+          MCP: <code className="code">/api/mcp</code> · REST: <code className="code">/api/v1/campaigns</code>
+        </p>
+        <p className="text-muted">{t("Streamable HTTP with an Authorization: Bearer header. This server does not provide OAuth; use a client that supports custom headers.")}</p>
+        <p className="text-muted">{t("Campaign lists are limited to 100. Use get_campaign for complete settings and destination links; clicks are raw requests, not unique recipients.")}</p>
+      </section>
+    </div>
+  );
 }

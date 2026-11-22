@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
+
 /**
  * Dashboard Home Page
  *
@@ -69,16 +72,14 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+      <div className="space-y-6" aria-busy="true">
+        <div className="h-16 max-w-sm rounded-card bg-surface" />
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="panel rounded p-5 h-32">
-              <div className="w-10 h-10 rounded bg-surface-hover" />
-              <div className="mt-4 h-6 w-16 bg-surface-hover rounded" />
-              <div className="mt-2 h-4 w-24 bg-surface-hover/60 rounded" />
-            </div>
+            <div key={i} className="card h-[92px]" />
           ))}
         </div>
+        <div className="card h-64" />
       </div>
     );
   }
@@ -88,109 +89,87 @@ export default function DashboardPage() {
   const connectedCount = stats?.instagramAccounts.length ?? 0;
 
   return (
-    <div className="space-y-8">
-      {/* Greeting header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-            {t("Hello, {name}!", { name: stats?.userName ?? t("there") })}
-          </h1>
-          <p className="mt-1 text-sm text-muted">
+    <div className="space-y-6">
+      <PageHeader
+        title={t("Hello, {name}!", { name: stats?.userName ?? t("there") })}
+        description={
+          <>
             {t(connectedCount === 1 ? "{count} connected account" : "{count} connected accounts", { count: connectedCount })}
             {" · "}
             {t(stats?.contactsCount === 1 ? "{count} contact" : "{count} contacts", { count: stats?.contactsCount ?? 0 })}
             {" · "}
-            <a href="/logs" className="text-accent hover:underline">
+            <Link href="/logs" className="link">
               {t("See activity")}
-            </a>
-          </p>
-        </div>
-        {stats && stats.instagramAccounts.length > 1 && (
-          <AccountSelect
-            accounts={stats.instagramAccounts}
-            value={selectedAccountId}
-            onChange={handleAccountChange}
-          />
-        )}
-      </div>
+            </Link>
+          </>
+        }
+        actions={
+          stats && stats.instagramAccounts.length > 1 ? (
+            <AccountSelect accounts={stats.instagramAccounts} value={selectedAccountId} onChange={handleAccountChange} />
+          ) : undefined
+        }
+      />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard
-          label={t("Active Campaigns")}
-          value={stats?.activeAutomations ?? 0}
-        />
-        <StatCard label={t("DMs Sent")} value={stats?.dmsSentMonth ?? 0} />
+      {/* Numbers of the month. Only "DMs sent" has real daily values (the
+          last 7 days), so only it gets the small line. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <StatCard label={t("Active Campaigns")} value={stats?.activeAutomations ?? 0} />
+        <StatCard label={t("DMs Sent")} value={stats?.dmsSentMonth ?? 0} daily={stats?.dailyDMs.map((d) => d.count)} />
         <StatCard label={t("Skipped")} value={stats?.dmsSkippedMonth ?? 0} />
         <StatCard label={t("Failed")} value={stats?.dmsFailedMonth ?? 0} />
         <StatCard label={t("Clicks")} value={stats?.clicksThisMonth ?? 0} />
         <StatCard label={t("CTR")} value={`${stats?.ctrThisMonth ?? 0}%`} />
       </div>
 
-      {/* Chart + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 sm:gap-6">
-        {/* 7-Day Chart */}
-        <div className="lg:col-span-3 panel rounded p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-6">{t("DMs — Last 7 Days")}</h2>
-          <div className="flex items-end gap-1.5 h-40 sm:gap-2">
+      {/* Chart + keywords + recent activity */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-6">
+        {/* 7-day chart (real daily numbers) */}
+        <div className="card p-5 sm:p-6 lg:col-span-3">
+          <h2 className="title-section mb-6">{t("DMs — Last 7 Days")}</h2>
+          <div className="flex h-44 items-end gap-1.5 sm:gap-2.5">
             {stats?.dailyDMs.map((day) => (
-              <div key={label(day.date)} className="min-w-0 flex-1 h-full flex flex-col items-center gap-2">
-                <span className="text-xs text-muted font-medium">{day.count}</span>
+              <div key={label(day.date)} className="flex h-full min-w-0 flex-1 flex-col items-center gap-2">
+                <span className="text-xs font-medium text-muted">{day.count}</span>
                 {/* A percentage height needs a parent with a definite height, so
                     the bar sits in a wrapper that fills the column's free space. */}
-                <div className="w-full min-h-0 flex-1 flex items-end">
+                <div className="flex min-h-0 w-full flex-1 items-end">
                   <div
-                    className="w-full rounded-sm bg-accent min-h-[4px]"
+                    className="min-h-[4px] w-full rounded-md bg-gradient-accent shadow-glow"
                     style={{ height: `${Math.max((day.count / maxDM) * 100, 4)}%` }}
                   />
                 </div>
                 {/* Seven labels share a phone's width, so they must not wrap. */}
-                <span className="w-full truncate text-center text-[10px] text-zinc-500">
-                  {label(day.date)}
-                </span>
+                <span className="w-full truncate text-center text-[11px] text-faint">{label(day.date)}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Top Keywords */}
-        <div className="lg:col-span-1 panel rounded p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">{t("Top Keywords")}</h2>
-          <div className="space-y-3">
-            {stats?.topKeywords.length === 0 && (
-              <p className="text-sm text-muted py-8">{t("No keyword matches yet")}</p>
-            )}
+        {/* Top keywords */}
+        <div className="card p-5 sm:p-6 lg:col-span-1">
+          <h2 className="title-section mb-4">{t("Top Keywords")}</h2>
+          <div className="space-y-2.5">
+            {stats?.topKeywords.length === 0 && <p className="py-8 text-sm text-muted">{t("No keyword matches yet")}</p>}
             {stats?.topKeywords.map((keyword) => (
               <div key={keyword.keyword} className="flex items-center justify-between gap-3">
-                <span className="truncate text-sm font-medium text-foreground">
-                  {keyword.keyword}
-                </span>
-                <span className="text-xs text-muted">{keyword.count}</span>
+                <span className="chip truncate">{keyword.keyword}</span>
+                <span className="text-[13px] text-faint">{keyword.count}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 panel rounded p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">{t("Recent Activity")}</h2>
-          <div className="space-y-3 max-h-60 overflow-y-auto">
-            {stats?.recentLogs.length === 0 && (
-              <p className="text-sm text-muted text-center py-8">{t("No activity yet")}</p>
-            )}
+        {/* Recent activity */}
+        <div className="card p-5 sm:p-6 lg:col-span-2">
+          <h2 className="title-section mb-4">{t("Recent Activity")}</h2>
+          <div className="max-h-64 overflow-y-auto">
+            {stats?.recentLogs.length === 0 && <p className="py-8 text-center text-sm text-muted">{t("No activity yet")}</p>}
             {stats?.recentLogs.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-center justify-between gap-3 py-2 border-b border-border last:border-0"
-              >
+              <div key={log.id} className="flex items-center justify-between gap-3 border-b border-border-subtle py-2.5 last:border-0">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    @{log.commenterName ?? "unknown"}
-                  </p>
-                  <p className="text-xs text-muted truncate">
-                    {log.instagramAccount
-                      ? `@${log.instagramAccount.username} · `
-                      : ""}
+                  <p className="truncate font-medium text-heading">@{log.commenterName ?? "unknown"}</p>
+                  <p className="truncate text-[13px] text-faint">
+                    {log.instagramAccount ? `@${log.instagramAccount.username} · ` : ""}
                     {log.commentText}
                   </p>
                 </div>

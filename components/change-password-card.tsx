@@ -42,15 +42,14 @@ export default function ChangePasswordCard() {
     setBusy(false);
   }
 
-  const inputClass =
-    "w-full px-3 py-2 rounded bg-background border border-border text-sm focus:border-accent/40 focus:outline-none";
+  const inputClass = "field";
 
   return (
-    <section className="panel rounded p-4 sm:p-6">
-      <h2 className="text-base font-semibold">{t("Your account")}</h2>
+    <section className="card p-5 sm:p-6">
+      <h2 className="title-section">{t("Your account")}</h2>
       {account?.email && <p className="mt-1 text-sm text-muted">{account.email}</p>}
       <form onSubmit={submit} className="mt-5 space-y-3">
-        <h3 className="text-sm font-medium">
+        <h3 className="font-semibold text-heading">
           {account?.hasPassword === false ? t("Set a password") : t("Change password")}
         </h3>
         {error && (
@@ -91,13 +90,13 @@ export default function ChangePasswordCard() {
           aria-label={t("Confirm the new password")}
           className={inputClass}
         />
-        <p className="text-xs text-muted">
+        <p className="hint">
           {t("At least 8 characters. You will be signed out of all devices.")}
         </p>
         <button
           type="submit"
           disabled={busy}
-          className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary"
         >
           {busy ? t("Saving...") : t("Save password")}
         </button>

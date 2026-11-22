@@ -5,6 +5,8 @@ import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
 import ChangePasswordCard from "@/components/change-password-card";
+import { ButtonLink, buttonClass } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface SettingsData {
   workspace: {
@@ -110,7 +112,13 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return <div className="panel rounded p-8 h-64" />;
+    return (
+      <div className="max-w-3xl space-y-5" aria-busy="true">
+        <div className="h-12 max-w-xs rounded-card bg-surface" />
+        <div className="card h-40" />
+        <div className="card h-56" />
+      </div>
+    );
   }
 
   const accounts = data?.instagramAccounts ?? [];
@@ -119,41 +127,43 @@ export default function SettingsPage() {
     membersData?.currentUserRole === "ADMIN";
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
-      <section className="panel rounded p-4 sm:p-6 space-y-3">
-        <h2 className="text-base font-semibold">{t("Interface language")}</h2>
+    <div className="max-w-3xl space-y-5">
+      <PageHeader title={t("Settings")} />
+
+      <section className="card space-y-3 p-5 sm:p-6">
+        <h2 className="title-section">{t("Interface language")}</h2>
         <LanguageSwitcher />
         <p className="text-sm text-muted">{t("Saved in this browser. Campaign messages stay unchanged.")}</p>
       </section>
 
-      <section className="panel rounded p-4 sm:p-6">
-        <h2 className="text-base font-semibold">{t("Instagram accounts")}</h2>
+      <section className="card p-5 sm:p-6">
+        <h2 className="title-section">{t("Instagram accounts")}</h2>
         <p className="mt-2 text-sm text-muted">
           {t(accounts.length === 1 ? "{count} connected Instagram profile" : "{count} connected Instagram profiles", { count: accounts.length })}.{" "}
           {t("Connect, turn off or remove accounts in the Accounts tab.")}
         </p>
-        <a href="/accounts" className="mt-4 inline-flex rounded border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover">
+        <ButtonLink href="/accounts" className="mt-4" icon="accounts">
           {t("Open Accounts")}
-        </a>
+        </ButtonLink>
       </section>
 
       <ChangePasswordCard />
 
-      <section className="panel rounded p-4 sm:p-6">
-        <h2 className="text-base font-semibold mb-6">{t("Team")}</h2>
+      <section className="card p-5 sm:p-6">
+        <h2 className="title-section mb-4">{t("Team")}</h2>
         <div className="space-y-3">
           {membersData?.members.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
+              className="flex items-center justify-between gap-4 border-b border-border-subtle py-3 last:border-0"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
+                <p className="truncate font-medium text-heading">
                   {member.user.name ?? member.user.email ?? t("Unknown member")}
                 </p>
-                <p className="text-xs text-muted">{member.user.email}</p>
+                <p className="text-[13px] text-faint">{member.user.email}</p>
               </div>
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted">
+              <span className="rounded-full border border-accent-soft-border bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-soft-fg">
                 {label(member.role)}
               </span>
             </div>
@@ -161,21 +171,21 @@ export default function SettingsPage() {
         </div>
 
         {membersData?.invitations.length ? (
-          <div className="mt-6 border-t border-border pt-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <div className="mt-6 border-t border-border-subtle pt-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-faint">
               {t("Pending invites")}
             </p>
             <div className="space-y-3">
               {membersData.invitations.map((invitation) => (
                 <div
                   key={invitation.id}
-                  className="flex flex-col gap-3 rounded border border-border bg-surface/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 rounded-control border border-border-subtle bg-surface p-3.5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
+                    <p className="truncate font-medium text-heading">
                       {invitation.email}
                     </p>
-                    <p className="truncate text-xs text-muted">
+                    <p className="truncate text-[13px] text-faint">
                       {label(invitation.role)} · {invitation.inviteUrl}
                     </p>
                   </div>
@@ -185,7 +195,7 @@ export default function SettingsPage() {
                       onClick={() =>
                         void navigator.clipboard?.writeText(invitation.inviteUrl)
                       }
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
+                      className={buttonClass("secondary", "sm")}
                     >
                       {t("Copy")}
                     </button>
@@ -193,7 +203,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => removeInvitation(invitation.id)}
                       disabled={busy === `invite:${invitation.id}`}
-                      className="rounded-lg border border-error/20 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
+                      className={buttonClass("secondary", "sm", "!border-error-border !text-error hover:!bg-error-soft")}
                     >
                       {t("Revoke")}
                     </button>
@@ -207,14 +217,15 @@ export default function SettingsPage() {
         {canManageMembers && (
           <form
             onSubmit={inviteMember}
-            className="mt-6 grid gap-3 border-t border-border pt-4 sm:grid-cols-[1fr_140px_auto]"
+            className="mt-6 grid gap-3 border-t border-border-subtle pt-4 sm:grid-cols-[1fr_150px_auto]"
           >
             <input
               type="email"
               value={inviteEmail}
               onChange={(event) => setInviteEmail(event.target.value)}
               placeholder="teammate@agency.com"
-              className="rounded border border-border bg-surface px-4 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+              aria-label={t("E-mail")}
+              className="field"
               required
             />
             <select
@@ -222,7 +233,7 @@ export default function SettingsPage() {
               onChange={(event) =>
                 setInviteRole(event.target.value as "ADMIN" | "MEMBER")
               }
-              className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+              className="field"
             >
               <option value="MEMBER">{t("Member")}</option>
               <option value="ADMIN">{t("Admin")}</option>
@@ -230,29 +241,29 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={busy === "invite"}
-              className="rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              className={buttonClass("primary")}
             >
               {busy === "invite" ? t("Inviting...") : t("Invite")}
             </button>
             {memberError && (
-              <p className="sm:col-span-3 text-sm text-error">{memberError}</p>
+              <p role="alert" className="text-sm text-error sm:col-span-3">{memberError}</p>
             )}
           </form>
         )}
       </section>
 
-      <section className="panel rounded p-4 sm:p-6">
-        <h2 className="text-base font-semibold mb-6">{t("Usage")}</h2>
+      <section className="card p-5 sm:p-6">
+        <h2 className="title-section mb-2">{t("Usage")}</h2>
         <div className="flex items-center justify-between gap-3 py-3">
           <div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="font-medium text-heading">
               {t("DMs sent this month")}
             </p>
-            <p className="text-xs text-muted mt-0.5">
+            <p className="mt-0.5 text-[13px] text-faint">
               {t("Self-hosted — no plan limits.")}
             </p>
           </div>
-          <span className="text-sm font-semibold text-foreground">
+          <span className="font-display text-2xl font-semibold text-heading">
             {data?.workspace.dmsSentThisPeriod ?? 0}
           </span>
         </div>
