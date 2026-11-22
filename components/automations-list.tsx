@@ -244,7 +244,9 @@ export default function AutomationsList({ initialType }: { initialType: Automati
   function selectTab(type: AutomationType) {
     setActiveType(type);
     // Keep the tab in the URL so a reload or a shared link opens it again.
-    router.replace(`/automations?tipo=${automationTypeSlug(type)}`, { scroll: false });
+    // Native replaceState (synced by Next) instead of router.replace: no
+    // server round trip and no remount, so keyboard focus stays on the tab.
+    window.history.replaceState(null, "", `/automations?tipo=${automationTypeSlug(type)}`);
   }
 
   async function deleteAutomation(id: string) {

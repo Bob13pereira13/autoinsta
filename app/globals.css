@@ -821,6 +821,14 @@ dialog.ui-dialog::backdrop {
   border-collapse: collapse;
   margin-top: 0.75rem;
 }
+/* Wide legal tables scroll inside their own box on phones. */
+@media (max-width: 640px) {
+  .legal-content table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
 .legal-content th,
 .legal-content td {
   border: 1px solid var(--border);

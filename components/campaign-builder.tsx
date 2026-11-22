@@ -21,7 +21,6 @@ import HowItWorks from "@/components/how-it-works";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { KeywordChip } from "@/components/ui/chip";
-import { Icon } from "@/components/ui/icons";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { StatusDot } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
