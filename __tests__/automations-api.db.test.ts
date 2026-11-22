@@ -110,6 +110,110 @@ describe.skipIf(!databaseUrl)("automations API with channels and media", () => {
     expect(paused.status).toBe(200);
   });
 
+  describe("several posts", () => {
+    const rowsOf = (id: string) =>
+      state.db.automationPost.findMany({ where: { automationId: id }, orderBy: { position: "asc" } });
+
+    it("creates with a list of posts; postId mirrors the first", async () => {
+      const res = await POST(req("POST", {
+        name: "Multi", type: "COMMENTS", keywords: ["LINK"], dmMessage: "Oi",
+        posts: [
+          { id: "p1", url: "https://instagram.com/p/1", publishedAt: "2026-11-01T10:00:00Z" },
+          { id: "p2", url: "https://instagram.com/p/2" },
+          { id: "p1" },
+        ],
+        // A list wins over the all-posts flag.
+        matchAnyPost: true,
+      }));
+      expect(res.status).toBe(201);
+      const created = (await res.json()).data;
+      const row = await state.db.automation.findUniqueOrThrow({ where: { id: created.id } });
+      expect(row).toMatchObject({ postId: "p1", postUrl: "https://instagram.com/p/1", matchAnyPost: false, pendingNextReel: false, replyToRecentComments: false });
+      expect((await rowsOf(created.id)).map((p) => [p.postId, p.postUrl, p.position])).toEqual([
+        ["p1", "https://instagram.com/p/1", 0],
+        ["p2", "https://instagram.com/p/2", 1],
+      ]);
+      expect((await rowsOf(created.id))[0].publishedAt?.toISOString()).toBe("2026-11-01T10:00:00.000Z");
+      const listed = (await (await GET(new NextRequest("https://app.test/api/automations"))).json()).data.find((a: { id: string }) => a.id === created.id);
+      expect(listed.postIds).toEqual(["p1", "p2"]);
+    });
+
+    it("accepts plain postIds and the legacy single postId", async () => {
+      const a = (await (await POST(req("POST", { name: "Ids", keywords: ["A"], dmMessage: "Oi", postIds: ["x1", "x2", "x3"] }))).json()).data;
+      expect((await rowsOf(a.id)).map((p) => p.postId)).toEqual(["x1", "x2", "x3"]);
+      const b = (await (await POST(req("POST", { name: "Legacy", keywords: ["A"], dmMessage: "Oi", postId: "solo", postUrl: "https://instagram.com/p/solo" }))).json()).data;
+      expect((await rowsOf(b.id)).map((p) => [p.postId, p.postUrl])).toEqual([["solo", "https://instagram.com/p/solo"]]);
+      expect(b.postId).toBe("solo");
+    });
+
+    it("refuses more than 100 posts and an empty specific selection", async () => {
+      const many = Array.from({ length: 101 }, (_, i) => `m${i}`);
+      const res = await POST(req("POST", { name: "Too many", keywords: ["A"], dmMessage: "Oi", postIds: many }));
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(await res.json())).toMatch(/Up to 100 posts per automation/);
+      expect((await POST(req("POST", { name: "Nothing", keywords: ["A"], dmMessage: "Oi", postIds: [] }))).status).toBe(400);
+      const hundred = Array.from({ length: 100 }, (_, i) => `h${i}`);
+      expect((await POST(req("POST", { name: "Hundred", keywords: ["A"], dmMessage: "Oi", postIds: hundred }))).status).toBe(201);
+    });
+
+    it("editing the selection rewrites the rows and keeps postId in sync; all posts clears them", async () => {
+      const created = (await (await POST(req("POST", { name: "Edit", keywords: ["A"], dmMessage: "Oi", postIds: ["e1", "e2"] }))).json()).data;
+      let res = await PATCH(req("PATCH", { posts: [{ id: "e3", url: "https://instagram.com/p/e3" }, { id: "e1" }] }, `?id=${created.id}`));
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.postId).toBe("e3");
+      expect((await rowsOf(created.id)).map((p) => p.postId)).toEqual(["e3", "e1"]);
+      expect((await state.db.automation.findUniqueOrThrow({ where: { id: created.id } })).postUrl).toBe("https://instagram.com/p/e3");
+
+      res = await PATCH(req("PATCH", { matchAnyPost: true }, `?id=${created.id}`));
+      expect(res.status).toBe(200);
+      expect(await rowsOf(created.id)).toEqual([]);
+      expect(await state.db.automation.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ postId: null, postUrl: null, matchAnyPost: true });
+
+      // Renaming or pausing leaves the posts alone.
+      await PATCH(req("PATCH", { postIds: ["e9"], matchAnyPost: false }, `?id=${created.id}`));
+      await PATCH(req("PATCH", { name: "Renamed", isActive: false }, `?id=${created.id}`));
+      expect((await rowsOf(created.id)).map((p) => p.postId)).toEqual(["e9"]);
+    });
+
+    it("Direct and Stories automations never keep posts", async () => {
+      const created = (await (await POST(req("POST", { name: "D", type: "DIRECT", keywords: ["A"], dmMessage: "Oi", postIds: ["d1"] }))).json()).data;
+      expect(await rowsOf(created.id)).toEqual([]);
+      const comments = (await (await POST(req("POST", { name: "C", keywords: ["A"], dmMessage: "Oi", postIds: ["c1"] }))).json()).data;
+      await PATCH(req("PATCH", { type: "DIRECT" }, `?id=${comments.id}`));
+      expect(await rowsOf(comments.id)).toEqual([]);
+      expect((await state.db.automation.findUniqueOrThrow({ where: { id: comments.id } })).postId).toBeNull();
+    });
+  });
+
+  describe("activation", () => {
+    it("activeSince is set on creation and moves forward only when the automation is resumed", async () => {
+      const t0 = Date.now();
+      const created = (await (await POST(req("POST", { name: "Act", keywords: ["A"], dmMessage: "Oi", matchAnyPost: true }))).json()).data;
+      const first = (await state.db.automation.findUniqueOrThrow({ where: { id: created.id } })).activeSince;
+      expect(first.getTime()).toBeGreaterThanOrEqual(t0 - 1000);
+
+      await PATCH(req("PATCH", { isActive: false }, `?id=${created.id}`));
+      await PATCH(req("PATCH", { name: "Still paused" }, `?id=${created.id}`));
+      expect((await state.db.automation.findUniqueOrThrow({ where: { id: created.id } })).activeSince).toEqual(first);
+
+      await new Promise((r) => setTimeout(r, 20));
+      await PATCH(req("PATCH", { isActive: true }, `?id=${created.id}`));
+      const resumed = (await state.db.automation.findUniqueOrThrow({ where: { id: created.id } })).activeSince;
+      expect(resumed.getTime()).toBeGreaterThan(first.getTime());
+
+      // Saving an active automation does not move it.
+      await PATCH(req("PATCH", { isActive: true, name: "Again" }, `?id=${created.id}`));
+      expect((await state.db.automation.findUniqueOrThrow({ where: { id: created.id } })).activeSince).toEqual(resumed);
+    });
+
+    it("stores the 72h option for Comments only", async () => {
+      const c = (await (await POST(req("POST", { name: "Rec", keywords: ["A"], dmMessage: "Oi", matchAnyPost: true, replyToRecentComments: true }))).json()).data;
+      expect(c.replyToRecentComments).toBe(true);
+      const d = (await (await POST(req("POST", { name: "RecD", type: "DIRECT", keywords: ["A"], dmMessage: "Oi", replyToRecentComments: true }))).json()).data;
+      expect(d.replyToRecentComments).toBe(false);
+    });
+  });
+
   it("Stories: mentions only without keywords", async () => {
     const bad = await POST(req("POST", { name: "S", type: "STORIES", keywords: ["LINK"], triggerStoryMentions: true, dmMessage: "Oi" }));
     expect(bad.status).toBe(400);

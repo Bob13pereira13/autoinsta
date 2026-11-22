@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
-import { getAllUserMedia, getUserMedia } from "@/lib/instagram/provider";
+import { getAllUserMedia, getUserMedia, getUserMediaPage } from "@/lib/instagram/provider";
 import { createInstagramContext } from "@/lib/instagram/provider";
 
 export async function GET(request: NextRequest) {
@@ -32,9 +32,21 @@ export async function GET(request: NextRequest) {
   try {
     const accessToken = await createInstagramContext(account);
 
-    // `all=true` paginates the full library (for the campaign post picker);
-    // otherwise return a single recent page.
-    const loadAll = request.nextUrl.searchParams.get("all") === "true";
+    // `paged=1` returns one page plus `nextCursor` (post grid, infinite
+    // scroll; pass it back as `after`). `all=true` paginates the full library;
+    // otherwise a single recent page.
+    const params = request.nextUrl.searchParams;
+    if (params.get("paged") === "1") {
+      const parsedLimit = Number.parseInt(params.get("limit") ?? "24", 10);
+      const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 24;
+      const after = params.get("after");
+      if (after && !/^[A-Za-z0-9_=-]{1,512}$/.test(after)) {
+        return NextResponse.json({ success: false, error: "Invalid cursor" }, { status: 400 });
+      }
+      const page = await getUserMediaPage({ context: accessToken, limit, after });
+      return NextResponse.json({ success: true, data: page.data, nextCursor: page.nextCursor });
+    }
+    const loadAll = params.get("all") === "true";
     let posts;
     if (loadAll) {
       posts = await getAllUserMedia({ context: accessToken, max: 300 });

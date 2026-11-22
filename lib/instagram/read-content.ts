@@ -108,6 +108,23 @@ export async function getUserMedia({
   }));
 }
 
+/** One page of media for the post grid (infinite scroll). */
+export async function getUserMediaPage({
+  context,
+  limit = 24,
+  after,
+}: {
+  context: InstagramContext;
+  limit?: number;
+  after?: string | null;
+}): Promise<{ data: meta.InstagramMedia[]; nextCursor: string | null }> {
+  if (context.provider === "META") {
+    return meta.getUserMediaPage(context, { limit, after, igUserId: context.instagramId });
+  }
+  // Other providers only return the most recent posts, in one page.
+  return after ? { data: [], nextCursor: null } : { data: await getUserMedia({ context, limit: 25 }), nextCursor: null };
+}
+
 export async function getAllUserMedia({
   context,
   max = 500,

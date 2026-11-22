@@ -825,6 +825,32 @@ export async function getUserMedia(
 }
 
 /**
+ * One page of the account's media, newest first, for infinite scrolling.
+ * `after` is the cursor of the previous page; `nextCursor` is null on the last.
+ */
+export async function getUserMediaPage(
+  auth: MetaAuth,
+  { limit = 24, after, igUserId }: { limit?: number; after?: string | null; igUserId?: string }
+): Promise<{ data: InstagramMedia[]; nextCursor: string | null }> {
+  const accessToken = tokenOf(auth);
+  const node = instagramNode(auth, igUserId);
+  const url = new URL(`${instagramGraphBase(auth)}/${node}/media`);
+  url.searchParams.set("fields", MEDIA_FIELDS);
+  url.searchParams.set("limit", String(Math.min(Math.max(limit, 1), MEDIA_PAGE_SIZE)));
+  if (after) url.searchParams.set("after", after);
+  url.searchParams.set("access_token", accessToken);
+
+  const response = await fetch(url.toString());
+  const page = await handleResponse<{
+    data: InstagramMedia[];
+    paging?: { next?: string; cursors?: { after?: string } };
+  }>(response);
+  const data = page.data ?? [];
+  const nextCursor = page.paging?.next && data.length ? page.paging.cursors?.after ?? null : null;
+  return { data, nextCursor };
+}
+
+/**
  * Fetch media by following pagination cursors until `max` items are collected
  * or there are no more pages. Pass a large `max` for an "all time" view; the
  * cap is a safety ceiling so an account with thousands of posts can't spin

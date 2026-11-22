@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
+import { MAX_POSTS_PER_AUTOMATION, normalizePostInput, postIdsOf, postsCreateData } from "@/lib/automation/posts";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
@@ -10,7 +11,9 @@ import {
 } from "@/lib/workspace-access";
 
 const campaignSchema = z.object({
-  postId: z.string().min(1),
+  // One post (postId) or several (postIds); at least one is required.
+  postId: z.string().min(1).optional().nullable(),
+  postIds: z.array(z.string().min(1).max(64)).max(MAX_POSTS_PER_AUTOMATION).optional(),
   postUrl: z.string().optional().nullable(),
   keywords: z.array(z.string().min(1).max(50)).min(1).max(10),
   dmMessage: z.string().min(1).max(1000),
@@ -24,7 +27,10 @@ const campaignSchema = z.object({
 
 const importSchema = z.object({
   instagramAccountId: z.string().min(1),
-  campaigns: z.array(campaignSchema).min(1).max(200),
+  campaigns: z
+    .array(campaignSchema.refine((c) => Boolean(c.postId) || Boolean(c.postIds?.length), { message: "postId or postIds is required" }))
+    .min(1)
+    .max(200),
 });
 
 export async function POST(request: NextRequest) {
@@ -64,17 +70,23 @@ export async function POST(request: NextRequest) {
 
   const existing = await prisma.automation.findMany({
     where: { instagramAccountId: account.id },
-    select: { postId: true },
+    select: { postId: true, posts: { select: { postId: true } } },
   });
-  const usedPostIds = new Set(existing.map((a) => a.postId));
+  const usedPostIds = new Set(existing.flatMap((a) => postIdsOf(a)));
 
-  const created: { name: string; postId: string }[] = [];
+  const created: { name: string; postId: string; postIds: string[] }[] = [];
   const skipped: { row: number; reason: string }[] = [];
 
   let row = 0;
   for (const campaign of parsed.data.campaigns) {
     row++;
-    if (usedPostIds.has(campaign.postId)) {
+    const postList =
+      normalizePostInput({
+        postIds: campaign.postIds?.length ? campaign.postIds : undefined,
+        postId: campaign.postId ?? null,
+        postUrl: campaign.postUrl && /^https?:\/\//i.test(campaign.postUrl) ? campaign.postUrl : null,
+      }) ?? [];
+    if (postList.some((p) => usedPostIds.has(p.id))) {
       skipped.push({ row, reason: "a campaign already exists for this post" });
       continue;
     }
@@ -92,8 +104,9 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         goal: (campaign.goal ?? "").trim().slice(0, 120) || null,
-        postId: campaign.postId,
-        postUrl: campaign.postUrl ?? null,
+        postId: postList[0].id,
+        postUrl: postList[0].url ?? campaign.postUrl ?? null,
+        posts: { create: postsCreateData(postList) },
         keywords: campaign.keywords,
         dmMessage: campaign.dmMessage.slice(0, 1000),
         publicReplyEnabled: Boolean(publicReply),
@@ -118,8 +131,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    usedPostIds.add(campaign.postId);
-    created.push({ name, postId: campaign.postId });
+    for (const p of postList) usedPostIds.add(p.id);
+    created.push({ name, postId: postList[0].id, postIds: postList.map((p) => p.id) });
   }
 
   return NextResponse.json({

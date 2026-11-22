@@ -12,6 +12,14 @@ import {
 } from "@/lib/media/attach";
 import { mediaPublicUrl } from "@/lib/media/urls";
 import {
+  MAX_POSTS_PER_AUTOMATION,
+  normalizePostInput,
+  postIdsOf,
+  postsCreateData,
+  POSTS_SELECT,
+  setAutomationPosts,
+} from "@/lib/automation/posts";
+import {
   AUTOMATION_TYPES,
   automationRuleIssues,
   sanitizeForType,
@@ -39,6 +47,18 @@ import {
 // immediately), so never cache it at the route or CDN layer.
 export const dynamic = "force-dynamic";
 
+const TOO_MANY_POSTS = `Up to ${MAX_POSTS_PER_AUTOMATION} posts per automation`;
+const postIdsSchema = z.array(z.string().min(1).max(64)).max(MAX_POSTS_PER_AUTOMATION, TOO_MANY_POSTS);
+const postsSchema = z
+  .array(
+    z.object({
+      id: z.string().min(1).max(64),
+      url: z.string().url().max(500).optional().nullable(),
+      publishedAt: z.string().max(40).optional().nullable(),
+    })
+  )
+  .max(MAX_POSTS_PER_AUTOMATION, TOO_MANY_POSTS);
+
 const createAutomationSchema = z
   .object({
     name: z.string().min(1).max(100),
@@ -51,8 +71,12 @@ const createAutomationSchema = z
     instagramAccountId: z.string().min(1).optional().nullable(),
     postId: z.string().min(1).optional().nullable(),
     postUrl: z.string().url().optional().nullable(),
+    // Several posts: plain ids (API) or objects with link and date (dashboard).
+    postIds: postIdsSchema.optional(),
+    posts: postsSchema.optional(),
     pendingNextReel: z.boolean().optional().default(false),
     matchAnyPost: z.boolean().optional().default(false),
+    replyToRecentComments: z.boolean().optional().default(false),
     keywords: z.array(z.string().min(1).max(50)).max(10).optional().default([]),
     matchAnyWord: z.boolean().optional().default(false),
     dmTriggerEnabled: z.boolean().optional().default(false),
@@ -93,7 +117,8 @@ const createAutomationSchema = z
   // Which options combine depends on the type (lib/automation/rules.ts).
   // Media kinds are checked in the handler, once the uploads are looked up.
   .superRefine((d, ctx) => {
-    for (const issue of automationRuleIssues({ ...d, media: [] })) {
+    const postIds = normalizePostInput(d)?.map((p) => p.id);
+    for (const issue of automationRuleIssues({ ...d, postIds, media: [] })) {
       ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message });
     }
   });
@@ -109,8 +134,11 @@ const updateAutomationSchema = z.object({
   instagramAccountId: z.string().min(1).optional(),
   postId: z.string().min(1).optional().nullable(),
   postUrl: z.string().url().optional().nullable(),
+  postIds: postIdsSchema.optional(),
+  posts: postsSchema.optional(),
   pendingNextReel: z.boolean().optional(),
   matchAnyPost: z.boolean().optional(),
+  replyToRecentComments: z.boolean().optional(),
   keywords: z.array(z.string().min(1).max(50)).max(10).optional(),
   matchAnyWord: z.boolean().optional(),
   dmTriggerEnabled: z.boolean().optional(),
@@ -150,6 +178,8 @@ const RULE_FIELDS = [
   "matchAnyPost",
   "pendingNextReel",
   "postId",
+  "postIds",
+  "posts",
   "matchAnyWord",
   "keywords",
   "openingDmEnabled",
@@ -189,8 +219,9 @@ export async function GET(request: NextRequest) {
     where: { workspaceId, ...accountFilter },
     include: {
       instagramAccount: {
-        select: { username: true, instagramId: true },
+        select: { username: true, instagramId: true, automationsEnabled: true },
       },
+      posts: POSTS_SELECT,
       _count: {
         select: { dmLogs: true },
       },
@@ -311,6 +342,8 @@ export async function GET(request: NextRequest) {
       const { media, ...rest } = automation;
       return {
         ...rest,
+        // Marked posts (empty = all posts or the next reel).
+        postIds: postIdsOf(automation),
         // Public URL for previews; the storage key itself is not exposed.
         media: media.map(({ storageKey, ...m }) => ({ ...m, url: mediaPublicUrl(storageKey) })),
         trackedLinks: automation.trackedLinks.map((link) => ({
@@ -420,10 +453,12 @@ export async function POST(request: NextRequest) {
     secondaryLabel: parsed.data.secondaryButtonLabel,
   });
 
-  const { pendingNextReel, matchAnyPost, matchAnyWord, openingDmEnabled } =
-    parsed.data;
-  // A post is only stored for the "specific post" trigger.
-  const isSpecificPost = !pendingNextReel && !matchAnyPost;
+  const { matchAnyWord, openingDmEnabled } = parsed.data;
+  // Marked posts win over the all-posts / next-reel flags; only Comments
+  // automations have posts.
+  const postList = parsed.data.type === "COMMENTS" ? normalizePostInput(parsed.data) ?? [] : [];
+  const pendingNextReel = postList.length ? false : parsed.data.pendingNextReel;
+  const matchAnyPost = postList.length ? false : parsed.data.matchAnyPost;
   const publicReplyList = (
     parsed.data.publicReplyMessages.length > 0
       ? parsed.data.publicReplyMessages
@@ -444,11 +479,14 @@ export async function POST(request: NextRequest) {
       triggerStoryReplies: parsed.data.triggerStoryReplies,
       triggerStoryMentions: parsed.data.triggerStoryMentions,
       replyCooldownHours: parsed.data.replyCooldownHours,
-      // A next-reel campaign has no post yet; the cron binds it once a reel is posted.
-      postId: isSpecificPost ? parsed.data.postId : null,
-      postUrl: isSpecificPost ? parsed.data.postUrl : null,
+      // A next-reel campaign has no post yet; the cron binds it once a reel is
+      // posted. postId/postUrl mirror the first marked post.
+      postId: postList[0]?.id ?? null,
+      postUrl: postList[0]?.url ?? null,
+      ...(postList.length ? { posts: { create: postsCreateData(postList) } } : {}),
       pendingNextReel,
       matchAnyPost,
+      replyToRecentComments: type === "COMMENTS" && parsed.data.replyToRecentComments,
       keywords: matchAnyWord ? [] : parsed.data.keywords,
       matchAnyWord,
       dmTriggerEnabled: parsed.data.dmTriggerEnabled,
@@ -552,6 +590,7 @@ export async function PATCH(request: NextRequest) {
 
   const existing = await prisma.automation.findFirst({
     where: { id: automationId, workspaceId },
+    include: { posts: { select: { postId: true } } },
   });
 
   if (!existing) {
@@ -566,8 +605,25 @@ export async function PATCH(request: NextRequest) {
     secondaryDestinationUrl,
     secondaryButtonLabel,
     media: mediaInput,
+    posts: postsInput,
+    postIds: postIdsInput,
     ...automationData
   } = parsed.data;
+
+  // Marked posts: undefined = unchanged. postId/postUrl are written by
+  // setAutomationPosts so they always mirror the first post.
+  let postList = normalizePostInput({
+    posts: postsInput,
+    postIds: postIdsInput,
+    postId: automationData.postId,
+    postUrl: automationData.postUrl,
+  });
+  delete automationData.postId;
+  delete automationData.postUrl;
+  if (postList?.length) {
+    automationData.matchAnyPost = false;
+    automationData.pendingNextReel = false;
+  }
 
   // Moving a campaign to another account: it must be one of this workspace's.
   if (
@@ -601,10 +657,9 @@ export async function PATCH(request: NextRequest) {
     automationData.followUpMessage = null;
     automationData.followUpDelayMinutes = 0;
   }
-  // Any-post / next-reel campaigns carry no specific post.
+  // Any-post / next-reel campaigns carry no marked post.
   if (automationData.matchAnyPost === true || automationData.pendingNextReel === true) {
-    automationData.postId = null;
-    automationData.postUrl = null;
+    postList = [];
   }
   // Keep the public-reply variations list and the legacy single field in sync.
   if (automationData.publicReplyMessages !== undefined) {
@@ -621,7 +676,15 @@ export async function PATCH(request: NextRequest) {
 
   // Validate the automation as it will be after this save.
   const type = automationData.type ?? existing.type;
-  const merged = { ...existing, ...automationData, type };
+  if (type !== "COMMENTS" && (existing.posts?.length || existing.postId)) postList = [];
+  const merged = {
+    ...existing,
+    ...automationData,
+    type,
+    postIds: postList ? postList.map((p) => p.id) : postIdsOf(existing),
+  };
+  // Resuming: the reconciler only answers comments made from now on.
+  const resumed = automationData.isActive === true && !existing.isActive;
   let mediaItems: Awaited<ReturnType<typeof resolveMediaInput>>;
   try {
     mediaItems =
@@ -659,10 +722,18 @@ export async function PATCH(request: NextRequest) {
   // for this one before it reads the links.
   let removedMediaKeys: string[] = [];
   const updated = await prisma.$transaction(async (tx) => {
-    const campaign = await tx.automation.update({
+    let campaign = await tx.automation.update({
       where: { id: automationId },
-      data: sanitizeForType(type, automationData),
+      data: {
+        ...sanitizeForType(type, automationData),
+        ...(resumed ? { activeSince: new Date() } : {}),
+        ...(type !== "COMMENTS" ? { replyToRecentComments: false } : {}),
+      },
     });
+    if (postList !== undefined) {
+      await setAutomationPosts(tx, automationId, postList);
+      campaign = { ...campaign, postId: postList[0]?.id ?? null, postUrl: postList[0]?.url ?? null };
+    }
     removedMediaKeys = await syncAutomationMedia(tx, {
       automationId,
       workspaceId,

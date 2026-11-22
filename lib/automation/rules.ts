@@ -19,6 +19,8 @@ export interface RuleInput {
   matchAnyPost?: boolean;
   pendingNextReel?: boolean;
   postId?: string | null;
+  /** Marked posts (AutomationPost). */
+  postIds?: string[];
   matchAnyWord?: boolean;
   keywords?: string[];
   openingDmEnabled?: boolean;
@@ -49,7 +51,7 @@ export const RULE_MESSAGES = {
 export function automationRuleIssues(input: RuleInput): RuleIssue[] {
   const issues: RuleIssue[] = [];
 
-  if (input.type === "COMMENTS" && !input.matchAnyPost && !input.pendingNextReel && !input.postId) {
+  if (input.type === "COMMENTS" && !input.matchAnyPost && !input.pendingNextReel && !input.postId && !input.postIds?.length) {
     issues.push({ path: "postId", message: RULE_MESSAGES.postScope });
   }
   if (!input.matchAnyWord && (input.keywords ?? []).filter((k) => k.trim()).length === 0) {

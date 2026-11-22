@@ -1,18 +1,23 @@
-import { NextResponse } from "next/server";
-import { getCurrentWorkspaceId } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db/client";
+import { removeInstagramAccounts } from "@/lib/instagram/remove-account";
+import { canManageWorkspace, getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export const runtime = "nodejs";
 
 /**
- * The workspace's connected Instagram accounts — just enough for an account
- * selector. This is a single indexed query, unlike /api/dashboard/stats which
- * runs the full analytics aggregation. Pages that only need the account list
- * (e.g. the inbox) should use this so they aren't gated on heavy stats.
+ * The workspace's connected Instagram accounts (Accounts tab, account
+ * selectors). A single indexed query, unlike /api/dashboard/stats.
+ *
+ * PATCH ?id=  { automationsEnabled }  turns every automation of the account
+ *             off or back on without deleting anything.
+ * DELETE ?id= removes the account for good (automations, history, links).
+ * Both are for owners and admins only.
  */
 export async function GET() {
-  const workspaceId = await getCurrentWorkspaceId();
-  if (!workspaceId) {
+  const context = await getCurrentWorkspaceContext();
+  if (!context) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
@@ -20,16 +25,87 @@ export async function GET() {
   }
 
   const instagramAccounts = await prisma.instagramAccount.findMany({
-    where: { workspaceId },
+    where: { workspaceId: context.workspaceId },
     orderBy: { connectedAt: "desc" },
-    select: { id: true, username: true, instagramId: true, name: true },
+    select: {
+      id: true,
+      username: true,
+      instagramId: true,
+      name: true,
+      automationsEnabled: true,
+      tokenInvalidAt: true,
+      connectedAt: true,
+      _count: { select: { automations: true } },
+    },
   });
 
   return NextResponse.json({
     success: true,
     data: {
-      instagramAccounts,
+      instagramAccounts: instagramAccounts.map(({ _count, ...account }) => ({
+        ...account,
+        automationCount: _count.automations,
+      })),
       selectedInstagramAccountId: instagramAccounts[0]?.id ?? null,
+      canManage: canManageWorkspace(context.role),
     },
   });
+}
+
+async function managedAccount(request: NextRequest) {
+  const context = await getCurrentWorkspaceContext();
+  if (!context) {
+    return { error: NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 }) };
+  }
+  if (!canManageWorkspace(context.role)) {
+    return {
+      error: NextResponse.json(
+        { success: false, error: "Only owners and admins can manage Instagram accounts" },
+        { status: 403 }
+      ),
+    };
+  }
+  const id = request.nextUrl.searchParams.get("id");
+  if (!id) {
+    return { error: NextResponse.json({ success: false, error: "Missing account ID" }, { status: 400 }) };
+  }
+  const account = await prisma.instagramAccount.findFirst({
+    where: { id, workspaceId: context.workspaceId },
+    select: { id: true, automationsEnabled: true },
+  });
+  if (!account) {
+    return { error: NextResponse.json({ success: false, error: "Instagram account not found" }, { status: 404 }) };
+  }
+  return { context, account };
+}
+
+const patchSchema = z.object({ automationsEnabled: z.boolean() }).strict();
+
+export async function PATCH(request: NextRequest) {
+  const found = await managedAccount(request);
+  if ("error" in found) return found.error;
+
+  const parsed = patchSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: "Invalid input" }, { status: 400 });
+  }
+  const { automationsEnabled } = parsed.data;
+  const updated = await prisma.instagramAccount.update({
+    where: { id: found.account.id },
+    data: {
+      automationsEnabled,
+      // Turning it back on: comments made while it was off stay ignored (the
+      // reconciler only answers comments made after this moment).
+      ...(automationsEnabled && !found.account.automationsEnabled ? { automationsResumedAt: new Date() } : {}),
+    },
+    select: { id: true, automationsEnabled: true, automationsResumedAt: true },
+  });
+  return NextResponse.json({ success: true, data: updated });
+}
+
+export async function DELETE(request: NextRequest) {
+  const found = await managedAccount(request);
+  if ("error" in found) return found.error;
+  await removeInstagramAccounts(found.context.workspaceId, [found.account.id]);
+  return NextResponse.json({ success: true });
 }

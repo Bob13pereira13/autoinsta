@@ -289,19 +289,37 @@ export default async function ReportPage({ params }: ReportPageProps) {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                {t("Source post")}
+                {report.campaign.postCount > 1 ? t("Source posts") : t("Source post")}
               </p>
-              {report.campaign.postUrl ? (
-                <a
-                  href={report.campaign.postUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-cyan-100"
-                >
-                  {t("View Instagram post")}
-                </a>
-              ) : (
+              {report.campaign.type !== "COMMENTS" ? (
                 <p className="mt-3 text-sm text-zinc-400">{t("Not attached")}</p>
+              ) : report.campaign.postScope === "all" ? (
+                <p className="mt-3 text-sm text-zinc-300">{t("All posts and reels")}</p>
+              ) : report.campaign.postUrls.length ? (
+                <div className="mt-3 flex flex-col gap-1">
+                  {report.campaign.postUrls.slice(0, 10).map((url, i) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex text-sm font-semibold text-cyan-200 transition hover:text-cyan-100"
+                    >
+                      {report.campaign.postUrls.length > 1
+                        ? t("View Instagram post {number}", { number: i + 1 })
+                        : t("View Instagram post")}
+                    </a>
+                  ))}
+                  {report.campaign.postCount > 10 && (
+                    <p className="text-xs text-zinc-500">
+                      {t("and {count} more", { count: report.campaign.postCount - 10 })}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-zinc-400">
+                  {report.campaign.postScope === "next" ? t("Your next reel") : t("Not attached")}
+                </p>
               )}
             </div>
           </div>

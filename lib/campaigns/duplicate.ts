@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client";
+import { POSTS_SELECT } from "@/lib/automation/posts";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { TRACKED_LINK_ORDER } from "@/lib/tracking/link-order";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
@@ -50,6 +51,7 @@ export async function duplicateCampaign({
     include: {
       trackedLinks: { orderBy: TRACKED_LINK_ORDER },
       media: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
+      posts: POSTS_SELECT,
     },
   });
 
@@ -57,7 +59,7 @@ export async function duplicateCampaign({
 
   // Every setting on the row carries over. The links and media are recreated
   // rather than spread, since they are rows of their own.
-  const { trackedLinks, media = [], ...settings } = source;
+  const { trackedLinks, media = [], posts = [], ...settings } = source;
 
   let mediaCopies: Array<{ storageKey: string; source: (typeof media)[number] }> = [];
   let mediaSkipped = false;
@@ -81,6 +83,9 @@ export async function duplicateCampaign({
       id: undefined,
       createdAt: undefined,
       updatedAt: undefined,
+      // The copy starts paused; it becomes active (for the reconciler) when
+      // it is switched on.
+      activeSince: undefined,
       name: buildDuplicateName(settings.name),
       isActive: false,
       reportShareSlug: generateReportShareSlug(),
@@ -95,6 +100,19 @@ export async function duplicateCampaign({
           position,
         })),
       },
+      // Same marked posts, in the same order.
+      ...(posts.length
+        ? {
+            posts: {
+              create: posts.map((p) => ({
+                postId: p.postId,
+                postUrl: p.postUrl,
+                publishedAt: p.publishedAt,
+                position: p.position,
+              })),
+            },
+          }
+        : {}),
       ...(mediaCopies.length
         ? {
             media: {

@@ -42,6 +42,10 @@ export async function getCampaignReportBySlug(shareSlug: string, locale: Locale 
       name: true,
       goal: true,
       postUrl: true,
+      postId: true,
+      matchAnyPost: true,
+      pendingNextReel: true,
+      posts: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { postId: true, postUrl: true } },
       keywords: true,
       type: true,
       isActive: true,
@@ -165,6 +169,14 @@ export async function getCampaignReportBySlug(shareSlug: string, locale: Locale 
       postUrl: automation.postUrl,
       keywords: automation.keywords,
       type: automation.type,
+      // Marked posts with a link (the first one is also postUrl); "all" or
+      // "next" when the automation is not limited to marked posts.
+      postScope: automation.matchAnyPost ? ("all" as const) : automation.pendingNextReel ? ("next" as const) : ("marked" as const),
+      postUrls: (automation.posts.length
+        ? automation.posts.map((p) => p.postUrl)
+        : [automation.postUrl]
+      ).filter((url): url is string => Boolean(url)),
+      postCount: Math.max(automation.posts.length, automation.postId ? 1 : 0),
       isActive: automation.isActive,
       createdAt: automation.createdAt,
       updatedAt: automation.updatedAt,
