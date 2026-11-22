@@ -5,6 +5,7 @@ const { mockPrisma, mockExchange } = vi.hoisted(() => ({
   mockPrisma: {
     workspaceMember: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
+    platformSettings: { findUnique: vi.fn() },
     instagramAccount: {
       findUnique: vi.fn(),
       updateMany: vi.fn(),
@@ -55,6 +56,8 @@ beforeEach(() => {
   vi.stubEnv("NEXTAUTH_URL", "https://app.test");
   mockPrisma.workspaceMember.findFirst.mockResolvedValue({ role: "OWNER" });
   mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 10 });
+  // Platform default limit: none, unless a test sets one.
+  mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: null });
   workspaceAccounts = [];
   mockPrisma.instagramAccount.count.mockImplementation(async ({ where }: { where: { instagramId?: string; workspaceId: string } }) =>
     where.instagramId ? workspaceAccounts.filter((id) => id === where.instagramId).length : workspaceAccounts.length
@@ -210,6 +213,41 @@ describe("Instagram OAuth callback", () => {
       const response = await callback();
       expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=2&connected=1");
       expect(workspaceAccounts).toEqual(["ig_existing", "ig_a"]);
+    });
+
+    it("without a limit (follows a 'no limit' default) connects every account granted at once", async () => {
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: null });
+      workspaceAccounts = ["ig_existing"];
+      unified(["ig_a", "ig_b", "ig_c"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a", "ig_b", "ig_c"]);
+    });
+
+    it("a numeric platform default blocks a client that follows the default", async () => {
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: null });
+      mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 2 });
+      workspaceAccounts = ["ig_existing"];
+      unified(["ig_a", "ig_b"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=2&connected=1");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a"]);
+    });
+
+    it("the client's own limit wins over the platform default (both ways)", async () => {
+      // Own 1 under a default of 5: blocked.
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 1 });
+      mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 5 });
+      workspaceAccounts = ["ig_existing"];
+      unified(["ig_a"]);
+      expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=1&connected=0");
+      // Own 3 over a default of 1: allowed.
+      fetchMock.mockReset();
+      mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 3 });
+      mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 1 });
+      unified(["ig_b"]);
+      expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_b"]);
     });
 
     it("always lets the client reconnect an account it already has", async () => {

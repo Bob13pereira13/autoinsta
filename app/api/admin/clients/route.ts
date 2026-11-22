@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
       companyName: String(body.companyName ?? ""),
       phone: body.phone ? String(body.phone) : null,
       document: body.document ? String(body.document) : null,
-      instagramAccountLimit: body.instagramAccountLimit === undefined ? 1 : Number(body.instagramAccountLimit),
+      // Empty or null = follow the platform default.
+      instagramAccountLimit: body.instagramAccountLimit ?? null,
     })
   );
 }

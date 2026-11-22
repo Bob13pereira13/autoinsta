@@ -13,13 +13,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   });
 }
 
-/** Change the Instagram account limit and/or the internal notes. */
+/** Change the Instagram account limit (a number, or null = follow the default) and/or the notes. */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   return withAdmin((admin) =>
     updateClient(admin, id, {
-      ...(body.instagramAccountLimit !== undefined ? { instagramAccountLimit: Number(body.instagramAccountLimit) } : {}),
+      ...(body.instagramAccountLimit !== undefined ? { instagramAccountLimit: body.instagramAccountLimit } : {}),
       ...(body.internalNotes !== undefined ? { internalNotes: body.internalNotes === null ? null : String(body.internalNotes) } : {}),
     })
   );

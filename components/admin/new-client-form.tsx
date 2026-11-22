@@ -7,7 +7,8 @@ import { useI18n } from "@/lib/i18n/provider";
 export default function NewClientForm() {
   const { t, message } = useI18n();
   const router = useRouter();
-  const [values, setValues] = useState({ name: "", email: "", companyName: "", phone: "", document: "", instagramAccountLimit: "1" });
+  // Empty limit = follow the platform default.
+  const [values, setValues] = useState({ name: "", email: "", companyName: "", phone: "", document: "", instagramAccountLimit: "" });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (field: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [field]: e.target.value }));
@@ -21,7 +22,7 @@ export default function NewClientForm() {
       const res = await fetch("/api/admin/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, instagramAccountLimit: Number(values.instagramAccountLimit) }),
+        body: JSON.stringify({ ...values, instagramAccountLimit: values.instagramAccountLimit.trim() ? Number(values.instagramAccountLimit) : null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!data.success) {
@@ -54,8 +55,11 @@ export default function NewClientForm() {
         </label>
       ))}
       <label className="block space-y-1 text-sm">
-        <span className="font-medium">{t("Instagram account limit")}</span>
-        <input type="number" min={1} max={100} required value={values.instagramAccountLimit} onChange={set("instagramAccountLimit")} className={`${input} w-28`} />
+        <span className="font-medium">
+          {t("Instagram account limit")} <span className="font-normal text-muted">{t("(optional)")}</span>
+        </span>
+        <input type="number" min={1} max={100} value={values.instagramAccountLimit} onChange={set("instagramAccountLimit")} className={`${input} w-28`} />
+        <span className="block text-xs text-muted">{t("Empty = follow the default limit (set in Price and limits).")}</span>
       </label>
       <p className="text-xs text-muted">{t("The client starts Active and gets an e-mail to set the password (link valid for 7 days).")}</p>
       <button type="submit" disabled={saving} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">

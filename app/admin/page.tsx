@@ -43,9 +43,16 @@ export default async function AdminOverviewPage() {
           <p className="text-sm text-muted">{t("Estimated monthly revenue")}</p>
           <p className="mt-1 text-2xl font-semibold">{formatMoney(data.estimatedRevenueCents, locale)}</p>
           <p className="mt-1 text-xs text-muted">
-            {t("Active clients: {limit} contracted accounts (sum of limits) × price. Default price {price} per account.", {
-              limit: data.billableAccounts,
+            {t("Active clients: {accounts} billable accounts × price (with a limit: the limit; without: the connected accounts). Default price {price} per account.", {
+              accounts: data.billableAccounts,
               price: formatMoney(data.pricePerAccountCents, locale),
+            })}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {t("{limited} with a limit, {unlimited} without a limit (default: {limit}).", {
+              limited: data.limitedClients,
+              unlimited: data.unlimitedClients,
+              limit: data.defaultAccountLimit === null ? t("No limit") : String(data.defaultAccountLimit),
             })}
           </p>
           <p className="mt-1 text-xs text-muted">

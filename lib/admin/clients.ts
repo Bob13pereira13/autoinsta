@@ -1,5 +1,6 @@
 import type { Prisma, WorkspaceStatus } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
+import { effectiveAccountLimit, getDefaultAccountLimit, MAX_ACCOUNT_LIMIT, parseLimitInput } from "@/lib/account-limit";
 import { getBaseUrl } from "@/lib/env";
 import { normalizeEmail, sendWelcomeEmail } from "@/lib/account/tokens";
 import { recordAdminAction } from "@/lib/admin/audit";
@@ -26,7 +27,7 @@ export class AdminError extends Error {
 }
 
 export const DEFAULT_PRICE_CENTS = 19900;
-export const MAX_ACCOUNT_LIMIT = 100;
+export { MAX_ACCOUNT_LIMIT } from "@/lib/account-limit";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function getPlatformPriceCents(): Promise<number> {
@@ -56,7 +57,10 @@ export async function adminOverview(now = new Date()) {
       prisma.workspace.count({
         where: { signupSource: "SELF_SIGNUP", createdAt: { gte: new Date(now.getTime() - 30 * DAY_MS) }, owner: { emailVerified: { not: null } } },
       }),
-      prisma.workspace.findMany({ where: { status: "ACTIVE" }, select: { instagramAccountLimit: true, pricePerAccountCents: true } }),
+      prisma.workspace.findMany({
+        where: { status: "ACTIVE" },
+        select: { instagramAccountLimit: true, pricePerAccountCents: true, _count: { select: { instagramAccounts: true } } },
+      }),
       getPlatformPriceCents(),
       prisma.workspace.findMany({
         // Only sign-ups whose e-mail was confirmed wait for a decision.
@@ -77,13 +81,23 @@ export async function adminOverview(now = new Date()) {
   const clientsByStatus: Record<WorkspaceStatus, number> = { PENDING_APPROVAL: 0, ACTIVE: 0, DISABLED: 0, REJECTED: 0 };
   for (const row of byStatus) clientsByStatus[row.status] = row._count._all;
 
-  // Estimated monthly revenue: each ACTIVE client's account limit times its
-  // price (or the platform price). Connected and switched-on accounts are
-  // shown next to it, for information only.
-  const estimatedRevenueCents = activeClients.reduce(
-    (sum, ws) => sum + ws.instagramAccountLimit * (ws.pricePerAccountCents ?? price),
-    0
-  );
+  // Estimated monthly revenue, ACTIVE clients only: a client with a limit
+  // (its own or the default) pays limit × price; a client without a limit
+  // pays connected accounts × price. The price is the client's own or the
+  // platform's. Connected and switched-on accounts are shown next to it.
+  const platformDefaultLimit = await getDefaultAccountLimit();
+  let estimatedRevenueCents = 0;
+  let billableAccounts = 0;
+  let limitedClients = 0;
+  let unlimitedClients = 0;
+  for (const ws of activeClients) {
+    const limit = effectiveAccountLimit(ws.instagramAccountLimit, platformDefaultLimit);
+    const units = limit ?? ws._count.instagramAccounts;
+    if (limit === null) unlimitedClients++;
+    else limitedClients++;
+    billableAccounts += units;
+    estimatedRevenueCents += units * (ws.pricePerAccountCents ?? price);
+  }
 
   return {
     clientsByStatus,
@@ -92,7 +106,10 @@ export async function adminOverview(now = new Date()) {
     newSignupsLast30Days: newSignups,
     pricePerAccountCents: price,
     estimatedRevenueCents,
-    billableAccounts: activeClients.reduce((sum, ws) => sum + ws.instagramAccountLimit, 0),
+    billableAccounts,
+    limitedClients,
+    unlimitedClients,
+    defaultAccountLimit: platformDefaultLimit,
     pending,
   };
 }
@@ -140,7 +157,7 @@ export async function listClients({ q, status, page = 1 }: { q?: string | null; 
       },
     }),
   ]);
-  return { total, page: Math.max(1, page), pageSize: take, rows };
+  return { total, page: Math.max(1, page), pageSize: take, rows, defaultAccountLimit: await getDefaultAccountLimit() };
 }
 
 /* --------------------------------- detail --------------------------------- */
@@ -167,7 +184,17 @@ export async function getClientDetail(workspaceId: string, now = new Date()) {
   const sendsLast30Days = await prisma.dmLog.count({
     where: { workspaceId, status: "SENT", dmSentAt: { gte: new Date(now.getTime() - 30 * DAY_MS) } },
   });
-  return { workspace, sendsLast30Days, platformPriceCents: await getPlatformPriceCents() };
+  const platformDefault = await getDefaultAccountLimit();
+  return {
+    workspace,
+    sendsLast30Days,
+    platformPriceCents: await getPlatformPriceCents(),
+    accountLimit: {
+      own: workspace.instagramAccountLimit,
+      platformDefault,
+      effective: effectiveAccountLimit(workspace.instagramAccountLimit, platformDefault),
+    },
+  };
 }
 
 /* --------------------------------- status --------------------------------- */
@@ -243,7 +270,8 @@ export async function setClientStatus(actorEmail: string, workspaceId: string, a
 export async function updateClient(
   actorEmail: string,
   workspaceId: string,
-  changes: { instagramAccountLimit?: number; internalNotes?: string | null }
+  /** instagramAccountLimit: a number, or null to follow the platform default. */
+  changes: { instagramAccountLimit?: number | null; internalNotes?: string | null }
 ) {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
@@ -253,11 +281,9 @@ export async function updateClient(
   const owner = await ownerOf(workspaceId);
   const data: Prisma.WorkspaceUpdateInput = {};
   if (changes.instagramAccountLimit !== undefined) {
-    const limit = changes.instagramAccountLimit;
-    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACCOUNT_LIMIT) {
-      throw new AdminError(`The limit must be between 1 and ${MAX_ACCOUNT_LIMIT}`);
-    }
-    if (limit !== workspace.instagramAccountLimit) data.instagramAccountLimit = limit;
+    const parsed = parseLimitInput(changes.instagramAccountLimit);
+    if (!parsed.ok) throw new AdminError(`The limit must be between 1 and ${MAX_ACCOUNT_LIMIT}`);
+    if (parsed.value !== workspace.instagramAccountLimit) data.instagramAccountLimit = parsed.value;
   }
   if (changes.internalNotes !== undefined) {
     const notes = changes.internalNotes?.trim() || null;
@@ -347,7 +373,7 @@ export async function adminRemoveAccount(actorEmail: string, workspaceId: string
 
 export async function createClient(
   actorEmail: string,
-  input: { name: string; email: string; companyName: string; phone?: string | null; document?: string | null; instagramAccountLimit?: number }
+  input: { name: string; email: string; companyName: string; phone?: string | null; document?: string | null; instagramAccountLimit?: number | null }
 ) {
   const email = normalizeEmail(input.email ?? "");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new AdminError("Enter a valid e-mail");
@@ -359,8 +385,10 @@ export async function createClient(
   if (input.phone?.trim() && !phone) throw new AdminError("Enter a valid WhatsApp number with area code");
   const document = input.document?.trim() ? parseDocument(input.document) : null;
   if (input.document?.trim() && !document) throw new AdminError("Invalid CPF or CNPJ: check the digits");
-  const limit = input.instagramAccountLimit ?? 1;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACCOUNT_LIMIT) throw new AdminError(`The limit must be between 1 and ${MAX_ACCOUNT_LIMIT}`);
+  // Empty = follow the platform default.
+  const parsedLimit = parseLimitInput(input.instagramAccountLimit);
+  if (!parsedLimit.ok) throw new AdminError(`The limit must be between 1 and ${MAX_ACCOUNT_LIMIT}`);
+  const limit = parsedLimit.value;
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
     throw new AdminError("This e-mail already has an account", 409);
   }
@@ -425,6 +453,29 @@ export async function setPlatformPrice(actorEmail: string, cents: number) {
       before: { pricePerAccountCents: before },
       after: { pricePerAccountCents: cents },
     });
+    return settings;
+  });
+}
+
+/** The default limit for clients that follow it; null = no limit. Audited. */
+export async function setDefaultAccountLimit(actorEmail: string, value: unknown) {
+  const parsed = parseLimitInput(value);
+  if (!parsed.ok) throw new AdminError(`The limit must be between 1 and ${MAX_ACCOUNT_LIMIT}`);
+  const before = await getDefaultAccountLimit();
+  return prisma.$transaction(async (tx) => {
+    const settings = await tx.platformSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default", defaultInstagramAccountLimit: parsed.value, updatedBy: actorEmail },
+      update: { defaultInstagramAccountLimit: parsed.value, updatedBy: actorEmail },
+    });
+    if (before !== parsed.value) {
+      await recordAdminAction(tx, {
+        actorEmail,
+        action: "settings.defaultLimit",
+        before: { defaultInstagramAccountLimit: before },
+        after: { defaultInstagramAccountLimit: parsed.value },
+      });
+    }
     return settings;
   });
 }

@@ -34,6 +34,7 @@ export default async function AdminClientPage({ params }: { params: Promise<{ id
     "client.create": t("Client created by an admin"),
     "account.toggle": t("Instagram account switch"),
     "account.remove": t("Instagram account removed"),
+    "settings.defaultLimit": t("Default account limit changed"),
   };
   const sourceLabel = ws.signupSource === "SELF_SIGNUP" ? t("Public sign-up") : ws.signupSource === "ADMIN" ? t("Created by an admin") : t("Before sign-up existed");
   const row = (label: string, value: React.ReactNode) => (
@@ -91,7 +92,12 @@ export default async function AdminClientPage({ params }: { params: Promise<{ id
             {row(t("Sends (30 days)"), sendsLast30Days)}
             {row(t("Price per account"), ws.pricePerAccountCents !== null ? formatMoney(ws.pricePerAccountCents, locale) : t("{price} (default)", { price: formatMoney(platformPriceCents, locale) }))}
           </dl>
-          <LimitEditor clientId={ws.id} limit={ws.instagramAccountLimit} connected={ws.instagramAccounts.length} />
+          <LimitEditor
+            clientId={ws.id}
+            own={detail.accountLimit.own}
+            platformDefault={detail.accountLimit.platformDefault}
+            connected={ws.instagramAccounts.length}
+          />
         </section>
       </div>
 

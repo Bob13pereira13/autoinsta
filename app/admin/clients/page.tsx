@@ -13,7 +13,7 @@ export default async function AdminClientsPage({
 }) {
   const { t, locale } = await getI18n();
   const params = await searchParams;
-  const { rows, total, page, pageSize } = await listClients({ q: params.q, status: params.status, page: Number(params.page) || 1 });
+  const { rows, total, page, pageSize, defaultAccountLimit } = await listClients({ q: params.q, status: params.status, page: Number(params.page) || 1 });
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const link = (p: number) => {
     const qs = new URLSearchParams();
@@ -75,7 +75,14 @@ export default async function AdminClientsPage({
                   {!row.owner.emailVerified && <span className="ml-1 rounded bg-warning/10 px-1.5 text-[10px] text-warning">{t("not confirmed")}</span>}
                 </td>
                 <td className="px-4 py-3"><ClientStatusBadge status={row.status} /></td>
-                <td className="px-4 py-3 text-muted">{row._count.instagramAccounts} / {row.instagramAccountLimit}</td>
+                <td className="px-4 py-3 text-muted">
+                  {(() => {
+                    // The limit in effect: the client's own, or the default (∞ = no limit).
+                    const limit = row.instagramAccountLimit ?? defaultAccountLimit;
+                    return `${row._count.instagramAccounts} / ${limit ?? "∞"}`;
+                  })()}
+                  {row.instagramAccountLimit === null && <span className="ml-1 text-[10px]">({t("default")})</span>}
+                </td>
                 <td className="px-4 py-3 text-muted">{row._count.automations}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted">{formatDate(row.createdAt, locale)}</td>
               </tr>

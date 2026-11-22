@@ -108,7 +108,9 @@ describe.skipIf(!databaseUrl)("public sign-up", () => {
     const ws = user.workspaceMembers[0].workspace;
     expect(ws).toMatchObject({
       status: "PENDING_APPROVAL", signupSource: "SELF_SIGNUP", companyName: "Loja da Maria",
-      contactPhone: "+5511999998888", documentType: "CPF", documentNumber: "52998224725", instagramAccountLimit: 1,
+      contactPhone: "+5511999998888", documentType: "CPF", documentNumber: "52998224725",
+      // Follows the platform default limit.
+      instagramAccountLimit: null,
     });
     expect(user.workspaceMembers[0].role).toBe("OWNER");
     // The confirmation link went to the user, not to the admins yet.

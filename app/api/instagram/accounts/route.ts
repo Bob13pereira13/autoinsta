@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
+import { getWorkspaceAccountLimit } from "@/lib/account-limit";
 import { removeInstagramAccounts } from "@/lib/instagram/remove-account";
 import { canManageWorkspace, getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
@@ -24,7 +25,7 @@ export async function GET() {
     );
   }
 
-  const [instagramAccounts, workspace] = await Promise.all([prisma.instagramAccount.findMany({
+  const [instagramAccounts, limit] = await Promise.all([prisma.instagramAccount.findMany({
     where: { workspaceId: context.workspaceId },
     orderBy: { connectedAt: "desc" },
     select: {
@@ -38,7 +39,7 @@ export async function GET() {
       _count: { select: { automations: true } },
     },
   }),
-  prisma.workspace.findUnique({ where: { id: context.workspaceId }, select: { instagramAccountLimit: true } })]);
+  getWorkspaceAccountLimit(context.workspaceId)]);
 
   return NextResponse.json({
     success: true,
@@ -49,8 +50,9 @@ export async function GET() {
       })),
       selectedInstagramAccountId: instagramAccounts[0]?.id ?? null,
       canManage: canManageWorkspace(context.role),
-      // How many accounts this client may connect (set in the admin area).
-      accountLimit: workspace?.instagramAccountLimit ?? 1,
+      // How many accounts this client may connect: its own limit or the
+      // platform default; null = no limit.
+      accountLimit: limit.effective,
     },
   });
 }

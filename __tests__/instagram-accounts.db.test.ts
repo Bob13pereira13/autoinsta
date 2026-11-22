@@ -175,6 +175,8 @@ describe.skipIf(!databaseUrl)("Accounts tab", () => {
       m.role = "MEMBER";
       const list = (await (await GET()).json()).data;
       expect(list.canManage).toBe(false);
+      // Follows the "no limit" default: no "of Y" on the Accounts tab.
+      expect(list.accountLimit).toBeNull();
       expect(list.instagramAccounts.map((a: { id: string }) => a.id).sort()).toEqual(["acc1", "acc2"]);
 
       expect((await PATCH(req("PATCH", "?id=acc1", { automationsEnabled: false }))).status).toBe(403);

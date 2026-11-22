@@ -145,7 +145,9 @@ model Workspace {
   /// Sent to the client by e-mail and shown after sign-in.
   rejectionReason       String?
   /// How many Instagram accounts the client may connect (set by the admin).
-  instagramAccountLimit Int                   @default(1)
+  /// Null = follow PlatformSettings.defaultInstagramAccountLimit (which may
+  /// itself be null = no limit).
+  instagramAccountLimit Int?
   signupSource          WorkspaceSignupSource @default(LEGACY)
   companyName           String?
   /// E.164, e.g. +5511999998888 (WhatsApp).
@@ -180,13 +182,15 @@ model Workspace {
 
 /// Platform-wide settings edited in the admin area (single row, id "default").
 model PlatformSettings {
-  id                   String   @id @default("default")
+  id                           String   @id @default("default")
   /// Price per Instagram account, in cents; only used for the estimated
   /// revenue until billing exists.
-  pricePerAccountCents Int      @default(19900)
-  currency             String   @default("BRL")
-  updatedAt            DateTime @updatedAt
-  updatedBy            String?
+  pricePerAccountCents         Int      @default(19900)
+  /// Instagram account limit for clients that follow the default; null = no limit.
+  defaultInstagramAccountLimit Int?
+  currency                     String   @default("BRL")
+  updatedAt                    DateTime @updatedAt
+  updatedBy                    String?
 }
 
 /// Every admin action: who, what, when, before/after. When a rejected sign-up

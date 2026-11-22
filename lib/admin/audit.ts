@@ -17,7 +17,8 @@ export type AdminAction =
   | "client.create"
   | "account.toggle"
   | "account.remove"
-  | "settings.price";
+  | "settings.price"
+  | "settings.defaultLimit";
 
 /** Record an admin action in the same transaction as the change itself. */
 export async function recordAdminAction(

@@ -132,7 +132,8 @@ export async function registerSignup(body: unknown, context: { ip: string | null
           contactPhone: phone,
           documentType: document?.type ?? null,
           documentNumber: document?.number ?? null,
-          instagramAccountLimit: 1,
+          // Follows the platform default limit (set in the admin area).
+          instagramAccountLimit: null,
           members: { create: { userId: user.id, role: "OWNER" } },
         },
       });

@@ -100,21 +100,39 @@ export function ClientStatusActions({ clientId, status, compact = false }: { cli
   );
 }
 
-export function LimitEditor({ clientId, limit, connected }: { clientId: string; limit: number; connected: number }) {
+/** "Follow the default" (null) or the client's own number; shows the limit in effect. */
+export function LimitEditor({
+  clientId,
+  own,
+  platformDefault,
+  connected,
+}: {
+  clientId: string;
+  own: number | null;
+  platformDefault: number | null;
+  connected: number;
+}) {
   const { t, message } = useI18n();
   const router = useRouter();
-  const [value, setValue] = useState(String(limit));
+  const [mode, setMode] = useState<"default" | "own">(own === null ? "default" : "own");
+  const [value, setValue] = useState(own === null ? "" : String(own));
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
+  const limitLabel = (n: number | null) =>
+    n === null ? t("No limit") : t(n === 1 ? "{count} account" : "{count} accounts", { count: n });
+  const next = mode === "default" ? null : Number(value);
+  const effective = mode === "default" ? platformDefault : Number.isInteger(next) && (next ?? 0) > 0 ? next : own;
+  const unchanged = mode === "default" ? own === null : next === own;
+  const name = `limit-${clientId}`;
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className="space-y-2"
       onSubmit={async (e) => {
         e.preventDefault();
         setState("saving");
         setError(null);
         try {
-          await post(`/api/admin/clients/${clientId}`, "PATCH", { instagramAccountLimit: Number(value) });
+          await post(`/api/admin/clients/${clientId}`, "PATCH", { instagramAccountLimit: next });
           setState("saved");
           router.refresh();
         } catch (err) {
@@ -123,17 +141,36 @@ export function LimitEditor({ clientId, limit, connected }: { clientId: string; 
         }
       }}
     >
-      <label className="text-sm">
-        <span className="block text-xs text-muted">{t("Instagram account limit")}</span>
-        <input type="number" min={1} max={100} value={value} onChange={(e) => { setValue(e.target.value); setState("idle"); }} className="mt-1 w-24 rounded border border-border bg-surface px-2 py-1.5 text-sm" />
+      <p className="text-xs text-muted">{t("Instagram account limit")}</p>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="radio" name={name} checked={mode === "default"} onChange={() => { setMode("default"); setState("idle"); }} />
+        {t("Follow the default ({limit})", { limit: limitLabel(platformDefault) })}
       </label>
-      <button type="submit" disabled={state === "saving" || Number(value) === limit} className="rounded border border-border px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50">
+      <label className="flex flex-wrap items-center gap-2 text-sm">
+        <input type="radio" name={name} checked={mode === "own"} onChange={() => { setMode("own"); setState("idle"); }} />
+        {t("Own limit")}
+        <input
+          type="number"
+          min={1}
+          max={100}
+          aria-label={t("Own limit")}
+          disabled={mode !== "own"}
+          required={mode === "own"}
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setState("idle"); }}
+          className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm disabled:opacity-50"
+        />
+      </label>
+      <p className="text-sm">
+        <span className="text-muted">{t("Limit in effect:")}</span> <strong>{limitLabel(effective)}</strong>
+      </p>
+      <button type="submit" disabled={state === "saving" || unchanged} className="rounded border border-border px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50">
         {state === "saved" ? t("Saved") : t("Save")}
       </button>
-      <p className="w-full text-xs text-muted">
+      <p className="text-xs text-muted">
         {t("{count} connected now. Lowering the limit disconnects nothing; it only blocks new connections.", { count: connected })}
       </p>
-      {error && <p role="alert" className="w-full text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-xs text-error">{error}</p>}
     </form>
   );
 }

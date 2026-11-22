@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
+import { effectiveAccountLimit, getDefaultAccountLimit } from "@/lib/account-limit";
 import { getBaseUrl, isUnifiedLogin, requireMetaAppId, requireSecret } from "@/lib/env";
 import { canConnectInstagramAccount } from "@/lib/instagram-accounts";
 import {
@@ -47,7 +48,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
   }
 
-  // Only ACTIVE clients connect accounts, up to the limit the admin set.
+  // Only ACTIVE clients connect accounts, up to the limit in effect (the
+  // client's own or the platform default; null = no limit).
   const workspace = await prisma.workspace.findUnique({
     where: { id: state.workspaceId },
     select: { status: true, instagramAccountLimit: true },
@@ -55,6 +57,7 @@ export async function GET(request: NextRequest) {
   if (!workspace || workspace.status !== "ACTIVE") {
     return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
   }
+  const accountLimit = effectiveAccountLimit(workspace.instagramAccountLimit, await getDefaultAccountLimit());
 
   try {
     const redirectUri = `${baseUrl}/api/instagram/callback`;
@@ -116,9 +119,9 @@ export async function GET(request: NextRequest) {
       });
       if (!connection.allowed) continue;
       const alreadyHere = await prisma.instagramAccount.count({ where: { instagramId, workspaceId: state.workspaceId } });
-      if (!alreadyHere) {
+      if (!alreadyHere && accountLimit !== null) {
         const current = await prisma.instagramAccount.count({ where: { workspaceId: state.workspaceId } });
-        if (current >= workspace.instagramAccountLimit) {
+        if (current >= accountLimit) {
           limited = true;
           continue;
         }
@@ -167,7 +170,7 @@ export async function GET(request: NextRequest) {
 
     if (limited) {
       return NextResponse.redirect(
-        `${baseUrl}/accounts?instagram=limit&max=${workspace.instagramAccountLimit}&connected=${connected}`
+        `${baseUrl}/accounts?instagram=limit&max=${accountLimit}&connected=${connected}`
       );
     }
     if (!connected) {

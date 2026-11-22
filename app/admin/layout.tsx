@@ -32,7 +32,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin", label: t("Overview") },
     { href: "/admin/clients", label: t("Clients") },
     { href: "/admin/clients/new", label: t("New client") },
-    { href: "/admin/settings", label: t("Price") },
+    { href: "/admin/settings", label: t("Price and limits") },
   ];
   return (
     <I18nProvider locale={locale}>

@@ -29,7 +29,8 @@ export default function AccountsPage() {
   const { t, message } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [canManage, setCanManage] = useState(false);
-  const [accountLimit, setAccountLimit] = useState(1);
+  // null = no limit (the client follows a "no limit" default).
+  const [accountLimit, setAccountLimit] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export default function AccountsPage() {
       if (data.success) {
         setAccounts(data.data.instagramAccounts);
         setCanManage(Boolean(data.data.canManage));
-        setAccountLimit(Number(data.data.accountLimit) || 1);
+        setAccountLimit(typeof data.data.accountLimit === "number" ? data.data.accountLimit : null);
       } else {
         setError(message(data.error, "Could not load accounts"));
       }
@@ -95,11 +96,13 @@ export default function AccountsPage() {
     }
   }
 
-  const atLimit = accounts.length >= accountLimit;
-  const limitText = t(
-    accountLimit === 1 ? "Your plan allows {max} account. Contact support to increase it." : "Your plan allows {max} accounts. Contact support to increase it.",
-    { max: accountLimit }
-  );
+  const atLimit = accountLimit !== null && accounts.length >= accountLimit;
+  const limitText = accountLimit === null
+    ? ""
+    : t(
+        accountLimit === 1 ? "Your plan allows {max} account. Contact support to increase it." : "Your plan allows {max} accounts. Contact support to increase it.",
+        { max: accountLimit }
+      );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -115,7 +118,11 @@ export default function AccountsPage() {
             {t("The Instagram accounts your automations answer from. Turn an account off to pause all of its automations at once, without deleting anything.")}
           </p>
           {!loading && (
-            <p className="mt-1 text-xs text-muted">{t("{count} of {max} accounts", { count: accounts.length, max: accountLimit })}</p>
+            <p className="mt-1 text-xs text-muted">
+              {accountLimit === null
+                ? t(accounts.length === 1 ? "{count} account connected" : "{count} accounts connected", { count: accounts.length })
+                : t("{count} of {max} accounts", { count: accounts.length, max: accountLimit })}
+            </p>
           )}
         </div>
         {canManage && !loading && !atLimit && (

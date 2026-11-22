@@ -276,25 +276,64 @@ describe.skipIf(!databaseUrl)("admin area", () => {
     expect(await m.db.authToken.count({ where: { userId: ws.ownerId, purpose: "WELCOME" } })).toBe(1);
     expect((await audit(workspaceId))[0]).toMatchObject({ action: "client.create", actorEmail: ADMIN });
     expect((await clientsPost(req("/api/admin/clients", "POST", { name: "Xavier", email: "nova@loja.test", companyName: "Outra Loja" }))).status).toBe(409);
+    // Without a limit it follows the platform default.
+    const plain = (await (await clientsPost(req("/api/admin/clients", "POST", { name: "Padrão", email: "padrao@loja.test", companyName: "Loja Padrão" }))).json()).data;
+    expect((await m.db.workspace.findUniqueOrThrow({ where: { id: plain.workspaceId } })).instagramAccountLimit).toBeNull();
+    await m.db.workspace.update({ where: { id: plain.workspaceId }, data: { status: "DISABLED" } });
   });
 
-  it("the price is configurable and audited; revenue = Σ limit × price of ACTIVE clients only", async () => {
-    expect((await (await settingsGet()).json()).data.pricePerAccountCents).toBe(19900);
+  it("estimated revenue, ACTIVE clients only: with a limit = limit × price; without = connected accounts × price", async () => {
+    expect((await (await settingsGet()).json()).data).toEqual({ pricePerAccountCents: 19900, defaultInstagramAccountLimit: null });
     await settingsPut(req("/api/admin/settings", "PUT", { pricePerAccountCents: 25000 }));
     expect(await m.db.adminAuditLog.count({ where: { action: "settings.price" } })).toBe(1);
-    const data = (await (await overviewGet()).json()).data;
-    const active = await m.db.workspace.findMany({ where: { status: "ACTIVE" } });
-    const expected = active.reduce((sum, ws) => sum + ws.instagramAccountLimit * (ws.pricePerAccountCents ?? 25000), 0);
-    expect(data.estimatedRevenueCents).toBe(expected);
-    // The disabled client (limit 2 × R$ 99) is not counted.
-    expect(data.clientsByStatus.DISABLED).toBe(1);
-    expect(data.pricePerAccountCents).toBe(25000);
-    expect(data.accounts).toEqual({ connected: 1, switchedOn: 1 });
+
+    // A client without a limit (follows the "no limit" default), own price R$ 100, two accounts.
+    await m.db.user.create({ data: { id: "u_unl", email: "semlimite@loja.test", emailVerified: new Date() } });
+    await m.db.workspace.create({ data: { id: "w_unl", name: "Sem Limite LTDA", ownerId: "u_unl", pricePerAccountCents: 10000, members: { create: { userId: "u_unl", role: "OWNER" } } } });
+    await m.db.instagramAccount.createMany({ data: [
+      { id: "acc_u1", workspaceId: "w_unl", instagramId: "ig_u1", username: "u1", accessToken: "x" },
+      { id: "acc_u2", workspaceId: "w_unl", instagramId: "ig_u2", username: "u2", accessToken: "x", automationsEnabled: false },
+    ] });
+
+    // ACTIVE now: w_pending (default, 0 accounts), w_active (own 5), Nova Loja (own 2), w_unl (default, 2 accounts).
+    // w_disabled (own 2 × R$ 99) does not count.
+    let data = (await (await overviewGet()).json()).data;
+    expect(data.estimatedRevenueCents).toBe(0 * 25000 + 5 * 25000 + 2 * 25000 + 2 * 10000);
+    expect(data.billableAccounts).toBe(0 + 5 + 2 + 2);
+    expect([data.limitedClients, data.unlimitedClients, data.defaultAccountLimit]).toEqual([2, 2, null]);
+
+    // A numeric default turns the clients that follow it into limited ones.
+    await settingsPut(req("/api/admin/settings", "PUT", { defaultInstagramAccountLimit: 3 }));
+    data = (await (await overviewGet()).json()).data;
+    expect(data.estimatedRevenueCents).toBe(3 * 25000 + 5 * 25000 + 2 * 25000 + 3 * 10000);
+    expect([data.limitedClients, data.unlimitedClients, data.defaultAccountLimit]).toEqual([4, 0, 3]);
+    expect(await m.db.adminAuditLog.findFirst({ where: { action: "settings.defaultLimit" } })).toMatchObject({
+      before: { defaultInstagramAccountLimit: null },
+      after: { defaultInstagramAccountLimit: 3 },
+    });
+    // Back to "no limit".
+    await settingsPut(req("/api/admin/settings", "PUT", { defaultInstagramAccountLimit: null }));
+    expect((await (await settingsGet()).json()).data.defaultInstagramAccountLimit).toBeNull();
+    expect((await settingsPut(req("/api/admin/settings", "PUT", { defaultInstagramAccountLimit: 0 }))).status).toBe(400);
+  });
+
+  it("a client goes back to following the default (null), audited, and the detail shows the limit in effect", async () => {
+    await settingsPut(req("/api/admin/settings", "PUT", { defaultInstagramAccountLimit: 4 }));
+    const res = await clientPatch(req("/api/admin/clients/w_active", "PATCH", { instagramAccountLimit: null }), params({ id: "w_active" }));
+    expect(res.status).toBe(200);
+    expect((await m.db.workspace.findUniqueOrThrow({ where: { id: "w_active" } })).instagramAccountLimit).toBeNull();
+    const last = (await audit("w_active")).filter((e) => e.action === "client.limit").pop();
+    expect([last?.before, last?.after]).toEqual([{ instagramAccountLimit: 5 }, { instagramAccountLimit: null }]);
+    const detail = (await (await clientGet(req("/api/admin/clients/w_active"), params({ id: "w_active" }))).json()).data;
+    expect(detail.accountLimit).toEqual({ own: null, platformDefault: 4, effective: 4 });
+    await settingsPut(req("/api/admin/settings", "PUT", { defaultInstagramAccountLimit: null }));
   });
 
   it("lists and searches clients by status, company, e-mail and document", async () => {
     const list = async (query: string) => (await (await clientsGet(req(`/api/admin/clients${query}`))).json()).data;
-    expect((await list("?status=DISABLED")).rows.map((r: { id: string }) => r.id)).toEqual(["w_disabled"]);
+    const disabled = (await list("?status=DISABLED")).rows as Array<{ id: string; status: string }>;
+    expect(disabled.map((r) => r.id)).toContain("w_disabled");
+    expect(disabled.every((r) => r.status === "DISABLED")).toBe(true);
     expect((await list("?q=nova")).total).toBe(1);
     expect((await list("?q=11.222.333/0001-81")).total).toBe(1);
     expect((await list("?q=PENDENTE@")).rows[0].id).toBe("w_pending");
