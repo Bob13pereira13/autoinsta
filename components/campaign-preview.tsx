@@ -50,6 +50,8 @@ interface CampaignPreviewProps {
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes?: number;
+  /** Wait before the first DM (0 = at once). */
+  dmDelaySeconds?: number;
 }
 
 const SAMPLE_USER = "username";
@@ -127,9 +129,12 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
   const linkButtons = showCard
     ? [props.linkButtonLabel || DEFAULT_LINK_BUTTON_LABEL, ...(props.hasSecondLink ? [props.secondLinkButtonLabel || DEFAULT_LINK_BUTTON_LABEL] : [])]
     : [];
+  const delay = props.dmDelaySeconds ?? 0;
+  const delayLabel = delay === 30 ? t("30 seconds") : delay === 60 ? t("1 minute") : delay === 300 ? t("5 minutes") : null;
   return (
     <div className="flex flex-col gap-2.5">
       {props.inbound !== undefined && <Outgoing>{props.inbound}</Outgoing>}
+      {delayLabel && <p className="py-0.5 text-center text-[11px] text-faint">{t("{delay} later", { delay: delayLabel })}</p>}
       {props.opening && (
         <>
           <Incoming buttons={[props.openingDmButtonLabel || t("Button label")]}>{props.openingDmMessage || t("Your opening message…")}</Incoming>

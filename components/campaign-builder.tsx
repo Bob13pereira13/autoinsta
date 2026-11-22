@@ -36,6 +36,7 @@ import {
 import { automationSummary } from "@/lib/automation/summary";
 import { editorWarnings, mainMessageKind, type EditorDraft, type WarningId } from "@/lib/automation/editor-warnings";
 import { messageLimit } from "@/lib/automation/message-limits";
+import { deliveryModeOf, deliverySequence, DM_DELAY_OPTIONS, type DeliveryMode, type DmDelay } from "@/lib/automation/delivery";
 import { accountProblem } from "@/lib/automation/account-status";
 import { findConflicts, sharedNextReel, type Conflict, type ConflictCandidate } from "@/lib/automation/conflicts";
 import {
@@ -89,6 +90,7 @@ interface LoadedCampaign {
   triggerStoryReplies?: boolean;
   triggerStoryMentions?: boolean;
   replyCooldownHours?: number;
+  dmDelaySeconds?: number;
   media?: Array<{ id: string; slot: string | null; kind: "IMAGE" | "VIDEO"; url: string; originalName?: string | null }>;
   dmMessage: string;
   openingDmEnabled: boolean;
@@ -200,6 +202,12 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const [triggerStoryReplies, setTriggerStoryReplies] = useState(true);
   const [triggerStoryMentions, setTriggerStoryMentions] = useState(false);
   const [replyCooldownHours, setReplyCooldownHours] = useState(24);
+  // Step 3: the main message directly (default for new automations), or
+  // steps first (opening DM and/or follow request). Saved automations open on
+  // the mode their steps say.
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("direct");
+  // Wait before the first DM, in seconds.
+  const [dmDelay, setDmDelay] = useState<DmDelay>(0);
   const [media, setMedia] = useState<Record<MediaSlot, BuilderMedia[]>>(EMPTY_MEDIA);
   const [storageVersion, setStorageVersion] = useState(0);
   const isComments = automationType === "COMMENTS";
@@ -309,6 +317,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         setTriggerStoryReplies(c.triggerStoryReplies ?? true);
         setTriggerStoryMentions(c.triggerStoryMentions ?? false);
         setReplyCooldownHours(c.replyCooldownHours ?? 24);
+        setDmDelay((DM_DELAY_OPTIONS as readonly number[]).includes(c.dmDelaySeconds ?? 0) ? ((c.dmDelaySeconds ?? 0) as DmDelay) : 0);
+        setDeliveryMode(deliveryModeOf({ type: c.type ?? "COMMENTS", openingDmEnabled: c.openingDmEnabled, requireFollow: c.requireFollow }));
         const loaded: Record<MediaSlot, BuilderMedia[]> = { FOLLOW_PROMPT: [], MAIN: [], FOLLOW_UP: [] };
         for (const m of c.media ?? []) {
           if (m.slot === "FOLLOW_PROMPT" || m.slot === "MAIN" || m.slot === "FOLLOW_UP") {
@@ -390,6 +400,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     setPublicReplyMessages(row.publicReply ? [row.publicReply] : [""]);
     const hasOpening = Boolean(row.openingDmMessage);
     setOpeningDmEnabled(hasOpening);
+    setRequireFollow(false);
+    setDeliveryMode(hasOpening ? "steps" : "direct");
     setOpeningDmMessage(row.openingDmMessage ?? "");
     setOpeningDmButtonLabel(
       row.openingDmButtonLabel || (hasOpening ? DEFAULT_OPENING_BUTTON_LABEL : "")
@@ -427,11 +439,54 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     automationType === "COMMENTS" ? t("Comments") : automationType === "STORIES" ? t("Stories") : t("Direct");
   // Step 2's option without a keyword, named after what arrives.
   const anyLabel = isComments ? t("Any comment") : automationType === "STORIES" ? t("Any reply") : t("Any message");
-  const totalMedia = media.FOLLOW_PROMPT.length + media.MAIN.length + media.FOLLOW_UP.length;
-  const mediaBlockedInComments = isComments && !openingDmEnabled && totalMedia > 0;
-  const commentsMediaNote = isComments && !openingDmEnabled
-    ? t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM in this step to add media.")
+  // Only the media that will be saved: a step that is off takes none.
+  const totalMedia =
+    media.MAIN.length + (requireFollow ? media.FOLLOW_PROMPT.length : 0) + (followUpEnabled ? media.FOLLOW_UP.length : 0);
+  // Comments with no step ("Direct"): the one reply to a comment is text with
+  // a link button, so images and videos cannot go. With a step they go after
+  // the tap. Without the opening DM, the follow request is that one reply too.
+  const commentsDirect = isComments && !openingDmEnabled && !requireFollow;
+  const mediaBlockedInComments = commentsDirect && totalMedia > 0;
+  const commentsMediaNote = commentsDirect
+    ? t("In Comments, Instagram only lets you send one message to the person who commented: text with a link button. To send an image or video, use “With steps first” (the media goes after the person taps the button) or put the content in the link.")
     : null;
+  const followPromptMediaNote =
+    isComments && !openingDmEnabled ? t("Without the opening DM, the follow request is the reply to the comment: text only.") : null;
+
+  // Switching mode: "Direct" turns both steps off; "With steps first" turns
+  // one on (the opening DM in Comments, the follow request elsewhere) so the
+  // automation is never left in steps mode with no step.
+  function changeDeliveryMode(mode: DeliveryMode) {
+    setDeliveryMode(mode);
+    if (mode === "direct") {
+      setOpeningDmEnabled(false);
+      setRequireFollow(false);
+    } else if (!(isComments && openingDmEnabled) && !requireFollow) {
+      if (isComments) setOpeningDmEnabled(true);
+      else setRequireFollow(true);
+    }
+  }
+  const sequence = deliverySequence({
+    type: automationType,
+    publicReply: isComments && publicReplyEnabled,
+    openingDm: isComments && openingDmEnabled,
+    requireFollow,
+    delaySeconds: dmDelay,
+    followUp: followUpEnabled,
+    followUpMinutes: followUpDelayMinutes,
+  });
+  const delayText = (seconds: number) =>
+    seconds === 30 ? t("after 30 seconds") : seconds === 60 ? t("after 1 minute") : seconds === 300 ? t("after 5 minutes") : t("right away");
+  const sequenceText = sequence
+    .map((item) => {
+      if (item.kind === "publicReply") return t("public reply on the comment");
+      if (item.kind === "followUp") return item.minutes > 0 ? t("thank-you {count} min later", { count: item.minutes }) : t("thank-you right after");
+      const label = item.kind === "opening" ? t("opening DM") : item.kind === "follow" ? t("follow request") : t("main message");
+      if (!item.firstDm) return label;
+      return `${item.kind === "opening" ? label : t("{item} by DM", { item: label })} ${delayText(item.delaySeconds)}`;
+    })
+    .join(" → ");
+  const sequenceLine = sequenceText.charAt(0).toUpperCase() + sequenceText.slice(1);
   const summary = automationSummary(
     { t },
     {
@@ -450,6 +505,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       followUpMinutes: followUpDelayMinutes,
       publicReply: isComments && publicReplyEnabled,
       cooldownHours: replyCooldownHours,
+      dmDelaySeconds: dmDelay,
     }
   );
   const setSlotMedia = (slot: MediaSlot) => (items: BuilderMedia[]) =>
@@ -462,6 +518,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const hasSecondLink = secondLinkOpen && Boolean(secondaryDestinationUrl.trim());
   const draft: EditorDraft = {
     type: automationType,
+    deliveryMode,
     postScope,
     selectedPostCount: selectedPosts.length,
     matchAnyWord: matchMode === "any",
@@ -481,6 +538,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     hasSecondLink,
     secondaryButtonLabel,
     mediaCount: totalMedia,
+    followPromptMediaCount: requireFollow ? media.FOLLOW_PROMPT.length : 0,
     followUpEnabled,
     followUpMessage,
     followUpDelayMinutes,
@@ -547,6 +605,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       triggerStoryReplies,
       triggerStoryMentions: triggerStoryMentions && matchMode === "any",
       replyCooldownHours,
+      dmDelaySeconds: dmDelay,
       media: includedSlots.flatMap((slot) => media[slot].map((m, position) => ({ id: m.id, slot, position }))),
       dmMessage,
       openingDmEnabled: isComments && openingDmEnabled,
@@ -986,85 +1045,138 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         <Step number={3} title={t("What the person receives")}>
           <StorageUsage version={storageVersion} />
 
-          {isComments && (
+          {/* The order of what the person receives, live. */}
+          <p data-sequence className="rounded-control border border-border-subtle bg-surface px-3.5 py-2.5 text-[13px] text-foreground">
+            <span className="font-semibold text-heading">{t("Order:")}</span> {sequenceLine}
+          </p>
+
+          <RadioCards
+            name="delivery-mode"
+            labelledBy="step-3"
+            value={deliveryMode}
+            onChange={changeDeliveryMode}
+            options={[
+              {
+                value: "direct",
+                title: t("Direct: the person gets it without tapping anything"),
+                description: isComments
+                  ? t("The main message goes by DM as the reply to the comment: text with a link button.")
+                  : t("Text, images and videos go straight into the conversation."),
+              },
+              {
+                value: "steps",
+                title: isComments ? t("With steps first: opening DM and/or follow request") : t("With steps first: follow request"),
+                description: t("The person taps a button first; the main message goes after the tap."),
+              },
+            ]}
+          />
+          {notes("steps")}
+
+          {deliveryMode === "steps" && (
+            <div className="space-y-3">
+            {isComments && (
+              <div className="rounded-control border border-border-subtle bg-surface p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-semibold text-heading">{t("Optional step: opening DM with a button")}</span>
+                  <Toggle label={t("Optional step: opening DM with a button")} on={openingDmEnabled} onToggle={() => setOpeningDmEnabled(!openingDmEnabled)} />
+                </div>
+                <Hint className="mt-1.5">
+                  {t("The first reply to a comment can only be text (Instagram's rule). With the opening DM, the person taps the button, the conversation opens and then the link, images and videos go. If they reply by typing instead of tapping, the main message goes all the same. If they only read it and do nothing, Instagram does not let you send anything else.")}
+                </Hint>
+                {openingDmEnabled && (
+                  <div className="mt-3 space-y-2">
+                    <textarea
+                      value={openingDmMessage}
+                      onChange={(e) => setOpeningDmMessage(e.target.value)}
+                      placeholder={t("Hey there! I'm so happy you're here 😊")}
+                      rows={3}
+                      aria-label={t("Opening DM text")}
+                      className="field resize-none"
+                      maxLength={1000}
+                    />
+                    <Counter limit={messageLimit(openingDmMessage, "button")} />
+                    {notes("opening")}
+                    <input
+                      value={openingDmButtonLabel}
+                      onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
+                      placeholder={t("Send me the link")}
+                      aria-label={t("Button label")}
+                      className="field"
+                      maxLength={20}
+                    />
+                    {notes("openingLabel")}
+                    <Hint>{t("This first message is text only: Instagram does not allow images or videos in it.")}</Hint>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="rounded-control border border-border-subtle bg-surface p-3.5">
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-heading">{t("an opening DM with a button")}</span>
-                <Toggle label={t("an opening DM with a button")} on={openingDmEnabled} onToggle={() => setOpeningDmEnabled(!openingDmEnabled)} />
+                <span className="font-semibold text-heading">{t("Optional step: ask to follow first")}</span>
+                <Toggle label={t("Optional step: ask to follow first")} on={requireFollow} onToggle={() => setRequireFollow(!requireFollow)} />
               </div>
               <Hint className="mt-1.5">
-                {t("The first reply to a comment can only be text (Instagram's rule). With the opening DM, the person taps the button, the conversation opens and then the link, images and videos go. If they read it and don't tap, the main message goes by itself 5 minutes later.")}
+                {t("Before the content, the person gets a request to follow with a button. They follow, tap the button and the app checks with Instagram (if it doesn't show yet, it checks again for up to 1 minute). If Instagram can't confirm, the content goes anyway. Asking to follow usually reduces how many people reach the content.")}
               </Hint>
-              {openingDmEnabled && (
+              {requireFollow && (
                 <div className="mt-3 space-y-2">
                   <textarea
-                    value={openingDmMessage}
-                    onChange={(e) => setOpeningDmMessage(e.target.value)}
-                    placeholder={t("Hey there! I'm so happy you're here 😊")}
+                    value={followPromptMessage}
+                    onChange={(e) => setFollowPromptMessage(e.target.value)}
+                    placeholder={DEFAULT_FOLLOW_PROMPT_MESSAGE}
                     rows={3}
-                    aria-label={t("Opening DM text")}
+                    aria-label={t("Follow request text")}
                     className="field resize-none"
                     maxLength={1000}
                   />
-                  <Counter limit={messageLimit(openingDmMessage, "button")} />
-                  {notes("opening")}
+                  <Counter limit={messageLimit(followPromptMessage, "button")} />
+                  {notes("follow")}
                   <input
-                    value={openingDmButtonLabel}
-                    onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
-                    placeholder={t("Send me the link")}
+                    value={followPromptButtonLabel}
+                    onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
+                    placeholder={DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
                     aria-label={t("Button label")}
                     className="field"
                     maxLength={20}
                   />
-                  {notes("openingLabel")}
-                  <Hint>{t("This first message is text only: Instagram does not allow images or videos in it.")}</Hint>
+                  {notes("followLabel")}
+                  <MediaPicker
+                    items={media.FOLLOW_PROMPT}
+                    onChange={setSlotMedia("FOLLOW_PROMPT")}
+                    onStorageChange={bumpStorage}
+                    blockedReason={followPromptMediaNote}
+                  />
                 </div>
               )}
             </div>
+            </div>
           )}
 
-          <div className="rounded-control border border-border-subtle bg-surface p-3.5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-semibold text-heading">{t("follow me to unlock")}</span>
-              <Toggle label={t("follow me to unlock")} on={requireFollow} onToggle={() => setRequireFollow(!requireFollow)} />
-            </div>
+          <div className="rounded-control border border-border-subtle bg-surface px-3.5 py-3">
+            <label htmlFor="dm-delay" className="font-semibold text-heading">
+              {t("Wait before sending the DM")}
+            </label>
+            <select
+              id="dm-delay"
+              value={dmDelay}
+              onChange={(e) => setDmDelay(Number(e.target.value) as DmDelay)}
+              className="field mt-2 sm:max-w-60"
+            >
+              <option value={0}>{t("Right away")}</option>
+              <option value={30}>{t("30 seconds")}</option>
+              <option value={60}>{t("1 minute")}</option>
+              <option value={300}>{t("5 minutes")}</option>
+            </select>
             <Hint className="mt-1.5">
-              {t("Before the content, the person gets a request to follow with a button. They follow, tap the button and the app checks with Instagram (if it doesn't show yet, it checks again for up to 1 minute). If Instagram can't confirm, the content goes anyway. Asking to follow usually reduces how many people reach the content.")}
+              {isComments
+                ? t("Applies to the first DM. The public reply on the comment goes right away. If someone from your team answers the person in the Direct during the wait, the DM is not sent.")
+                : t("Applies to the first reply. If someone from your team answers the person during the wait, the automation does not answer.")}
             </Hint>
-            {requireFollow && (
-              <div className="mt-3 space-y-2">
-                <textarea
-                  value={followPromptMessage}
-                  onChange={(e) => setFollowPromptMessage(e.target.value)}
-                  placeholder={DEFAULT_FOLLOW_PROMPT_MESSAGE}
-                  rows={3}
-                  aria-label={t("Follow request text")}
-                  className="field resize-none"
-                  maxLength={1000}
-                />
-                <Counter limit={messageLimit(followPromptMessage, "button")} />
-                {notes("follow")}
-                <input
-                  value={followPromptButtonLabel}
-                  onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
-                  placeholder={DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
-                  aria-label={t("Button label")}
-                  className="field"
-                  maxLength={20}
-                />
-                {notes("followLabel")}
-                <MediaPicker
-                  items={media.FOLLOW_PROMPT}
-                  onChange={setSlotMedia("FOLLOW_PROMPT")}
-                  onStorageChange={bumpStorage}
-                  blockedReason={commentsMediaNote}
-                />
-              </div>
-            )}
           </div>
 
           <div className="space-y-2.5 rounded-control border border-border-subtle bg-surface p-3.5">
-            <span className="font-semibold text-heading">{t("the main message")}</span>
+            <span className="font-semibold text-heading">{t("Main message (always sent)")}</span>
             <Hint>
               {t("{username} becomes the person's @. With a link, it goes as a button right below the message; {link} marks where the link goes if Instagram doesn't accept the button.", { link: "{link}", username: "{username}" })}
             </Hint>
@@ -1278,6 +1390,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             followUpEnabled={followUpEnabled}
             followUpMessage={followUpMessage}
             followUpDelayMinutes={followUpDelayMinutes}
+            dmDelaySeconds={dmDelay}
           />
       </div>
       </div>

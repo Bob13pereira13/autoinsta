@@ -137,6 +137,18 @@ describe("reconcileComments respects activation", () => {
     expect(enqueuedIds()).toEqual(["after_on"]);
   });
 
+  it("a DM cancelled because the team answered during the wait (dmDelaySeconds) is not swept again", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([campaign({ activeSince: ago(2) })]);
+    readComments.mockResolvedValue([comment("team_answered", 0.5), comment("waiting", 0.4), comment("new", 0.3)]);
+    mockPrisma.dmLog.findMany.mockResolvedValue([
+      { commentId: "team_answered", status: "SKIPPED_HUMAN_ACTIVE", attempts: 0, errorMessage: null, dmDeliveryUnconfirmed: false, publicReplySentAt: null, publicReplyDeliveryUnconfirmed: false },
+      // Still waiting: picked up again (the worker collapses it onto the same delayed job).
+      { commentId: "waiting", status: "PENDING", attempts: 0, errorMessage: null, dmDeliveryUnconfirmed: false, publicReplySentAt: null, publicReplyDeliveryUnconfirmed: false },
+    ]);
+    await reconcileComments();
+    expect(enqueuedIds()).toEqual(["waiting", "new"]);
+  });
+
   it("passes the cutoff to the comment reader so older pages are not fetched", async () => {
     mockPrisma.automation.findMany.mockResolvedValue([campaign({ activeSince: ago(2) })]);
     readComments.mockResolvedValue([]);

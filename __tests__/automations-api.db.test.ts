@@ -82,13 +82,13 @@ describe.skipIf(!databaseUrl)("automations API with channels and media", () => {
     expect(listed.media[0].storageKey).toBeUndefined();
   });
 
-  it("refuses media in a Comments automation without the opening DM", async () => {
+  it("refuses media in a Comments automation with no step (Direct)", async () => {
     const image = await storeUpload({ workspaceId: "w1", buffer: JPEG });
     const res = await POST(req("POST", {
       name: "Post", type: "COMMENTS", matchAnyPost: true, keywords: ["LINK"], dmMessage: "Aqui", media: [{ id: image.id, slot: "MAIN" }],
     }));
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/opening DM/);
+    expect((await res.json()).error).toMatch(/With steps first/);
   });
 
   it("refuses media that belongs to another workspace", async () => {

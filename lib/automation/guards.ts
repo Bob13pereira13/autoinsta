@@ -144,3 +144,79 @@ export async function handleEcho({
   await recordHumanMessage({ accountConnectionId, recipientId, at });
   return "human";
 }
+
+/*
+ * A wait before the DM (Automation.dmDelaySeconds) must not end with the bot
+ * talking over a person from the team. The echo of a message the account sent
+ * is only classified 20 s after it arrives (it waits for the bot's own mid to
+ * be stored), so each echo is also noted here the moment it arrives, and the
+ * delayed send looks at both.
+ */
+const ECHO_NOTE_TTL_SECONDS = 15 * 60;
+const echoNoteKey = (accountConnectionId: string, recipientId: string) => `echoes:${accountConnectionId}:${recipientId}`;
+
+/** Note an echo as it arrives (before it is classified). Best-effort. */
+export async function noteEcho({
+  accountConnectionId,
+  recipientId,
+  messageId,
+  at = new Date(),
+}: {
+  accountConnectionId: string;
+  recipientId: string;
+  messageId: string;
+  at?: Date;
+}): Promise<void> {
+  try {
+    const redis = getRedisConnection();
+    const key = echoNoteKey(accountConnectionId, recipientId);
+    await redis.lpush(key, JSON.stringify({ mid: messageId, at: at.getTime() }));
+    await redis.ltrim(key, 0, 49);
+    await redis.expire(key, ECHO_NOTE_TTL_SECONDS);
+  } catch (err) {
+    console.warn("[guards] Could not note echo:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Did a person from the account message this recipient since `since` (when a
+ * delayed DM was scheduled)? Classified echoes (ConversationActivity) and
+ * echoes noted on arrival that are not one of the bot's own messages count.
+ */
+export async function humanRepliedSince({
+  accountConnectionId,
+  recipientId,
+  since,
+}: {
+  accountConnectionId: string;
+  recipientId: string;
+  since: Date;
+}): Promise<boolean> {
+  const activity = await prisma.conversationActivity.findUnique({
+    where: { instagramAccountId_recipientId: { instagramAccountId: accountConnectionId, recipientId } },
+    select: { lastHumanMessageAt: true },
+  });
+  if (activity && activity.lastHumanMessageAt.getTime() >= since.getTime()) return true;
+
+  let notes: Array<{ mid: string; at: number }> = [];
+  try {
+    const raw = await getRedisConnection().lrange(echoNoteKey(accountConnectionId, recipientId), 0, -1);
+    notes = raw
+      .map((entry) => {
+        try {
+          return JSON.parse(entry) as { mid: string; at: number };
+        } catch {
+          return null;
+        }
+      })
+      .filter((n): n is { mid: string; at: number } => Boolean(n?.mid) && n!.at >= since.getTime());
+  } catch {
+    // Redis unavailable: the classified echoes above are all we have.
+    return false;
+  }
+  if (!notes.length) return false;
+  const bot = await prisma.botMessage.findMany({ where: { mid: { in: notes.map((n) => n.mid) } }, select: { mid: true } });
+  const botMids = new Set(bot.map((b) => b.mid));
+  return notes.some((n) => !botMids.has(n.mid));
+}
+

@@ -11,6 +11,7 @@ import { accountNeedsReconnect, accountProblem } from "@/lib/automation/account-
 /** A Comments automation that raises nothing. */
 const ok: EditorDraft = {
   type: "COMMENTS",
+  deliveryMode: "direct",
   postScope: "posts",
   selectedPostCount: 1,
   matchAnyWord: false,
@@ -156,9 +157,25 @@ describe("step 3 — What the person receives", () => {
     toggles("labelTooLong", "error", { hasSecondLink: true, secondaryButtonLabel: "x".repeat(21) }, { secondaryButtonLabel: "Site" });
   });
 
-  it("media in Comments needs the opening DM", () => {
-    toggles("mediaWithoutOpening", "error", { mediaCount: 1 }, { openingDmEnabled: true, openingDmMessage: "Oi", openingDmButtonLabel: "Quero" });
-    expect(has({ ...ok, type: "DIRECT", mediaCount: 2 }, "mediaWithoutOpening")).toBeUndefined();
+  it("media in Comments: refused in “Direct” (no step), fine with the opening DM or the follow request", () => {
+    toggles("mediaInDirectComments", "error", { mediaCount: 1 }, { openingDmEnabled: true, openingDmMessage: "Oi", openingDmButtonLabel: "Quero" });
+    toggles("mediaInDirectComments", "error", { mediaCount: 1 }, { requireFollow: true, deliveryMode: "steps" });
+    expect(has({ ...ok, type: "DIRECT", mediaCount: 2 }, "mediaInDirectComments")).toBeUndefined();
+    expect(has({ ...ok, type: "STORIES", mediaCount: 2 }, "mediaInDirectComments")).toBeUndefined();
+  });
+
+  it("media on the follow request in Comments needs the opening DM (otherwise it is the text-only reply)", () => {
+    const follow = { deliveryMode: "steps" as const, requireFollow: true, followPromptMediaCount: 1 };
+    toggles("followMediaWithoutOpening", "error", follow, { openingDmEnabled: true, openingDmMessage: "Oi", openingDmButtonLabel: "Quero" });
+    toggles("followMediaWithoutOpening", "error", follow, { followPromptMediaCount: 0 });
+  });
+
+  it("“With steps first” needs at least one step on", () => {
+    toggles("stepsMissing", "error", { deliveryMode: "steps" }, { requireFollow: true });
+    toggles("stepsMissing", "error", { deliveryMode: "steps" }, { openingDmEnabled: true, openingDmMessage: "Oi", openingDmButtonLabel: "Quero" });
+    toggles("stepsMissing", "error", { deliveryMode: "steps" }, { deliveryMode: "direct" });
+    // Stories and Direct have no opening DM: it does not count there.
+    expect(has({ ...ok, type: "DIRECT", deliveryMode: "steps", openingDmEnabled: true }, "stepsMissing")?.tone).toBe("error");
   });
 
   it("thank-you: only after a button in Comments; late delay; {link} removed; 1000 bytes", () => {

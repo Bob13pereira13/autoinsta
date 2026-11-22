@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/client';
 import { ECHO_JOB_NAME, getDMQueue, MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from '@/lib/queue/client';
+import { noteEcho } from '@/lib/automation/guards';
 import { parseCommentEvents, parseEchoEvents, parseMessageEvents, parsePostbackEvents, parseReadEvents } from '@/lib/meta/webhook';
 import { Prisma, type InstagramProvider } from '@/app/generated/prisma/client';
 
@@ -139,6 +140,9 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
     for (const event of parseEchoEvents(payload as Parameters<typeof parseEchoEvents>[0])) {
       const account = accountMap.get(event.instagramAccountId);
       if (!account) continue;
+      // Noted at once, so a DM waiting to be sent (dmDelaySeconds) sees it
+      // before the delayed classification below runs.
+      await noteEcho({ accountConnectionId: account.id, recipientId: event.recipientId, messageId: event.messageId });
       await queue.add(
         ECHO_JOB_NAME,
         {
@@ -155,9 +159,11 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
       );
     }
 
-    // If a user reads the opening DM and never taps the button, deliver the
-    // same next-step DM after five minutes. The worker no-ops this delayed job
-    // if a real button tap has already delivered the reveal.
+    // If a user reads the opening DM and never taps the button, try the same
+    // next-step DM five minutes later. It only goes out when the person wrote
+    // back by typing (that opens the conversation); after a read alone Meta
+    // refuses it (see processPostback). The worker no-ops this delayed job if a
+    // real button tap has already delivered the reveal.
     const readEvents = parseReadEvents(
       payload as Parameters<typeof parseReadEvents>[0]
     );

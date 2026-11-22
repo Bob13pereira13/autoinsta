@@ -44,7 +44,9 @@ export const RULE_MESSAGES = {
   storyTrigger: "Choose at least one: story replies or story mentions",
   mentionNeedsAny: "Story mentions have no text, so they only work without keywords",
   commentsMediaNeedsOpening:
-    "In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media.",
+    "In Comments, Instagram only lets you send one message to the person who commented: text with a link button. To send an image or video, use “With steps first” (the media goes after the person taps the button) or put the content in the link.",
+  followPromptMediaNeedsOpening:
+    "Without the opening DM, the follow request is the reply to the comment: text only. Remove its images and videos or turn on the opening DM.",
   tooManyImages: "Up to 5 images per message",
   tooManyVideos: "Up to 1 video per message",
   ...TEXT_RULE_MESSAGES,
@@ -79,8 +81,15 @@ export function automationRuleIssues(input: RuleInput): RuleIssue[] {
   issues.push(...textRuleIssues(input));
 
   const media = input.media ?? [];
-  if (input.type === "COMMENTS" && media.length > 0 && !input.openingDmEnabled) {
+  // Comments: the first reply to a comment is a single text message, so media
+  // only goes after a tap — on the opening DM's button or on "Já sigo" of the
+  // follow request. Without either ("Direct" mode) it would never go.
+  if (input.type === "COMMENTS" && media.length > 0 && !input.openingDmEnabled && !input.requireFollow) {
     issues.push({ path: "media", message: RULE_MESSAGES.commentsMediaNeedsOpening });
+  }
+  // Without the opening DM, the follow request itself is that one text reply.
+  if (input.type === "COMMENTS" && input.requireFollow && !input.openingDmEnabled && media.some((m) => m.slot === "FOLLOW_PROMPT")) {
+    issues.push({ path: "media.FOLLOW_PROMPT", message: RULE_MESSAGES.followPromptMediaNeedsOpening });
   }
   for (const slot of MEDIA_SLOTS) {
     const inSlot = media.filter((m) => m.slot === slot);

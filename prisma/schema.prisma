@@ -325,6 +325,10 @@ model Automation {
   /// STORIES/DIRECT without keywords: reply to the same person at most once
   /// per this many hours.
   replyCooldownHours      Int            @default(24)
+  /// Wait before the first DM (any channel): 0, 30, 60 or 300 seconds. The
+  /// public reply to a comment still goes out at once. The DM is sent by a
+  /// delayed job that checks everything again when it runs.
+  dmDelaySeconds          Int            @default(0)
   /// Deprecated: replaced by DIRECT/STORIES automations (the migration that
   /// added `type` converted every true value). Kept, always false, so API v1
   /// readers keep the field.

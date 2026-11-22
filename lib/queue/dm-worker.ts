@@ -42,7 +42,7 @@ import {
   sendPrivateReplyWithLinkButton,
 } from "@/lib/automation/bot-send";
 import { isGuardedAutomation, selectAutomation, type TriggerEvent } from "@/lib/automation/select";
-import { claimReplyCooldown, handleEcho, isHumanConversationActive } from "@/lib/automation/guards";
+import { claimReplyCooldown, handleEcho, humanRepliedSince, isHumanConversationActive } from "@/lib/automation/guards";
 import { mediaPublicUrl } from "@/lib/media/urls";
 import {
   createInstagramContext,
@@ -469,7 +469,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     // Skip only when there is genuinely nothing left to do. A comment whose DM
     // already sent but whose public reply never posted (e.g. it hit a rate
     // limit) must still come back so the public reply can be retried.
-    if (existingLog?.status === "SKIPPED_PLAN_LIMIT") continue;
+    if (existingLog?.status === "SKIPPED_PLAN_LIMIT" || existingLog?.status === "SKIPPED_HUMAN_ACTIVE") continue;
     if (
       !needsDm &&
       (alreadyPublicReplied || existingLog?.publicReplyDeliveryUnconfirmed || !automation.publicReplyEnabled)
@@ -610,6 +610,45 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     // DM already sent on an earlier pass; the public reply retry above was all
     // this run needed. Don't re-send the DM.
     if (!needsDm) continue;
+
+    // Wait before the DM (dmDelaySeconds). The public reply above went out at
+    // once; the DM leg runs again as its own delayed job, so everything below
+    // (dedup, plan and hourly limits) and above (the account still on, the
+    // automation still active, the client still active) is checked when it is
+    // sent, not now. The job id carries the attempt count: a sweep during the
+    // wait collapses onto the same job, a retry after a failure gets its own.
+    const dmDelaySeconds = automation.dmDelaySeconds ?? 0;
+    if (dmDelaySeconds > 0 && !job.data.dmDelayed) {
+      await getDMQueue().add(
+        "process-comment",
+        { ...job.data, dmDelayed: true, dmScheduledAt: new Date().toISOString() },
+        {
+          delay: dmDelaySeconds * 1000,
+          jobId: `dmdelay_${instagramAccountId}_${commentId}_${existingLog?.attempts ?? 0}`,
+        }
+      );
+      continue;
+    }
+    // Someone from the team answered the person during the wait: the bot
+    // stays out of it (final, a later sweep does not send it either).
+    if (
+      job.data.dmDelayed &&
+      job.data.dmScheduledAt &&
+      (await humanRepliedSince({
+        accountConnectionId: automation.instagramAccountId,
+        recipientId: commenterId,
+        since: new Date(job.data.dmScheduledAt),
+      }))
+    ) {
+      await prisma.dmLog.update({
+        where: { automationId_commentId: { automationId: automation.id, commentId } },
+        data: {
+          status: "SKIPPED_HUMAN_ACTIVE",
+          errorMessage: "Not sent: someone from the account answered this person while the DM was waiting",
+        },
+      });
+      continue;
+    }
 
     // Meta allows exactly ONE private reply per comment, ever — across every
     // campaign. When several campaigns match the same comment (duplicated
@@ -1499,6 +1538,40 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
       create: { ...logBase, ...data },
       update: data,
     });
+
+  // Wait before the reply (dmDelaySeconds), as in processComment: the reply
+  // runs again as a delayed job, so the account, the automation, the guards
+  // below (team talking, cooldown) and the limits are checked when it is sent.
+  const dmDelaySeconds = automation.dmDelaySeconds ?? 0;
+  if (dmDelaySeconds > 0 && !job.data.dmDelayed) {
+    await writeLog({ status: "PENDING" });
+    await getDMQueue().add(
+      MESSAGE_JOB_NAME,
+      { ...job.data, dmDelayed: true, dmScheduledAt: new Date().toISOString() },
+      {
+        delay: dmDelaySeconds * 1000,
+        jobId: `dmdelay_${instagramAccountId}_${Buffer.from(messageId).toString("base64url")}`,
+      }
+    );
+    return;
+  }
+  // Someone from the team answered during the wait: no automatic reply, with
+  // or without a keyword.
+  if (
+    job.data.dmDelayed &&
+    job.data.dmScheduledAt &&
+    (await humanRepliedSince({
+      accountConnectionId: automation.instagramAccountId,
+      recipientId: senderId,
+      since: new Date(job.data.dmScheduledAt),
+    }))
+  ) {
+    await writeLog({
+      status: "SKIPPED_HUMAN_ACTIVE",
+      errorMessage: "Not sent: someone from the account answered this person while the reply was waiting",
+    });
+    return;
+  }
 
   if (!hasInstagramCredentials(automation.instagramAccount)) {
     await writeLog({ status: "FAILED", errorMessage: "No Instagram access token available" });

@@ -11,6 +11,7 @@
 import type { PostScope } from "@/lib/automation/editor-scope";
 import { postScopeBlocked, storyTriggerProblem } from "@/lib/automation/editor-scope";
 import { buttonTitleTooLong, limitState, messageLimit, type MessageLimit } from "@/lib/automation/message-limits";
+import { stepsMissing, type DeliveryMode } from "@/lib/automation/delivery";
 import { foldDiacritics, normalizeArabicScript, stripSpecialCharacters } from "@/lib/utils/keyword-matcher";
 
 export type WarningTone = "warning" | "danger" | "error";
@@ -20,6 +21,7 @@ export type WarningField =
   | "storyTriggers"
   | "keywords"
   | "match"
+  | "steps"
   | "opening"
   | "openingLabel"
   | "follow"
@@ -55,7 +57,9 @@ export type WarningId =
   | "labelTooLong"
   | "textNearLimit"
   | "textOverLimit"
-  | "mediaWithoutOpening"
+  | "stepsMissing"
+  | "mediaInDirectComments"
+  | "followMediaWithoutOpening"
   | "followUpWithoutButton"
   | "followUpLate"
   | "followUpLinkToken"
@@ -74,6 +78,8 @@ export interface EditorWarning {
 
 export interface EditorDraft {
   type: "COMMENTS" | "STORIES" | "DIRECT";
+  /** Step 3: the main message directly, or steps (opening DM / follow request) first. */
+  deliveryMode: DeliveryMode;
   postScope: PostScope;
   selectedPostCount: number;
   matchAnyWord: boolean;
@@ -93,6 +99,8 @@ export interface EditorDraft {
   hasSecondLink: boolean;
   secondaryButtonLabel: string;
   mediaCount: number;
+  /** Images and videos on the follow request. */
+  followPromptMediaCount?: number;
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes: number;
@@ -195,6 +203,9 @@ export function editorWarnings(draft: EditorDraft): EditorWarning[] {
   if (draft.type === "DIRECT" && anyWord) out.push({ id: "directAny", tone: "danger", field: "match" });
 
   // Step 3 — What the person receives.
+  if (stepsMissing({ type: draft.type, mode: draft.deliveryMode, openingDmEnabled: draft.openingDmEnabled, requireFollow: draft.requireFollow })) {
+    out.push({ id: "stepsMissing", tone: "error", field: "steps" });
+  }
   const openingOn = isComments && draft.openingDmEnabled;
   if (openingOn) {
     if (!draft.openingDmMessage.trim() || !draft.openingDmButtonLabel.trim()) {
@@ -222,7 +233,14 @@ export function editorWarnings(draft: EditorDraft): EditorWarning[] {
   if (draft.hasLink && draft.hasSecondLink && buttonTitleTooLong(draft.secondaryButtonLabel)) {
     out.push({ id: "labelTooLong", tone: "error", field: "secondLinkLabel" });
   }
-  if (isComments && !draft.openingDmEnabled && draft.mediaCount > 0) out.push({ id: "mediaWithoutOpening", tone: "error", field: "media" });
+  // Comments with no step ("Direct"): the one reply to a comment is text, so
+  // media would never go. With a step it goes after the tap.
+  if (isComments && !draft.openingDmEnabled && !draft.requireFollow && draft.mediaCount > 0) {
+    out.push({ id: "mediaInDirectComments", tone: "error", field: "media" });
+  }
+  if (isComments && draft.requireFollow && !draft.openingDmEnabled && (draft.followPromptMediaCount ?? 0) > 0) {
+    out.push({ id: "followMediaWithoutOpening", tone: "error", field: "follow" });
+  }
   if (draft.followUpEnabled) {
     // In Comments the first reply is the only message until the person taps a button.
     if (isComments && !draft.openingDmEnabled && !draft.requireFollow) {

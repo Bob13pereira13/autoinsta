@@ -308,6 +308,9 @@ async function sweepCampaign({
     });
     const handledSet = new Set(logs.filter((log) => {
       const dmStopped = log.status === "SENT" || log.status === "SKIPPED_PLAN_LIMIT" ||
+        // Cancelled because the team answered during the wait (dmDelaySeconds):
+        // a later sweep must not send it after all.
+        log.status === "SKIPPED_HUMAN_ACTIVE" ||
         log.dmDeliveryUnconfirmed || log.attempts >= MAX_COMMENT_SEND_ATTEMPTS ||
         (log.status === "FAILED" && hasLegacyUnconfirmedDelivery(log.errorMessage));
       const replyStopped = !automation.publicReplyEnabled ||

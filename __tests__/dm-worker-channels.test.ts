@@ -23,7 +23,7 @@ const m = vi.hoisted(() => ({
     getUserUsername: vi.fn(),
   },
   rate: { reserveDMSlot: vi.fn(), releaseDMSlot: vi.fn(), reserveSendSlots: vi.fn(), countSendCalls: vi.fn() },
-  guards: { claimReplyCooldown: vi.fn(), isHumanConversationActive: vi.fn(), handleEcho: vi.fn(), recordBotMessage: vi.fn() },
+  guards: { claimReplyCooldown: vi.fn(), isHumanConversationActive: vi.fn(), handleEcho: vi.fn(), recordBotMessage: vi.fn(), humanRepliedSince: vi.fn() },
   queueAdd: vi.fn(),
 }));
 
@@ -107,6 +107,7 @@ beforeEach(() => {
   m.rate.reserveSendSlots.mockResolvedValue(true);
   m.guards.claimReplyCooldown.mockResolvedValue({ allowed: true, release: vi.fn() });
   m.guards.isHumanConversationActive.mockResolvedValue(false);
+  m.guards.humanRepliedSince.mockResolvedValue(false);
 });
 
 function lastLog() {
@@ -290,6 +291,113 @@ describe("default texts are in Portuguese", () => {
     const [, , , text, buttons] = m.meta.sendDirectMessageWithLinkButton.mock.calls[0];
     expect(text).toBe("Aqui está o seu link:");
     expect(buttons[0].title).toBe("Abrir link");
+  });
+});
+
+describe("wait before the DM (dmDelaySeconds)", () => {
+  const comment = (data: Record<string, unknown> = {}): Job => ({
+    data: { instagramAccountId: "ig_1", commentId: "c9", commentText: "quero o LINK", commenterId: "person_1", commenterName: "ana", mediaId: "post1", ...data },
+    id: "job_c9",
+    attemptsMade: 0,
+  });
+  const commentAutomation = (over: Record<string, unknown> = {}) =>
+    automation({ type: "COMMENTS", matchAnyPost: true, keywords: ["LINK"], publicReplyEnabled: true, publicReplyMessages: ["Te mandei na DM!"], dmMessage: "Aqui está", ...over });
+
+  it("Comments: the public reply goes at once; the DM is a BullMQ job delayed by the chosen time", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    await processor()(comment());
+    expect(m.meta.sendCommentReply).toHaveBeenCalledTimes(1);
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
+    expect(m.queueAdd).toHaveBeenCalledTimes(1);
+    const [name, data, opts] = m.queueAdd.mock.calls[0];
+    expect(name).toBe("process-comment");
+    expect(data).toMatchObject({ commentId: "c9", dmDelayed: true });
+    expect(Date.parse(data.dmScheduledAt)).not.toBeNaN();
+    expect(opts).toEqual({ delay: 30_000, jobId: "dmdelay_ig_1_c9_0" });
+    // Nothing counted against the limits yet: they are checked when it is sent.
+    expect(m.rate.reserveDMSlot).not.toHaveBeenCalled();
+  });
+
+  it("Comments: the delayed pass sends the DM (limits checked then), without a second public reply", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: new Date() });
+    await processor()(comment({ dmDelayed: true, dmScheduledAt: new Date(Date.now() - 30_000).toISOString() }));
+    expect(m.guards.humanRepliedSince).toHaveBeenCalledWith(expect.objectContaining({ recipientId: "person_1" }));
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
+    expect(m.rate.reserveDMSlot).toHaveBeenCalled();
+    expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(m.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("Comments: someone from the team answered during the wait — nothing is sent, and it is final", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: new Date() });
+    m.guards.humanRepliedSince.mockResolvedValue(true);
+    await processor()(comment({ dmDelayed: true, dmScheduledAt: new Date(Date.now() - 60_000).toISOString() }));
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
+    expect(m.rate.reserveDMSlot).not.toHaveBeenCalled();
+    expect(m.prisma.dmLog.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "SKIPPED_HUMAN_ACTIVE" }) }));
+    // A later pass (e.g. the comment sweep) leaves it alone.
+    vi.clearAllMocks();
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "SKIPPED_HUMAN_ACTIVE", attempts: 0, publicReplySentAt: new Date() });
+    await processor()(comment());
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
+    expect(m.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("Comments: an account turned off during the wait answers nothing (no candidate when it runs)", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([]);
+    await processor()(comment({ dmDelayed: true, dmScheduledAt: new Date().toISOString() }));
+    const where = m.prisma.automation.findMany.mock.calls[0][0].where;
+    expect(where.instagramAccount).toMatchObject({ automationsEnabled: true });
+    expect(where).toMatchObject({ isActive: true, workspace: { status: "ACTIVE" } });
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
+  });
+
+  it("Direct: the reply is a delayed job; the guards run when it is sent", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([automation({ matchAnyWord: true, dmDelaySeconds: 300 })]);
+    await processor()(message({ messageText: "oi" }));
+    expect(m.meta.sendDirectMessage).not.toHaveBeenCalled();
+    expect(m.guards.claimReplyCooldown).not.toHaveBeenCalled();
+    expect(m.guards.isHumanConversationActive).not.toHaveBeenCalled();
+    const [name, data, opts] = m.queueAdd.mock.calls[0];
+    expect(name).toBe("process-message");
+    expect(data).toMatchObject({ messageId: "mid_1", dmDelayed: true });
+    expect(opts).toEqual({ delay: 300_000, jobId: `dmdelay_ig_1_${Buffer.from("mid_1").toString("base64url")}` });
+    expect(lastLog().create.status).toBe("PENDING");
+  });
+
+  it("Direct: delayed pass with no team reply sends (cooldown and the 24 h pause checked then)", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([automation({ matchAnyWord: true, dmDelaySeconds: 30, dmMessage: "Oi! Já te respondo" })]);
+    await processor()(message({ messageText: "oi", dmDelayed: true, dmScheduledAt: new Date(Date.now() - 30_000).toISOString() }));
+    expect(m.guards.isHumanConversationActive).toHaveBeenCalled();
+    expect(m.guards.claimReplyCooldown).toHaveBeenCalled();
+    expect(m.meta.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(m.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("Direct: someone from the team answered during the wait — no reply, even with a keyword", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([automation({ keywords: ["preço"], dmDelaySeconds: 30, dmMessage: "Tabela!" })]);
+    m.guards.humanRepliedSince.mockResolvedValue(true);
+    await processor()(message({ messageText: "qual o preço?", dmDelayed: true, dmScheduledAt: new Date(Date.now() - 30_000).toISOString() }));
+    expect(m.meta.sendDirectMessage).not.toHaveBeenCalled();
+    expect(lastLog().update.status ?? lastLog().create.status).toBe("SKIPPED_HUMAN_ACTIVE");
+  });
+
+  it("no wait (0, every existing automation): sent at once, exactly as before", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([automation({ keywords: ["preço"], dmMessage: "Tabela!", dmDelaySeconds: 0 })]);
+    await processor()(message({ messageText: "qual o preço?" }));
+    expect(m.meta.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(m.queueAdd).not.toHaveBeenCalled();
+    expect(m.guards.humanRepliedSince).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation()]); // no dmDelaySeconds at all
+    m.rate.reserveDMSlot.mockResolvedValue({ allowed: true, reserved: true });
+    await processor()(comment());
+    expect(m.meta.sendCommentReply).toHaveBeenCalledTimes(1);
+    expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(m.queueAdd).not.toHaveBeenCalled();
   });
 });
 

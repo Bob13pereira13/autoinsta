@@ -110,10 +110,14 @@ export function useWarningText() {
         return w.limit?.unit === "bytes"
           ? t("Instagram takes up to 1000 bytes of text, and accents and emojis take more space. Shorten the message.")
           : t("With a button, Instagram takes up to 640 characters of text. Shorten the text.");
-      case "mediaWithoutOpening":
-        return t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media.");
+      case "stepsMissing":
+        return t("Turn on at least one step, or choose “Direct”.");
+      case "mediaInDirectComments":
+        return t("In Comments, Instagram only lets you send one message to the person who commented: text with a link button. To send an image or video, use “With steps first” (the media goes after the person taps the button) or put the content in the link.");
+      case "followMediaWithoutOpening":
+        return t("Without the opening DM, the follow request is the reply to the comment: text only. Remove its images and videos or turn on the opening DM.");
       case "followUpWithoutButton":
-        return t("In Comments, the thank-you only goes after the person taps a button. Turn on the opening DM or “follow me to unlock”.");
+        return t("In Comments, the thank-you only goes after the person taps a button. Choose “With steps first”.");
       case "followUpLate":
         return t("Instagram only allows replies up to 24 h after the person's last message; with this delay the thank-you may not go.");
       case "followUpLinkToken":

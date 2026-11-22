@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { findConflicts, type Conflict } from "@/lib/automation/conflicts";
+import { DM_DELAY_OPTIONS } from "@/lib/automation/delivery";
 import { deleteMediaFiles, mediaKeysForAutomations } from "@/lib/media/storage";
 import {
   enabledMediaSlots,
@@ -49,6 +50,12 @@ import {
 export const dynamic = "force-dynamic";
 
 const TOO_MANY_POSTS = `Up to ${MAX_POSTS_PER_AUTOMATION} posts per automation`;
+// Wait before the first DM: only the options the editor offers.
+const dmDelaySchema = z
+  .number()
+  .int()
+  .refine((value) => (DM_DELAY_OPTIONS as readonly number[]).includes(value), "Choose a wait the editor offers");
+
 const postIdsSchema = z.array(z.string().min(1).max(64)).max(MAX_POSTS_PER_AUTOMATION, TOO_MANY_POSTS);
 const postsSchema = z
   .array(
@@ -68,6 +75,7 @@ const createAutomationSchema = z
     triggerStoryReplies: z.boolean().optional().default(true),
     triggerStoryMentions: z.boolean().optional().default(false),
     replyCooldownHours: z.number().int().min(1).max(168).optional().default(24),
+    dmDelaySeconds: dmDelaySchema.optional().default(0),
     media: mediaInputSchema.optional().default([]),
     instagramAccountId: z.string().min(1).optional().nullable(),
     postId: z.string().min(1).optional().nullable(),
@@ -132,6 +140,7 @@ const updateAutomationSchema = z.object({
   triggerStoryReplies: z.boolean().optional(),
   triggerStoryMentions: z.boolean().optional(),
   replyCooldownHours: z.number().int().min(1).max(168).optional(),
+  dmDelaySeconds: dmDelaySchema.optional(),
   media: mediaInputSchema.optional(),
   instagramAccountId: z.string().min(1).optional(),
   postId: z.string().min(1).optional().nullable(),
@@ -522,6 +531,7 @@ export async function POST(request: NextRequest) {
       triggerStoryReplies: parsed.data.triggerStoryReplies,
       triggerStoryMentions: parsed.data.triggerStoryMentions,
       replyCooldownHours: parsed.data.replyCooldownHours,
+      dmDelaySeconds: parsed.data.dmDelaySeconds,
       // A next-reel campaign has no post yet; the cron binds it once a reel is
       // posted. postId/postUrl mirror the first marked post.
       postId: postList[0]?.id ?? null,
