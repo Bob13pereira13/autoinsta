@@ -308,6 +308,11 @@
   --shadow-preview: var(--preview-shadow);
 }
 
+/* The brand gradient as a background utility (bg-gradient-accent). */
+@utility bg-gradient-accent {
+  background-image: var(--gradient);
+}
+
 /* --------------------------------- base ----------------------------------- */
 body {
   background-color: var(--bg);
@@ -597,6 +602,52 @@ select:focus-visible {
     }
   }
 
+  /* Status dot: 7px, glowing in its own color (no glow when neutral). */
+  .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--dot-color);
+    box-shadow: 0 0 10px var(--dot-color);
+  }
+  .dot-success {
+    --dot-color: var(--success-dot);
+  }
+  .dot-warning {
+    --dot-color: var(--warning-dot);
+  }
+  .dot-error {
+    --dot-color: var(--danger);
+  }
+  .dot-accent {
+    --dot-color: var(--chart);
+  }
+  .dot-neutral {
+    --dot-color: var(--neutral-dot);
+    box-shadow: none;
+  }
+
+  /* Theme button: the label that applies to the current theme shows. */
+  .show-in-dark {
+    display: none;
+  }
+  :root[data-theme="dark"] .show-in-dark {
+    display: contents;
+  }
+  :root[data-theme="dark"] .show-in-light {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .show-in-dark {
+      display: contents;
+    }
+    :root:not([data-theme="light"]) .show-in-light {
+      display: none;
+    }
+  }
+
   /* Keyword chip (monospace) and code. */
   .chip {
     display: inline-flex;
@@ -666,6 +717,24 @@ select:focus-visible {
   .data-table tbody tr:hover {
     background: var(--surface);
   }
+}
+
+/* Native <dialog> (components/ui/dialog.tsx). */
+dialog.ui-dialog {
+  margin: auto;
+  max-width: min(100vw - 32px, 460px);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  overflow: visible;
+}
+dialog.ui-dialog[data-size="lg"] {
+  max-width: min(100vw - 32px, 640px);
+}
+dialog.ui-dialog::backdrop {
+  background: var(--overlay);
 }
 
 /* -------------------------------- movement --------------------------------- */

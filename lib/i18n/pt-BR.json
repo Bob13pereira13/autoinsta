@@ -816,5 +816,8 @@
   "Your e-mail is confirmed and your account is active. Sign in to connect your Instagram account and create your first automation.": "Seu e-mail foi confirmado e sua conta está ativa. Entre para conectar sua conta do Instagram e criar sua primeira automação.",
   "Approval of new sign-ups is on: each confirmed sign-up waits here.": "A aprovação de novos cadastros está ligada: cada cadastro confirmado aguarda aqui.",
   "Approval of new sign-ups is off: confirmed sign-ups become active right away. Only clients that were already waiting are listed here.": "A aprovação de novos cadastros está desligada: os cadastros confirmados ficam ativos na hora. Aqui aparecem só os clientes que já estavam aguardando.",
-  "Change in Settings": "Alterar em Configurações"
+  "Change in Settings": "Alterar em Configurações",
+  "Light theme": "Tema claro",
+  "Dark theme": "Tema escuro",
+  "How it works": "Como vai funcionar"
 }
