@@ -138,6 +138,18 @@ describe.skipIf(!databaseUrl)("automations API with channels and media", () => {
       expect(listed.postIds).toEqual(["p1", "p2"]);
     });
 
+    it("creates with posts exactly as the editor sends them (no matchAnyPost)", async () => {
+      const res = await POST(req("POST", {
+        name: "Editor", type: "COMMENTS", keywords: ["CUPOM"], dmMessage: "Oi",
+        posts: [{ id: "ed1", url: "https://instagram.com/p/ed1", publishedAt: null }, { id: "ed2", url: null, publishedAt: null }],
+        matchAnyPost: false, pendingNextReel: false, replyToRecentComments: true,
+      }));
+      expect(res.status).toBe(201);
+      const created = (await res.json()).data;
+      expect((await rowsOf(created.id)).map((p) => p.postId)).toEqual(["ed1", "ed2"]);
+      expect(created).toMatchObject({ postId: "ed1", matchAnyPost: false, replyToRecentComments: true });
+    });
+
     it("accepts plain postIds and the legacy single postId", async () => {
       const a = (await (await POST(req("POST", { name: "Ids", keywords: ["A"], dmMessage: "Oi", postIds: ["x1", "x2", "x3"] }))).json()).data;
       expect((await rowsOf(a.id)).map((p) => p.postId)).toEqual(["x1", "x2", "x3"]);

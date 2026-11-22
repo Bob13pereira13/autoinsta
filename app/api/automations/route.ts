@@ -408,6 +408,7 @@ export async function POST(request: NextRequest) {
   const mediaSlots = enabledMediaSlots(parsed.data);
   const ruleIssues = automationRuleIssues({
     ...parsed.data,
+    postIds: normalizePostInput(parsed.data)?.map((p) => p.id),
     media: mediaItems.filter((m) => mediaSlots.has(m.slot)),
   });
   if (ruleIssues.length) return invalidRules(ruleIssues);

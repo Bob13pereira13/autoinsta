@@ -8,7 +8,11 @@ Plataforma multi-cliente que responde automaticamente no Instagram, com automaç
 - **Direct**: alguém manda uma DM com uma palavra-chave (ou qualquer mensagem) e recebe a resposta.
 
 As mensagens podem levar link rastreado, botão, pedido para seguir, agradecimento e **imagens e
-vídeos**. Cada comentário ou mensagem dispara no máximo uma automação. Funciona **exclusivamente pela API
+vídeos**. Cada comentário ou mensagem dispara no máximo uma automação. Em Comentários, a automação vale
+para todas as publicações ou só para as marcadas na grade (até 100).
+
+As contas do Instagram ficam na aba **Contas**: conectar, reconectar, **desativar** (pausa todas as
+automações da conta sem apagar nada) ou remover (apaga a conta e tudo dela). Funciona **exclusivamente pela API
 oficial da Meta**.
 
 O nome, o logotipo, as cores e os dados legais da marca ficam em **[`config/brand.ts`](config/brand.ts)**.

@@ -315,9 +315,10 @@ export default function PrivacidadePage() {
         <h2>9. Como excluir seus dados</h2>
         <ul>
           <li>
-            <strong>No painel:</strong> em Configurações, clique em &quot;Desconectar&quot; na conta do
-            Instagram. A conta, o token, as automações (com as imagens e vídeos delas), os registros de envio
-            e os links são apagados na hora.
+            <strong>No painel:</strong> na aba Contas, clique na lixeira ao lado da conta do Instagram. A
+            conta, o token, as automações (com as imagens e vídeos delas), os registros de envio e os links
+            são apagados na hora. Desativar a conta (chave Ativa/Desativada) só pausa as respostas
+            automáticas e não apaga nenhum dado.
           </li>
           <li>
             <strong>Pela Meta:</strong> remova o {brand.name} nas configurações de apps do Instagram ou do

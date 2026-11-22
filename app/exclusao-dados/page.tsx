@@ -130,8 +130,8 @@ export default async function ExclusaoDadosPage({
         <h3>Se você é cliente e conectou uma conta do Instagram</h3>
         <ul>
           <li>
-            <strong>Pelo painel:</strong> acesse Configurações e clique em &quot;Desconectar&quot; ao lado da
-            conta. A conta conectada, o token de acesso, as automações (com imagens e vídeos), os registros de envio e os links
+            <strong>Pelo painel:</strong> acesse Contas e clique na lixeira ao lado da conta (desativar a
+            conta só pausa as respostas e não apaga nada). A conta conectada, o token de acesso, as automações (com imagens e vídeos), os registros de envio e os links
             rastreáveis são apagados imediatamente.
           </li>
           <li>

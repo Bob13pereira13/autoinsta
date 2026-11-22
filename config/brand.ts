@@ -84,7 +84,7 @@ export const brand = {
      * Data da última revisão das páginas legais (AAAA-MM-DD). Atualize quando
      * mudar o texto de /privacidade ou /termos.
      */
-    lastUpdated: "2026-11-21",
+    lastUpdated: "2026-11-22",
   },
 } as const;
 

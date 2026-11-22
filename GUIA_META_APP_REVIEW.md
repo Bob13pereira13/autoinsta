@@ -110,8 +110,8 @@ como referência para você.
 > our login configuration (account ID, username, name and follower count) and to list that account's own
 > posts and reels in our dashboard, so the business owner can choose which post or reel an automation
 > applies to. We only read the connecting account's own profile and media; we never read other users'
-> profiles or media. The screencast shows the account appearing in Settings after login and the post
-> picker listing the account's reels when an automation is created.
+> profiles or media. The screencast shows the account appearing in the Accounts tab after login and the
+> post grid listing the account's posts and reels when an automation is created.
 
 **PT**
 
@@ -119,7 +119,7 @@ como referência para você.
 > nosso login (ID, nome de usuário, nome e número de seguidores) e para listar os posts e reels da própria
 > conta no painel, para o dono escolher em qual post ou reel a automação vai funcionar. Lemos apenas o
 > perfil e as mídias da própria conta conectada, nunca de outros usuários. O vídeo mostra a conta
-> aparecendo em Configurações após o login e o seletor de posts listando os reels ao criar uma automação.
+> aparecendo na aba Contas após o login e a grade de publicações e reels ao criar uma automação.
 
 ### `instagram_manage_comments`
 
@@ -197,7 +197,7 @@ como referência para você.
 > app during login (GET /me/assigned_instagram_accounts), so we can attach that account to the business's
 > workspace. We do not create, modify or read any other business assets, ad accounts, pages or people. The
 > screencast shows the asset selection during login and the selected Instagram account appearing in
-> Settings right after.
+> the Accounts tab right after.
 
 **PT**
 
@@ -205,7 +205,7 @@ como referência para você.
 > Usamos business_management apenas para descobrir qual conta do Instagram a empresa atribuiu ao nosso app
 > durante o login (GET /me/assigned_instagram_accounts) e vinculá-la ao espaço de trabalho da empresa. Não
 > criamos, alteramos nem lemos outros ativos do portfólio, contas de anúncios, páginas ou pessoas. O vídeo
-> mostra a seleção do ativo durante o login e a conta escolhida aparecendo em Configurações logo depois.
+> mostra a seleção do ativo durante o login e a conta escolhida aparecendo na aba Contas logo depois.
 
 ### `public_profile` (Advanced Access)
 
@@ -232,8 +232,7 @@ encontra tudo pronto). No campo **App Review → Instructions** cole (em inglês
 > Test login: https://app.suaempresa.com.br/login
 > E-mail: revisor.meta@suaempresa.com.br — Password: (the password you set)
 >
-> The Instagram professional account @SUA_CONTA_DEMO is already connected (Settings → Instagram
-> connection). Automations has three tabs, one per channel; three automations are already active:
+> The Instagram professional account @SUA_CONTA_DEMO is already connected and active (Accounts tab). Automations has three tabs, one per channel; three automations are already active:
 > - Comments: keyword LINK on any post. From any other Instagram account, comment LINK on a post of
 >   @SUA_CONTA_DEMO: the commenter receives a DM with a button; after tapping it they receive the link and
 >   an image, and a public reply is posted under the comment.
@@ -268,9 +267,9 @@ instagram.com) pronto.
 |---|---|---|---|---|
 | 1 | 0:00 | Página inicial do site → **Política de Privacidade** (rolar até a tabela de permissões) → voltar | "This is our website. The privacy policy explains how Instagram data is used and deleted." | — |
 | 2 | 0:20 | **Login** com e-mail e senha da conta de demonstração. Em Configurações, trocar o idioma para **English** | "The business owner signs in to the dashboard. The UI is switched to English for this review." | — |
-| 3 | 0:40 | Settings → **Connect Instagram**. Mostrar a janela da Meta: login, **lista de permissões** e **seleção da conta do Instagram** (ativo) no portfólio. Conceder tudo | "The owner connects the Instagram professional account through Meta's login. The requested permissions and the selected Instagram account are shown here." | instagram_basic, business_management |
-| 4 | 1:20 | De volta em Settings: a conta **@SUA_CONTA_DEMO** conectada, "Webhook ready" | "The assigned Instagram account is now connected to this workspace." | instagram_basic, business_management |
-| 5 | 1:35 | **Automations** → aba **Comments** → **New automation**: o seletor lista os **posts/reels da conta**; escolher um; palavra-chave `LINK`; ligar **opening DM with a button**; mensagem principal com um link e **uma imagem** enviada pelo botão "+ Add image or video"; ligar **reply to the comment publicly**; mostrar o resumo no topo e a prévia; salvar | "The owner creates a Comments automation on one of the account's own reels: keyword LINK, an opening DM with a button, then the link and an image, plus an optional public reply." | instagram_basic |
+| 3 | 0:40 | **Accounts** → **Connect Instagram account**. Mostrar a janela da Meta: login, **lista de permissões** e **seleção da conta do Instagram** (ativo) no portfólio. Conceder tudo | "The owner connects the Instagram professional account through Meta's login. The requested permissions and the selected Instagram account are shown here." | instagram_basic, business_management |
+| 4 | 1:20 | De volta em **Accounts**: a conta **@SUA_CONTA_DEMO** conectada e **Active** | "The assigned Instagram account is now connected to this workspace and active." | instagram_basic, business_management |
+| 5 | 1:35 | **Automations** → aba **Comments** → **New automation**: a grade lista os **posts/reels da conta**; marcar um (sem marcar nenhum, vale para todos); palavra-chave `LINK`; ligar **opening DM with a button**; mensagem principal com um link e **uma imagem** enviada pelo botão "+ Add image or video"; ligar **reply to the comment publicly**; mostrar o resumo no topo e a prévia; salvar | "The owner creates a Comments automation on one of the account's own reels: keyword LINK, an opening DM with a button, then the link and an image, plus an optional public reply." | instagram_basic |
 | 6 | 2:30 | **Na segunda conta** (celular/outro navegador), comentar `LINK` no reel | "A different Instagram user comments LINK on that reel." | instagram_manage_comments |
 | 7 | 2:45 | Na segunda conta: a **DM de abertura** chegando; tocar no botão; chegam o **link e a imagem** | "The commenter receives a private reply; after tapping the button, the link and the image are delivered." | instagram_manage_messages |
 | 8 | 3:10 | No reel: a **resposta pública** sob o comentário | "The public reply is posted under the comment." | instagram_manage_comments |
@@ -279,7 +278,7 @@ instagram.com) pronto.
 | 11 | 4:15 | Aba **Direct** → mostrar a automação `HOURS`. Na segunda conta: mandar **HOURS** por DM → a resposta chega | "Direct automations answer direct messages that contain a keyword." | instagram_manage_messages |
 | 12 | 4:35 | **DM Logs**: as linhas **Sent** de cada caso (canal, pessoa, mensagem, data) | "Every send is logged with its channel and status." | instagram_manage_messages |
 | 13 | 4:50 | **Inbox**: abrir a conversa com a segunda conta e enviar uma resposta manual; mostrar que chegou | "The owner can read Instagram conversations and reply manually from the inbox. While a person from the business is talking to someone, keyword-free automations stay silent for 24 hours." | instagram_manage_messages |
-| 14 | 5:15 | Settings → **Disconnect** na conta (confirmar) e abrir `/exclusao-dados` | "The owner can disconnect at any time; the account's data, including uploaded images and videos, is deleted. Data deletion requests from Meta are handled automatically." | — |
+| 14 | 5:15 | **Accounts**: mostrar a chave **Active/Off** (desligar e religar), depois a **lixeira** na conta (ler a confirmação e confirmar) e abrir `/exclusao-dados` | "The owner can pause every automation of an account without deleting anything, or remove the account: its data, including uploaded images and videos, is deleted. Data deletion requests from Meta are handled automatically." | — |
 
 Dicas que evitam reprovação:
 
@@ -302,7 +301,7 @@ Dicas que evitam reprovação:
   ou a justificativa daquela permissão e reenvie só ela.
 - Motivos comuns: permissão pedida sem aparecer no vídeo; vídeo sem o login completo; DM não aparecendo
   no vídeo; política de privacidade sem explicar o uso dos dados; app sem verificação da empresa.
-- Depois de aprovado, cada cliente conecta o próprio Instagram em **Configurações → Conectar Instagram**,
+- Depois de aprovado, cada cliente conecta o próprio Instagram em **Contas → Conectar conta do Instagram**,
   escolhendo o portfólio empresarial dele. A conta precisa estar em um portfólio, e o cliente precisa ser
   administrador desse portfólio.
 

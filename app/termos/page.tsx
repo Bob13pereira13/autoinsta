@@ -132,8 +132,9 @@ export default function TermosPage() {
       <section>
         <h2>10. Encerramento</h2>
         <p>
-          O cliente pode desconectar o Instagram a qualquer momento em Configurações, o que apaga a conta
-          conectada e os dados vinculados a ela. Para encerrar o cadastro de acesso, basta solicitar pelo
+          O cliente pode remover a conta do Instagram a qualquer momento na aba Contas, o que apaga a
+          conta conectada e os dados vinculados a ela. Desativar a conta apenas pausa as automações, sem
+          apagar dados. Para encerrar o cadastro de acesso, basta solicitar pelo
           e-mail de suporte. Podemos encerrar o acesso em caso de violação destes Termos ou do contrato.
         </p>
       </section>
