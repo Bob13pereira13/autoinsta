@@ -446,7 +446,7 @@ export default function AutomationsList({ initialType }: { initialType: Automati
             type === "COMMENTS" && (auto.postIds?.length ?? 0) > 1 ? t("{count} checked posts", { count: auto.postIds?.length ?? 0 }) : null,
             auto.requireFollow ? t("Follow gate") : null,
             type === "STORIES" && auto.triggerStoryReplies ? t("Story replies") : null,
-            type === "STORIES" && auto.triggerStoryMentions && auto.matchAnyWord ? t("Mentions") : null,
+            type === "STORIES" && auto.triggerStoryMentions && auto.matchAnyWord ? t("Story mentions") : null,
             (auto.media?.length ?? 0) > 0 ? t("Media: {count}", { count: auto.media?.length ?? 0 }) : null,
             auto.trackedLinks.length >= 2 ? t("2 links") : null,
           ].filter(Boolean);

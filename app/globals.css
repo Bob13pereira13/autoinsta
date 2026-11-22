@@ -609,6 +609,116 @@ select:focus-visible {
     }
   }
 
+  /* Choice cards (components/ui/choice-cards.tsx): the mark on the left, a
+     title and a one-line explanation. The checked card gets the accent border
+     and the glow; the keyboard focus ring goes around the whole card. */
+  .choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      box-shadow 0.2s ease;
+  }
+  .choice:hover {
+    border-color: var(--border-strong);
+  }
+  .choice:has(.choice-mark:checked) {
+    border-color: var(--accent-fg);
+    background: var(--accent-soft);
+    box-shadow: var(--glow);
+  }
+  .choice:has(.choice-mark:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .choice:has(.choice-mark:disabled) {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .choice-mark {
+    appearance: none;
+    display: grid;
+    place-content: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    margin: 1px 0 0;
+    border: 2px solid var(--text-3);
+    border-radius: 999px;
+    background: var(--control);
+    cursor: inherit;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .choice-mark[type="checkbox"] {
+    border-radius: 6px;
+  }
+  .choice-mark::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--on-accent);
+    transform: scale(0);
+    transition: transform 0.15s ease;
+  }
+  .choice-mark[type="checkbox"]::before {
+    width: 11px;
+    height: 11px;
+    border-radius: 0;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+  .choice-mark:checked {
+    border-color: transparent;
+    background: var(--gradient);
+  }
+  .choice-mark:checked::before {
+    transform: scale(1);
+  }
+  /* Where :has() works the ring sits on the card, not on the small mark. */
+  @supports selector(:has(*)) {
+    .choice-mark:focus-visible {
+      outline: none;
+    }
+  }
+  .choice-title {
+    display: block;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--heading);
+  }
+  .choice-desc {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+  /* Windows high contrast: system colors instead of the gradient. */
+  @media (forced-colors: active) {
+    .choice-mark {
+      border-color: CanvasText;
+    }
+    .choice-mark:checked {
+      border-color: Highlight;
+      background: Highlight;
+    }
+    .choice-mark::before {
+      background: HighlightText;
+    }
+    .choice:has(.choice-mark:checked) {
+      border-color: Highlight;
+    }
+  }
+
   /* Status dot: 7px, glowing in its own color (no glow when neutral). */
   .dot {
     display: inline-block;

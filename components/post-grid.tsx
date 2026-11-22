@@ -181,7 +181,7 @@ export default function PostGrid({
         <p aria-live="polite" className={selected.length ? "font-semibold text-accent-fg" : "text-muted"}>
           {selected.length
             ? t(selected.length === 1 ? "{count} post selected" : "{count} posts selected", { count: selected.length })
-            : t("No post selected: the automation answers on all posts and reels.")}
+            : t("No post checked yet: check at least one.")}
         </p>
         <div className="flex items-center gap-3">
           {selected.length > 0 && (
@@ -222,7 +222,7 @@ export default function PostGrid({
                   {thumb ? (
                     <img src={thumb} alt="" loading="lazy" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="grid h-full w-full place-items-center px-2 text-center text-xs text-muted">{t("No preview")}</span>
+                    <span className="grid h-full w-full place-items-center px-2 text-center text-xs text-foreground">{t("No preview")}</span>
                   )}
                   <span
                     aria-hidden="true"

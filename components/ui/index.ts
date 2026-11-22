@@ -8,3 +8,4 @@ export { Alert, type AlertTone } from "./alert";
 export { PageHeader, Eyebrow } from "./page-header";
 export { NavItem } from "./nav-item";
 export { Sparkline } from "./sparkline";
+export { RadioCards, CheckCards, type ChoiceOption } from "./choice-cards";

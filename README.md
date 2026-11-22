@@ -9,7 +9,7 @@ Plataforma multi-cliente que responde automaticamente no Instagram, com automaç
 
 As mensagens podem levar link rastreado, botão, pedido para seguir, agradecimento e **imagens e
 vídeos**. Cada comentário ou mensagem dispara no máximo uma automação. Em Comentários, a automação vale
-para todas as publicações ou só para as marcadas na grade (até 100).
+para todas as publicações, só para as marcadas na grade (até 100) ou para o próximo reel publicado.
 
 **Clientes**: qualquer pessoa pode se cadastrar em `/cadastro` (com confirmação de e-mail e
 Cloudflare Turnstile). Por padrão, o cliente fica **ativo assim que confirma o e-mail** e entra direto

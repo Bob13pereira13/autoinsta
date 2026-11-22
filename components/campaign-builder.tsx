@@ -21,7 +21,7 @@ import HowItWorks from "@/components/how-it-works";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { KeywordChip } from "@/components/ui/chip";
-import { SegmentedControl } from "@/components/ui/segmented";
+import { CheckCards, RadioCards } from "@/components/ui/choice-cards";
 import { StatusDot } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -34,6 +34,15 @@ import {
   type MediaSlot,
 } from "@/components/automation-builder-parts";
 import { automationSummary } from "@/lib/automation/summary";
+import {
+  postScopeBlocked,
+  postScopeOf,
+  postScopePayload,
+  showsPostGrid,
+  storyTriggerProblem,
+  summaryScopeOf,
+  type PostScope,
+} from "@/lib/automation/editor-scope";
 import { automationTypeSlug } from "@/lib/automation/type-slugs";
 import { readCache, writeCache } from "@/lib/client-cache";
 import {
@@ -42,8 +51,6 @@ import {
   type ImportRow,
 } from "@/lib/import-queue";
 
-// "posts": already published posts — none checked = all of them.
-type TriggerScope = "posts" | "next";
 const MAX_POSTS = 100;
 type MatchMode = "specific" | "any";
 
@@ -121,8 +128,10 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
 
-  const [triggerScope, setTriggerScope] = useState<TriggerScope>("posts");
-  // Checked posts; empty = every post and reel.
+  // Comments: all posts, the posts checked in the grid, or the next reel.
+  const [postScope, setPostScope] = useState<PostScope>("all");
+  // Checked posts. Only saved with "Specific posts": switching to another
+  // option keeps them on screen, so switching back restores them.
   const [selectedPosts, setSelectedPosts] = useState<SelectedPost[]>([]);
   // New Comments automations: also answer comments from the 72h before.
   const [replyToRecentComments, setReplyToRecentComments] = useState(false);
@@ -236,14 +245,11 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         if (!c) return setNotFound(true);
         setName(c.name);
         setSelectedAccountId(c.instagramAccountId);
-        setTriggerScope(c.pendingNextReel ? "next" : "posts");
-        setSelectedPosts(
-          c.posts?.length
-            ? c.posts.map((p) => ({ id: p.postId, url: p.postUrl, publishedAt: p.publishedAt }))
-            : c.postId && !c.matchAnyPost
-              ? [{ id: c.postId, url: c.postUrl }]
-              : []
-        );
+        // A "next post" automation that already found its reel opens on
+        // "Specific posts" with that reel checked.
+        const stored = postScopeOf(c);
+        setPostScope(stored.scope);
+        setSelectedPosts(stored.posts);
         setMatchMode(c.matchAnyWord ? "any" : "specific");
         setKeywordText(c.keywords.join(", "));
         setWholeWordMatch(c.wholeWordMatch ?? true);
@@ -322,7 +328,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   function prefillFromRow(row: ImportRow) {
     setName(row.name ?? "");
     // Each imported row is for one post: the user checks it in the grid.
-    setTriggerScope("posts");
+    setPostScope("posts");
     setSelectedPosts([]);
     setMatchMode("specific");
     setKeywordText((row.keywords ?? []).join(", "));
@@ -366,6 +372,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
   const typeLabel =
     automationType === "COMMENTS" ? t("Comments") : automationType === "STORIES" ? t("Stories") : t("Direct");
+  // Step 2's option without a keyword, named after what arrives.
+  const anyLabel = isComments ? t("Any comment") : automationType === "STORIES" ? t("Any reply") : t("Any message");
   const totalMedia = media.FOLLOW_PROMPT.length + media.MAIN.length + media.FOLLOW_UP.length;
   const mediaBlockedInComments = isComments && !openingDmEnabled && totalMedia > 0;
   const commentsMediaNote = isComments && !openingDmEnabled
@@ -375,8 +383,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     { t },
     {
       type: automationType,
-      scope: triggerScope === "next" ? "next" : selectedPosts.length ? "specific" : "any",
-      postCount: selectedPosts.length,
+      scope: summaryScopeOf(postScope),
+      postCount: selectedPosts.length || 1,
       keywords,
       anyWord: matchMode === "any",
       storyReplies: triggerStoryReplies,
@@ -398,7 +406,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
   // Comments on every post with no keyword: anyone who comments anything on
   // any post gets the DM. Allowed, but said loudly.
-  const answersEveryComment = isComments && triggerScope === "posts" && selectedPosts.length === 0 && matchMode === "any";
+  const answersEveryComment = isComments && postScope === "all" && matchMode === "any";
 
   function ensureLinkToken() {
     setDmMessage((cur) => (cur.includes("{link}") ? cur : `${cur.trim()} {link}`.trim()));
@@ -408,13 +416,19 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     setError(null);
 
     if (!selectedAccountId) return setError(t("Connect an Instagram account first."));
-    // An imported row is for one post: it has to be checked.
-    if (isComments && importQueue && triggerScope === "posts" && selectedPosts.length === 0)
-      return setError(t("Pick a post or reel to trigger the campaign."));
+    // "Specific posts" needs at least one checked post (an imported row too).
+    if (isComments && postScopeBlocked(postScope, selectedPosts)) return setError(t("Check at least one post"));
     if (matchMode === "specific" && keywords.length === 0)
-      return setError(t("Add at least one keyword, or switch to any word."));
-    if (automationType === "STORIES" && !triggerStoryReplies && !(triggerStoryMentions && matchMode === "any"))
-      return setError(t("Choose at least one: story replies or story mentions"));
+      return setError(t("Add at least one keyword, or choose “{any}”.", { any: anyLabel }));
+    if (automationType === "STORIES") {
+      const problem = storyTriggerProblem({
+        replies: triggerStoryReplies,
+        mentions: triggerStoryMentions,
+        anyReply: matchMode === "any",
+      });
+      if (problem === "none") return setError(t("Choose at least one: story replies or story mentions"));
+      if (problem === "mentionsNeedAnyReply") return setError(t("Story mentions have no text, so they only work without keywords"));
+    }
     if (!dmMessage.trim()) return setError(t("Add the DM with the link."));
     if (isComments && openingDmEnabled && (!openingDmMessage.trim() || !openingDmButtonLabel.trim()))
       return setError(t("Your opening DM needs a message and a button label."));
@@ -430,13 +444,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       name: name.trim() || t("{type} automation for @{username}", { type: typeLabel, username }),
       type: automationType,
       instagramAccountId: selectedAccountId,
-      // No post checked = all posts. postId/postUrl are derived on the server.
-      posts:
-        isComments && triggerScope === "posts"
-          ? selectedPosts.map((p) => ({ id: p.id, url: p.url ?? null, publishedAt: p.publishedAt ?? null }))
-          : [],
-      matchAnyPost: isComments && triggerScope === "posts" && selectedPosts.length === 0,
-      pendingNextReel: isComments && triggerScope === "next",
+      // All posts, the checked posts or the next reel (marks only go with
+      // "Specific posts"). postId/postUrl are derived on the server.
+      ...(isComments ? postScopePayload(postScope, selectedPosts) : { posts: [], matchAnyPost: false, pendingNextReel: false }),
       ...(mode === "new" ? { replyToRecentComments: isComments && replyToRecentComments } : {}),
       matchAnyWord: matchMode === "any",
       keywords: matchMode === "any" ? [] : keywords,
@@ -487,7 +497,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         // the picker flags it on the next imported row — the fetch that builds
         // this map doesn't re-run while the builder stays mounted through the
         // import queue.
-        if (isComments && triggerScope === "posts" && selectedPosts.length && activeValue) {
+        if (isComments && postScope === "posts" && selectedPosts.length && activeValue) {
           const assigned = selectedPosts.map((p) => p.id);
           setUsedPosts((prev) => ({ ...prev, ...Object.fromEntries(assigned.map((id) => [id, payload.name])) }));
         }
@@ -686,30 +696,33 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         <Step number={1} title={t("When")} aside={username ? `@${username}` : undefined}>
           {isComments && (
             <>
-              <p className="text-muted">{t("Someone comments on")}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <SegmentedControl
-                  label={t("Someone comments on")}
-                  value={triggerScope}
-                  onChange={setTriggerScope}
-                  items={[
-                    { value: "posts", label: selectedPosts.length ? t("the posts and reels checked below") : t("all posts and reels") },
-                    { value: "next", label: t("next post or reel") },
-                  ]}
-                />
-                {triggerScope === "posts" ? (
-                  <Help
-                    text={t("By default the automation answers on all your posts and reels. Check one or more below to limit it to those. A checked post takes priority over another automation that answers on all posts.")}
-                    example={t("Check only the reel of the launch, so the other posts keep their own automations.")}
-                  />
-                ) : (
-                  <Help
-                    text={t("The automation waits and attaches itself to the next reel you publish.")}
-                    example={t("Create it before posting the launch reel.")}
-                  />
-                )}
-              </div>
-              {triggerScope === "posts" && (
+              <p id="post-scope-label" className="text-muted">
+                {t("Someone comments on")}
+              </p>
+              <RadioCards
+                name="post-scope"
+                labelledBy="post-scope-label"
+                value={postScope}
+                onChange={setPostScope}
+                options={[
+                  {
+                    value: "all",
+                    title: t("All posts and reels"),
+                    description: t("Applies to any post or reel, including the ones you publish later."),
+                  },
+                  {
+                    value: "posts",
+                    title: t("Specific posts"),
+                    description: t("Choose in the grid which posts or reels the automation works on."),
+                  },
+                  {
+                    value: "next",
+                    title: t("Next post or reel"),
+                    description: t("Set it up before posting: it starts on the next reel you publish."),
+                  },
+                ]}
+              />
+              {showsPostGrid(postScope) && (
                 <PostGrid
                   instagramAccountId={selectedAccountId}
                   selected={selectedPosts}
@@ -739,68 +752,65 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           )}
           {automationType === "STORIES" && (
             <>
-              <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
-                <span className="text-foreground">
-                  {t("Someone replies to one of your stories")}
-                  <Help
-                    text={t("Answers the message a person sends when replying to any of your stories.")}
-                    example={t("Your story says “Reply PRICE”; whoever replies PRICE gets the price list.")}
-                  />
-                </span>
-                <Toggle label={t("Someone replies to one of your stories")} on={triggerStoryReplies} onToggle={() => setTriggerStoryReplies(!triggerStoryReplies)} />
-              </div>
-              <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
-                <span className="text-foreground">
-                  {t("Someone mentions you in their story")}
-                  <Help
-                    text={t("Answers when a person tags your account in their own story. A mention has no text, so it only works without keywords (step 2). Instagram only reports mentions from public accounts.")}
-                    example={t("A customer posts your product and tags you; they get a thank-you with a coupon.")}
-                  />
-                </span>
-                <Toggle label={t("Someone mentions you in their story")} on={triggerStoryMentions} onToggle={() => setTriggerStoryMentions(!triggerStoryMentions)} />
-              </div>
+              <p id="story-trigger-label" className="text-muted">
+                {t("Check one or both")}
+              </p>
+              <CheckCards
+                labelledBy="story-trigger-label"
+                values={[...(triggerStoryReplies ? (["replies"] as const) : []), ...(triggerStoryMentions ? (["mentions"] as const) : [])]}
+                onChange={(option, checked) => (option === "replies" ? setTriggerStoryReplies(checked) : setTriggerStoryMentions(checked))}
+                options={[
+                  {
+                    value: "replies",
+                    title: t("Story replies"),
+                    description: t("When someone replies to one of your stories."),
+                  },
+                  {
+                    value: "mentions",
+                    title: t("Story mentions"),
+                    description: t("When someone tags your account in their own story (public accounts only)."),
+                  },
+                ]}
+              />
               {triggerStoryMentions && matchMode !== "any" && (
                 <p className="rounded-control border border-warning-border bg-warning-soft px-3.5 py-2.5 text-[13px] text-warning">
-                  {t("Story mentions have no text, so they only work without keywords. Choose “any reply” in step 2.")}
+                  {t("Story mentions have no text, so they only work without keywords. Choose “Any reply” in step 2.")}
                 </p>
               )}
             </>
           )}
           {automationType === "DIRECT" && (
-            <p className="rounded-control border border-border-subtle bg-surface px-3.5 py-3 text-foreground">
-              {t("Someone sends you a direct message")}
-              <Help
-                text={t("Any DM to your account that is not a reply to a story (those go to Stories automations).")}
-                example={t("Someone writes “hi, what are your hours?”.")}
-              />
-            </p>
+            <div className="rounded-control border border-border-subtle bg-surface px-3.5 py-3">
+              <p className="choice-title">{t("Someone sends you a direct message")}</p>
+              <p className="choice-desc">{t("Any DM to your account that is not a reply to a story (those go to Stories automations).")}</p>
+            </div>
           )}
         </Step>
 
         {/* 2. Keyword */}
         <Step number={2} title={t("Keyword")}>
-          <div className="flex flex-wrap items-center gap-2">
-            <SegmentedControl
-              label={t("Keyword")}
-              value={matchMode}
-              onChange={setMatchMode}
-              items={[
-                { value: "specific", label: t("only when it contains a keyword") },
-                { value: "any", label: isComments ? t("any comment") : automationType === "STORIES" ? t("any reply") : t("any message") },
-              ]}
-            />
-            {matchMode === "specific" ? (
-              <Help
-                text={t("The automation only answers when the text contains one of these words. With several automations, the one with a keyword wins over one without.")}
-                example={t("LINK, PRICE, COUPON")}
-              />
-            ) : (
-              <Help
-                text={t("Answers everything that arrives, without needing a keyword.")}
-                example={isComments ? t("Every comment on the post gets the DM.") : t("Every new conversation gets a welcome message.")}
-              />
-            )}
-          </div>
+          <RadioCards
+            name="match-mode"
+            labelledBy="step-2"
+            value={matchMode}
+            onChange={setMatchMode}
+            options={[
+              {
+                value: "specific",
+                title: t("With a keyword"),
+                description: t("Only answers when the text has one of the words you choose."),
+              },
+              {
+                value: "any",
+                title: anyLabel,
+                description: isComments
+                  ? t("Answers every comment, no keyword needed.")
+                  : automationType === "STORIES"
+                    ? t("Answers every story reply and mention, no keyword needed.")
+                    : t("Answers every message, no keyword needed."),
+              },
+            ]}
+          />
           {matchMode === "specific" && (
             <div className="space-y-2">
               <input
@@ -836,7 +846,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             <div role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
               <p className="font-semibold">{t("Careful: this sends a DM to everyone who comments on any of your posts")}</p>
               <p className="mt-1 text-xs">
-                {t("Every comment on every post and reel gets the automatic reply. To limit it, check some posts in step 1 or answer only comments with a keyword.")}
+                {t("Every comment on every post and reel gets the automatic reply. To limit it, choose “Specific posts” in step 1 or “With a keyword” in step 2.")}
               </p>
             </div>
           )}
