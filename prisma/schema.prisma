@@ -21,6 +21,10 @@ model User {
   passwordChangedAt DateTime?
   /// Set to block sign-in (npm run user -- disable <email>).
   disabledAt        DateTime?
+  /// Version of the Terms of Use and Privacy Policy accepted at sign-up (the
+  /// legal pages' revision date, config/brand.ts) and when.
+  termsVersion      String?
+  termsAcceptedAt   DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -91,6 +95,29 @@ model AuthToken {
 enum AuthTokenPurpose {
   WELCOME
   RESET
+  /// Confirms the address of a public sign-up.
+  VERIFY_EMAIL
+}
+
+/// The client's (workspace's) standing. Only ACTIVE workspaces reach the
+/// dashboard and fire automations. Existing workspaces became ACTIVE.
+enum WorkspaceStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  DISABLED
+  REJECTED
+}
+
+enum WorkspaceSignupSource {
+  /// Created before public sign-up existed, or by `npm run user`.
+  LEGACY
+  SELF_SIGNUP
+  ADMIN
+}
+
+enum DocumentType {
+  CPF
+  CNPJ
 }
 
 model Workspace {
@@ -104,6 +131,33 @@ model Workspace {
   usagePeriodStart  DateTime @default(now())
   dmsSentThisPeriod Int      @default(0)
 
+  /// Default ACTIVE so the operator script and automatic workspace creation
+  /// keep working; public sign-up sets PENDING_APPROVAL explicitly.
+  status                WorkspaceStatus       @default(ACTIVE)
+  statusChangedAt       DateTime              @default(now())
+  /// Last time the workspace became ACTIVE (approval or reactivation). The
+  /// comment reconciler never answers comments made before it.
+  automationsResumedAt  DateTime?
+  approvedAt            DateTime?
+  rejectedAt            DateTime?
+  /// Sent to the client by e-mail and shown after sign-in.
+  rejectionReason       String?
+  /// How many Instagram accounts the client may connect (set by the admin).
+  instagramAccountLimit Int                   @default(1)
+  signupSource          WorkspaceSignupSource @default(LEGACY)
+  companyName           String?
+  /// E.164, e.g. +5511999998888 (WhatsApp).
+  contactPhone          String?
+  documentType          DocumentType?
+  /// Digits (CPF/CNPJ) or the alphanumeric CNPJ, uppercase, no punctuation.
+  documentNumber        String?
+  /// Admin-only notes.
+  internalNotes         String?
+  /// Billing, not used yet: a price per account for this client (null = the
+  /// platform default in PlatformSettings) and the gateway's customer id.
+  pricePerAccountCents  Int?
+  billingCustomerId     String?
+
   zernioConnection  ZernioConnection?
   members           WorkspaceMember[]
   invitations       WorkspaceInvitation[]
@@ -116,8 +170,41 @@ model Workspace {
   operationalEvents OperationalEvent[]
   serviceKeys       ServiceKey[]
   automationMedia   AutomationMedia[]
+  adminAuditLogs    AdminAuditLog[]
 
   @@index([ownerId])
+  @@index([status])
+}
+
+/// Platform-wide settings edited in the admin area (single row, id "default").
+model PlatformSettings {
+  id                   String   @id @default("default")
+  /// Price per Instagram account, in cents; only used for the estimated
+  /// revenue until billing exists.
+  pricePerAccountCents Int      @default(19900)
+  currency             String   @default("BRL")
+  updatedAt            DateTime @updatedAt
+  updatedBy            String?
+}
+
+/// Every admin action: who, what, when, before/after. When a rejected sign-up
+/// is purged, only the decision row survives, with personal data removed and
+/// the client's e-mail kept as a SHA-256 hash.
+model AdminAuditLog {
+  id               String   @id @default(cuid())
+  actorEmail       String
+  workspaceId      String?
+  subjectEmailHash String?
+  action           String
+  before           Json?
+  after            Json?
+  reason           String?
+  createdAt        DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([createdAt])
 }
 
 model WorkspaceMember {
