@@ -9,6 +9,8 @@ import type { I18n } from "@/lib/i18n";
 export interface SummaryInput {
   type: "COMMENTS" | "STORIES" | "DIRECT";
   scope: "specific" | "any" | "next";
+  /** Checked posts when scope is "specific" (1 when unknown). */
+  postCount?: number;
   keywords: string[];
   anyWord: boolean;
   storyReplies: boolean;
@@ -32,8 +34,15 @@ export function automationSummary({ t }: Pick<I18n, "t">, s: SummaryInput): stri
   if (s.type === "COMMENTS") {
     // The preposition lives in the scope ("on the selected post" → "na
     // publicação escolhida"), since Portuguese contracts it with the article.
+    const count = s.postCount ?? 1;
     const scope =
-      s.scope === "any" ? t("on any of your posts") : s.scope === "next" ? t("on your next post or reel") : t("on the selected post");
+      s.scope === "any"
+        ? t("on any of your posts")
+        : s.scope === "next"
+          ? t("on your next post or reel")
+          : count > 1
+            ? t("on the {count} selected posts", { count })
+            : t("on the selected post");
     trigger = s.anyWord
       ? t("When someone comments anything {scope}", { scope })
       : t("When someone comments {words} {scope}", { words, scope });

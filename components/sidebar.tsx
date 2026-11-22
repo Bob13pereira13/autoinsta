@@ -20,6 +20,7 @@ const navItems = [
   // Editing an automation still lives under /campaigns/..., so that menu item
   // stays highlighted there too.
   { label: "Automations", href: "/automations", also: "/campaigns" },
+  { label: "Accounts", href: "/accounts" },
   { label: "DM Logs", href: "/logs" },
   { label: "Settings", href: "/settings" },
   { label: "API & MCP", href: "/integrations" },

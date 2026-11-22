@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
-import PostPicker from "@/components/post-picker";
+import PostGrid, { type SelectedPost } from "@/components/post-grid";
 import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
 import {
   Help,
@@ -34,7 +34,9 @@ import {
   type ImportRow,
 } from "@/lib/import-queue";
 
-type TriggerScope = "specific" | "any" | "next";
+// "posts": already published posts — none checked = all of them.
+type TriggerScope = "posts" | "next";
+const MAX_POSTS = 100;
 type MatchMode = "specific" | "any";
 
 interface LoadedCampaign {
@@ -42,6 +44,8 @@ interface LoadedCampaign {
   name: string;
   postId: string | null;
   postUrl: string | null;
+  postIds?: string[];
+  posts?: Array<{ postId: string; postUrl: string | null; publishedAt: string | null }>;
   pendingNextReel: boolean;
   matchAnyPost: boolean;
   keywords: string[];
@@ -165,11 +169,11 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
 
-  const [triggerScope, setTriggerScope] = useState<TriggerScope>("specific");
-  const [postId, setPostId] = useState<string | null>(null);
-  const [postUrl, setPostUrl] = useState<string | null>(null);
-  const [postThumb, setPostThumb] = useState<string | null>(null);
-  const [postCaption, setPostCaption] = useState("");
+  const [triggerScope, setTriggerScope] = useState<TriggerScope>("posts");
+  // Checked posts; empty = every post and reel.
+  const [selectedPosts, setSelectedPosts] = useState<SelectedPost[]>([]);
+  // New Comments automations: also answer comments from the 72h before.
+  const [replyToRecentComments, setReplyToRecentComments] = useState(false);
 
   // Post IDs already tied to another automation on this account, so the picker
   // can flag them and the user knows not to double-assign. Maps postId ->
@@ -280,11 +284,14 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         if (!c) return setNotFound(true);
         setName(c.name);
         setSelectedAccountId(c.instagramAccountId);
-        setTriggerScope(
-          c.matchAnyPost ? "any" : c.pendingNextReel ? "next" : "specific"
+        setTriggerScope(c.pendingNextReel ? "next" : "posts");
+        setSelectedPosts(
+          c.posts?.length
+            ? c.posts.map((p) => ({ id: p.postId, url: p.postUrl, publishedAt: p.publishedAt }))
+            : c.postId && !c.matchAnyPost
+              ? [{ id: c.postId, url: c.postUrl }]
+              : []
         );
-        setPostId(c.postId);
-        setPostUrl(c.postUrl);
         setMatchMode(c.matchAnyWord ? "any" : "specific");
         setKeywordText(c.keywords.join(", "));
         setWholeWordMatch(c.wholeWordMatch ?? true);
@@ -345,10 +352,10 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         if (cancelled || !payload.success) return;
         const map: Record<string, string> = {};
         for (const a of payload.data as LoadedCampaign[]) {
-          if (!a.postId) continue;
+          if (!a.isActive || (a.type ?? "COMMENTS") !== "COMMENTS") continue;
           if (a.instagramAccountId !== selectedAccountId) continue;
           if (mode === "edit" && a.id === campaignId) continue;
-          map[a.postId] = a.name;
+          for (const id of a.postIds ?? (a.postId ? [a.postId] : [])) map[id] ??= a.name;
         }
         setUsedPosts(map);
       })
@@ -362,11 +369,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   // unset so the user picks it per row.
   function prefillFromRow(row: ImportRow) {
     setName(row.name ?? "");
-    setTriggerScope("specific");
-    setPostId(null);
-    setPostUrl(null);
-    setPostThumb(null);
-    setPostCaption("");
+    // Each imported row is for one post: the user checks it in the grid.
+    setTriggerScope("posts");
+    setSelectedPosts([]);
     setMatchMode("specific");
     setKeywordText((row.keywords ?? []).join(", "));
     setDmMessage(row.dmMessage ?? "");
@@ -418,7 +423,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     { t },
     {
       type: automationType,
-      scope: triggerScope,
+      scope: triggerScope === "next" ? "next" : selectedPosts.length ? "specific" : "any",
+      postCount: selectedPosts.length,
       keywords,
       anyWord: matchMode === "any",
       storyReplies: triggerStoryReplies,
@@ -438,17 +444,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const bumpStorage = () => setStorageVersion((v) => v + 1);
   const saveBlocked = saving || mediaBlockedInComments;
 
-  function handlePostSelect(
-    id: string,
-    url?: string,
-    thumb?: string,
-    caption?: string
-  ) {
-    setPostId(id);
-    setPostUrl(url ?? null);
-    setPostThumb(thumb ?? null);
-    setPostCaption(caption ?? "");
-  }
+  // Comments on every post with no keyword: anyone who comments anything on
+  // any post gets the DM. Allowed, but said loudly.
+  const answersEveryComment = isComments && triggerScope === "posts" && selectedPosts.length === 0 && matchMode === "any";
 
   function ensureLinkToken() {
     setDmMessage((cur) => (cur.includes("{link}") ? cur : `${cur.trim()} {link}`.trim()));
@@ -458,7 +456,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     setError(null);
 
     if (!selectedAccountId) return setError(t("Connect an Instagram account first."));
-    if (isComments && triggerScope === "specific" && !postId)
+    // An imported row is for one post: it has to be checked.
+    if (isComments && importQueue && triggerScope === "posts" && selectedPosts.length === 0)
       return setError(t("Pick a post or reel to trigger the campaign."));
     if (matchMode === "specific" && keywords.length === 0)
       return setError(t("Add at least one keyword, or switch to any word."));
@@ -479,10 +478,14 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       name: name.trim() || t("{type} automation for @{username}", { type: typeLabel, username }),
       type: automationType,
       instagramAccountId: selectedAccountId,
-      postId: isComments && triggerScope === "specific" ? postId : null,
-      postUrl: isComments && triggerScope === "specific" ? postUrl : null,
-      matchAnyPost: isComments && triggerScope === "any",
+      // No post checked = all posts. postId/postUrl are derived on the server.
+      posts:
+        isComments && triggerScope === "posts"
+          ? selectedPosts.map((p) => ({ id: p.id, url: p.url ?? null, publishedAt: p.publishedAt ?? null }))
+          : [],
+      matchAnyPost: isComments && triggerScope === "posts" && selectedPosts.length === 0,
       pendingNextReel: isComments && triggerScope === "next",
+      ...(mode === "new" ? { replyToRecentComments: isComments && replyToRecentComments } : {}),
       matchAnyWord: matchMode === "any",
       keywords: matchMode === "any" ? [] : keywords,
       wholeWordMatch,
@@ -532,9 +535,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         // the picker flags it on the next imported row — the fetch that builds
         // this map doesn't re-run while the builder stays mounted through the
         // import queue.
-        if (triggerScope === "specific" && postId) {
-          const assignedPostId = postId;
-          setUsedPosts((prev) => ({ ...prev, [assignedPostId]: payload.name }));
+        if (isComments && triggerScope === "posts" && selectedPosts.length && activeValue) {
+          const assigned = selectedPosts.map((p) => p.id);
+          setUsedPosts((prev) => ({ ...prev, ...Object.fromEntries(assigned.map((id) => [id, payload.name])) }));
         }
         // Importing: advance to the next queued row instead of leaving.
         if (importQueue && importQueue.length > 1) {
@@ -744,9 +747,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 value={selectedAccountId}
                 onChange={(id) => {
                   setSelectedAccountId(id);
-                  setPostId(null);
-                  setPostUrl(null);
-                  setPostThumb(null);
+                  setSelectedPosts([]);
                 }}
                 includeAll={false}
                 label={t("Instagram account")}
@@ -759,32 +760,57 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         <Step number={1} title={t("When")}>
           {isComments && (
             <>
-              <p className="text-sm text-muted">
-                {t("Someone comments on")}
-                <Help
-                  text={t("Choose which posts this automation watches. A specific post takes priority over “any post” when both match.")}
-                  example={t("“Next post or reel” attaches itself to the next reel you publish.")}
-                />
-              </p>
-              <Radio checked={triggerScope === "specific"} onSelect={() => setTriggerScope("specific")}>
-                {t("a specific post or reel")}
-              </Radio>
-              {triggerScope === "specific" && (
-                <div className="rounded-lg border border-border p-2">
-                  <PostPicker
-                    selectedPostId={postId}
-                    instagramAccountId={selectedAccountId}
-                    usedPostIds={usedPosts}
-                    onSelect={handlePostSelect}
+              <p className="text-sm text-muted">{t("Someone comments on")}</p>
+              <Radio
+                checked={triggerScope === "posts"}
+                onSelect={() => setTriggerScope("posts")}
+                help={
+                  <Help
+                    text={t("By default the automation answers on all your posts and reels. Check one or more below to limit it to those. A checked post takes priority over another automation that answers on all posts.")}
+                    example={t("Check only the reel of the launch, so the other posts keep their own automations.")}
                   />
-                </div>
-              )}
-              <Radio checked={triggerScope === "any"} onSelect={() => setTriggerScope("any")}>
-                {t("any post or reel")}
+                }
+              >
+                {selectedPosts.length ? t("the posts and reels checked below") : t("all posts and reels")}
               </Radio>
-              <Radio checked={triggerScope === "next"} onSelect={() => setTriggerScope("next")}>
+              {triggerScope === "posts" && (
+                <PostGrid
+                  instagramAccountId={selectedAccountId}
+                  selected={selectedPosts}
+                  onChange={setSelectedPosts}
+                  usedBy={usedPosts}
+                  max={MAX_POSTS}
+                />
+              )}
+              <Radio
+                checked={triggerScope === "next"}
+                onSelect={() => setTriggerScope("next")}
+                help={
+                  <Help
+                    text={t("The automation waits and attaches itself to the next reel you publish.")}
+                    example={t("Create it before posting the launch reel.")}
+                  />
+                }
+              >
                 {t("next post or reel")}
               </Radio>
+              {mode === "new" && (
+                <label className="flex items-start gap-3 rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={replyToRecentComments}
+                    onChange={(e) => setReplyToRecentComments(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[var(--color-accent,#4f46e5)]"
+                  />
+                  <span className="flex-1">
+                    {t("Also reply to people who commented in the last 72h")}
+                    <Help
+                      text={t("Off: only comments made after the automation is turned on are answered. On: comments from up to 72 hours before are answered too, if nobody from your account replied to them yet.")}
+                      example={t("You posted the reel yesterday and people already commented LINK.")}
+                    />
+                  </span>
+                </label>
+              )}
             </>
           )}
           {automationType === "STORIES" && (
@@ -875,6 +901,14 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           >
             {isComments ? t("any comment") : automationType === "STORIES" ? t("any reply") : t("any message")}
           </Radio>
+          {answersEveryComment && (
+            <div role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+              <p className="font-semibold">{t("Careful: this sends a DM to everyone who comments on any of your posts")}</p>
+              <p className="mt-1 text-xs">
+                {t("Every comment on every post and reel gets the automatic reply. To limit it, check some posts in step 1 or answer only comments with a keyword.")}
+              </p>
+            </div>
+          )}
           {automationType === "DIRECT" && matchMode === "any" && (
             <div role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
               <p className="font-semibold">{t("Careful: this answers EVERY direct message")}</p>
@@ -1177,8 +1211,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             onTabChange={setPreviewTab}
             username={username}
             avatarUrl={avatarUrl}
-            postThumb={postThumb}
-            caption={postCaption}
+            postThumb={selectedPosts[0]?.thumb ?? null}
+            caption=""
             sampleComment={keywords[0] ?? ""}
             automationType={automationType}
             storyMode={triggerStoryReplies || !triggerStoryMentions || matchMode !== "any" ? "reply" : "mention"}

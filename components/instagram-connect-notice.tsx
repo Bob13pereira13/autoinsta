@@ -13,6 +13,12 @@ const TONE_CLASSES: Record<Tone, string> = {
 };
 
 const MESSAGES: Record<string, { tone: Tone; title: StaticMessageKey; detail: StaticMessageKey }> = {
+  connected: {
+    tone: "success",
+    title: "Instagram account connected",
+    detail:
+      "The account is active: its automations start answering right away. You can turn them off here at any time.",
+  },
   denied: {
     tone: "warning",
     title: "Instagram connection cancelled",

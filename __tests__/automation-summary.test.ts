@@ -35,6 +35,12 @@ describe("automationSummary", () => {
     expect(sentence).not.toContain("em a ");
   });
 
+  it("counts the checked posts", () => {
+    expect(automationSummary(en, { ...base, postCount: 3 })).toContain('comments "LINK" on the 3 selected posts');
+    expect(automationSummary(pt, { ...base, postCount: 3 })).toContain("nas 3 publicações escolhidas");
+    expect(automationSummary(en, { ...base, postCount: 1 })).toContain("on the selected post");
+  });
+
   it("does not claim to answer everything before a keyword is typed", () => {
     expect(automationSummary(en, { ...base, keywords: [] })).toContain("comments your keyword");
   });

@@ -24,6 +24,8 @@ interface Campaign {
   name: string;
   postId: string | null;
   postUrl: string | null;
+  postIds?: string[];
+  posts?: Array<{ postId: string; postUrl: string | null }>;
   pendingNextReel: boolean;
   matchAnyPost: boolean;
   keywords: string[];
@@ -75,7 +77,8 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [postThumb, setPostThumb] = useState<string | null>(null);
+  // postId → current thumbnail (Instagram URLs expire, so never stored).
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [tab, setTab] = useState<Tab>("insights");
   const [previewTab, setPreviewTab] = useState<PreviewTab>("dm");
   const [busy, setBusy] = useState(false);
@@ -103,21 +106,21 @@ export default function CampaignDetailPage() {
       )
       .catch(() => setAvatarUrl(null));
 
-    if (campaign.postId) {
+    // Thumbnails of the marked posts found among the 50 most recent; older
+    // ones are shown as links.
+    if (campaign.postIds?.length || campaign.postId) {
       fetch(`/api/instagram/posts?instagramAccountId=${acct}&limit=50`)
         .then((r) => r.json())
         .then((payload) => {
           if (!payload.success) return;
-          const hit = (
-            payload.data as {
-              id: string;
-              thumbnail_url?: string;
-              media_url?: string;
-            }[]
-          ).find((p) => p.id === campaign.postId);
-          setPostThumb(hit?.thumbnail_url ?? hit?.media_url ?? null);
+          const map: Record<string, string> = {};
+          for (const p of payload.data as { id: string; media_type?: string; thumbnail_url?: string; media_url?: string }[]) {
+            const url = p.media_type === "VIDEO" ? p.thumbnail_url : p.media_url ?? p.thumbnail_url;
+            if (url) map[p.id] = url;
+          }
+          setThumbs(map);
         })
-        .catch(() => setPostThumb(null));
+        .catch(() => setThumbs({}));
     }
   }, [campaign]);
 
@@ -165,11 +168,19 @@ export default function CampaignDetailPage() {
   const type: AutomationType = campaign.type ?? "COMMENTS";
   const isComments = type === "COMMENTS";
   const typeLabel = type === "COMMENTS" ? t("Comments") : type === "STORIES" ? t("Stories") : t("Direct");
+  const markedPosts = campaign.posts?.length
+    ? campaign.posts
+    : campaign.postId
+      ? [{ postId: campaign.postId, postUrl: campaign.postUrl }]
+      : [];
+  const postThumb = markedPosts[0] ? thumbs[markedPosts[0].postId] ?? null : null;
   const trigger = campaign.matchAnyPost
-    ? t("Any post or reel")
+    ? t("All posts and reels")
     : campaign.pendingNextReel
       ? t("Your next reel")
-      : t("A specific post or reel");
+      : markedPosts.length > 1
+        ? t("{count} checked posts and reels", { count: markedPosts.length })
+        : t("A specific post or reel");
   const storyTrigger = [
     campaign.triggerStoryReplies ? t("Replies to your stories") : null,
     campaign.triggerStoryMentions && campaign.matchAnyWord ? t("Mentions of you in stories") : null,
@@ -193,6 +204,7 @@ export default function CampaignDetailPage() {
     {
       type,
       scope: campaign.matchAnyPost ? "any" : campaign.pendingNextReel ? "next" : "specific",
+      postCount: markedPosts.length,
       keywords: campaign.keywords,
       anyWord: campaign.matchAnyWord,
       storyReplies: campaign.triggerStoryReplies,
@@ -256,21 +268,32 @@ export default function CampaignDetailPage() {
 
         {isComments && (
         <Summary title={t("When someone comments on")}>
-          <div className="flex items-center gap-3">
-            {postThumb ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={postThumb}
-                alt={t("Post")}
-                className="h-14 w-14 rounded object-cover"
-              />
-            ) : (
-              <div className="grid h-14 w-14 place-items-center rounded bg-surface-hover text-[10px] text-muted">
-                {campaign.matchAnyPost || campaign.pendingNextReel ? "Any" : t("Post")}
-              </div>
-            )}
-            <span className="text-sm text-foreground">{trigger}</span>
-          </div>
+          <p className="text-sm text-foreground">{trigger}</p>
+          {markedPosts.length > 0 && !campaign.matchAnyPost && (
+            <ul className="flex flex-wrap gap-2" aria-label={t("Posts and reels")}>
+              {markedPosts.slice(0, 12).map((p, i) => (
+                <li key={p.postId}>
+                  <a
+                    href={p.postUrl ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="grid h-14 w-14 place-items-center overflow-hidden rounded bg-surface-hover text-[10px] text-muted"
+                    title={p.postUrl ?? undefined}
+                  >
+                    {thumbs[p.postId] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumbs[p.postId]} alt={t("Post {number}", { number: i + 1 })} className="h-full w-full object-cover" />
+                    ) : (
+                      t("Post {number}", { number: i + 1 })
+                    )}
+                  </a>
+                </li>
+              ))}
+              {markedPosts.length > 12 && (
+                <li className="grid h-14 w-14 place-items-center rounded bg-surface-hover text-xs text-muted">+{markedPosts.length - 12}</li>
+              )}
+            </ul>
+          )}
         </Summary>
         )}
 

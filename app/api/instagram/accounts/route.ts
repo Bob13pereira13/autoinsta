@@ -52,29 +52,28 @@ export async function GET() {
   });
 }
 
+/** The account named by ?id=, if the caller may manage it; else the error response. */
 async function managedAccount(request: NextRequest) {
   const context = await getCurrentWorkspaceContext();
   if (!context) {
-    return { error: NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 }) };
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   if (!canManageWorkspace(context.role)) {
-    return {
-      error: NextResponse.json(
-        { success: false, error: "Only owners and admins can manage Instagram accounts" },
-        { status: 403 }
-      ),
-    };
+    return NextResponse.json(
+      { success: false, error: "Only owners and admins can manage Instagram accounts" },
+      { status: 403 }
+    );
   }
   const id = request.nextUrl.searchParams.get("id");
   if (!id) {
-    return { error: NextResponse.json({ success: false, error: "Missing account ID" }, { status: 400 }) };
+    return NextResponse.json({ success: false, error: "Missing account ID" }, { status: 400 });
   }
   const account = await prisma.instagramAccount.findFirst({
     where: { id, workspaceId: context.workspaceId },
     select: { id: true, automationsEnabled: true },
   });
   if (!account) {
-    return { error: NextResponse.json({ success: false, error: "Instagram account not found" }, { status: 404 }) };
+    return NextResponse.json({ success: false, error: "Instagram account not found" }, { status: 404 });
   }
   return { context, account };
 }
@@ -83,7 +82,7 @@ const patchSchema = z.object({ automationsEnabled: z.boolean() }).strict();
 
 export async function PATCH(request: NextRequest) {
   const found = await managedAccount(request);
-  if ("error" in found) return found.error;
+  if (found instanceof NextResponse) return found;
 
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -105,7 +104,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const found = await managedAccount(request);
-  if ("error" in found) return found.error;
+  if (found instanceof NextResponse) return found;
   await removeInstagramAccounts(found.context.workspaceId, [found.account.id]);
   return NextResponse.json({ success: true });
 }

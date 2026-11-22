@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
   const baseUrl = getBaseUrl();
 
   if (error) {
-    return NextResponse.redirect(`${baseUrl}/settings?instagram=denied`);
+    return NextResponse.redirect(`${baseUrl}/accounts?instagram=denied`);
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${baseUrl}/settings?instagram=invalid`);
+    return NextResponse.redirect(`${baseUrl}/accounts?instagram=invalid`);
   }
 
   const session = await auth();
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (!membership || !canManageWorkspace(membership.role)) {
-    return NextResponse.redirect(`${baseUrl}/settings?instagram=forbidden`);
+    return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
   }
 
   try {
@@ -147,11 +147,11 @@ export async function GET(request: NextRequest) {
 
     if (!connected) {
       return NextResponse.redirect(
-        `${baseUrl}/settings?instagram=already_connected`
+        `${baseUrl}/accounts?instagram=already_connected`
       );
     }
 
-    return NextResponse.redirect(`${baseUrl}/dashboard?connected=true`);
+    return NextResponse.redirect(`${baseUrl}/accounts?instagram=connected`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Instagram Callback] Error:", err);
@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
       .catch(() => {});
 
     return NextResponse.redirect(
-      `${baseUrl}/settings?instagram=failed&reason=${encodeURIComponent(
+      `${baseUrl}/accounts?instagram=failed&reason=${encodeURIComponent(
         message.slice(0, 200)
       )}`
     );

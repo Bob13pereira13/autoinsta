@@ -47,7 +47,9 @@ interface Campaign {
   instagramAccount: {
     username: string;
     instagramId: string;
+    automationsEnabled?: boolean;
   };
+  postIds?: string[];
   reportShareSlug: string | null;
   reportShareEnabled: boolean;
   reportUrl: string | null;
@@ -305,6 +307,10 @@ export default function AutomationsList({ initialType }: { initialType: Automati
     },
   };
   const newHref = `/campaigns/new?tipo=${automationTypeSlug(activeType)}`;
+  // Accounts turned off in the Accounts tab: their automations answer nothing.
+  const pausedAccounts = Array.from(
+    new Set(automations.filter((a) => a.instagramAccount.automationsEnabled === false).map((a) => a.instagramAccount.username))
+  );
 
   const query = search.trim().toLowerCase();
   const filtered = ofType.filter((a) => {
@@ -320,6 +326,19 @@ export default function AutomationsList({ initialType }: { initialType: Automati
 
   return (
     <div className="space-y-6">
+      {pausedAccounts.length > 0 && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <span>
+            {t(pausedAccounts.length === 1 ? "@{accounts} is turned off: none of its automations is answering." : "@{accounts} are turned off: none of their automations is answering.", {
+              accounts: pausedAccounts.join(", @"),
+            })}
+          </span>
+          <Link href="/accounts" className="font-semibold underline underline-offset-4">
+            {t("Open Accounts")}
+          </Link>
+        </div>
+      )}
+
       {/* Channel tabs */}
       <div role="tablist" aria-label={t("Automation channels")} className="flex gap-1 overflow-x-auto border-b border-border">
         {TABS.map((type) => (
@@ -435,7 +454,13 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                 to their own line instead of squeezing the campaign summary. */}
             <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
               {auto.postId && thumbnails[auto.postId] && (
-                videoUrl ? (
+                <div className="relative shrink-0">
+                {(auto.postIds?.length ?? 0) > 1 && (
+                  <span className="absolute -right-1.5 -top-1.5 z-10 rounded-full bg-accent px-1.5 text-[10px] font-semibold text-white">
+                    +{(auto.postIds?.length ?? 1) - 1}
+                  </span>
+                )}
+                {videoUrl ? (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -473,7 +498,8 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                       }}
                     />
                   </a>
-                )
+                )}
+                </div>
               )}
               <div className="min-w-[12rem] flex-1">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -490,6 +516,21 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                   >
                     {auto.isActive ? t("Active") : t("Paused")}
                   </span>
+                  {typeOf(auto) === "COMMENTS" && auto.matchAnyPost && (
+                    <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted border border-border">
+                      {t("All posts")}
+                    </span>
+                  )}
+                  {typeOf(auto) === "COMMENTS" && (auto.postIds?.length ?? 0) > 1 && (
+                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                      {t("{count} checked posts", { count: auto.postIds?.length ?? 0 })}
+                    </span>
+                  )}
+                  {auto.instagramAccount.automationsEnabled === false && (
+                    <span className="shrink-0 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                      {t("Account turned off")}
+                    </span>
+                  )}
                   {auto.pendingNextReel && (
                     <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-warning">
                       {t("Waiting for next reel")}

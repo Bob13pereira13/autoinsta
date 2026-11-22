@@ -19,6 +19,7 @@ const pageTitles: Record<string, StaticMessageKey> = {
   "/campaigns/new": "New automation",
   "/automations": "Automations",
   "/automations/new": "New automation",
+  "/accounts": "Accounts",
   "/logs": "DM Logs",
   "/settings": "Settings",
   "/diagnostics": "Diagnostics",

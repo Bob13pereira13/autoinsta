@@ -66,7 +66,7 @@ describe("Instagram OAuth callback", () => {
     const response = await callback();
 
     expect(response.headers.get("location")).toBe(
-      "https://app.test/dashboard?connected=true"
+      "https://app.test/accounts?instagram=connected"
     );
     expect(urls()[0]).toMatch(/^https:\/\/graph\.instagram\.com\/v[\d.]+\/access_token\?/);
     expect(urls()[1]).toMatch(/^https:\/\/graph\.instagram\.com\/v[\d.]+\/me\?/);
@@ -96,7 +96,7 @@ describe("Instagram OAuth callback", () => {
     const response = await callback();
 
     expect(response.headers.get("location")).toBe(
-      "https://app.test/dashboard?connected=true"
+      "https://app.test/accounts?instagram=connected"
     );
     expect(urls().every((url) => url.startsWith("https://graph.facebook.com/"))).toBe(true);
     expect(urls()[0]).toContain("/debug_token?");
