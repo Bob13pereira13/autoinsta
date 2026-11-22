@@ -12,10 +12,19 @@
 
 import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import PostGrid, { type SelectedPost } from "@/components/post-grid";
 import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
+import HowItWorks from "@/components/how-it-works";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { KeywordChip } from "@/components/ui/chip";
+import { Icon } from "@/components/ui/icons";
+import { SegmentedControl } from "@/components/ui/segmented";
+import { StatusDot } from "@/components/ui/status";
+import { Switch } from "@/components/ui/switch";
 import {
   Help,
   MediaPicker,
@@ -84,45 +93,6 @@ interface CampaignBuilderProps {
 
 const EMPTY_MEDIA: Record<MediaSlot, BuilderMedia[]> = { FOLLOW_PROMPT: [], MAIN: [], FOLLOW_UP: [] };
 
-function Radio({
-  checked,
-  onSelect,
-  children,
-  help,
-}: {
-  checked: boolean;
-  onSelect: () => void;
-  children: React.ReactNode;
-  /** Rendered beside the option, outside its button (no nested buttons). */
-  help?: React.ReactNode;
-}) {
-  return (
-    <div
-      className={`flex w-full flex-wrap items-start gap-x-1 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-        checked ? "border-accent bg-accent/5" : "border-border hover:border-border-hover"
-      }`}
-    >
-      <button
-        type="button"
-        role="radio"
-        aria-checked={checked}
-        onClick={onSelect}
-        className="flex flex-1 items-center gap-3 text-left"
-      >
-        <span
-          className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
-            checked ? "border-accent" : "border-zinc-500"
-          }`}
-        >
-          {checked && <span className="h-2 w-2 rounded-full bg-accent" />}
-        </span>
-        <span className="flex-1 text-foreground">{children}</span>
-      </button>
-      {help}
-    </div>
-  );
-}
-
 function Toggle({
   on,
   onToggle,
@@ -133,24 +103,7 @@ function Toggle({
   /** Accessible name; the visible text sits next to the switch. */
   label: string;
 }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={onToggle}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-        on ? "bg-accent" : "bg-zinc-300"
-      }`}
-    >
-      <span
-        className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
-          on ? "left-6" : "left-1"
-        }`}
-      />
-    </button>
-  );
+  return <Switch checked={on} onChange={() => onToggle()} label={label} />;
 }
 
 export default function CampaignBuilder({ mode, campaignId, initialType = "COMMENTS" }: CampaignBuilderProps) {
@@ -618,19 +571,22 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   }
 
   if (loading) {
-    return <div className="panel h-64 rounded" />;
+    return (
+      <div className="space-y-5" aria-busy="true">
+        <div className="h-16 max-w-md rounded-card bg-surface" />
+        <div className="card h-24" />
+        <div className="card h-64" />
+      </div>
+    );
   }
 
   if (notFound) {
     return (
-      <div className="panel rounded p-8 text-center">
+      <div className="card p-8 text-center">
         <p className="text-sm text-muted">{t("Campaign not found.")}</p>
-        <button
-          onClick={() => router.push(`/automations?tipo=${automationTypeSlug(automationType)}`)}
-          className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
-        >
+        <Button onClick={() => router.push(`/automations?tipo=${automationTypeSlug(automationType)}`)} className="mt-4" icon="arrowLeft">
           {t("Back to automations")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -638,8 +594,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   return (
     <div className="space-y-6">
       {importQueue && (
-        <div className="rounded border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
-          <span className="font-medium text-foreground">
+        <div className="rounded-control border border-accent-soft-border bg-accent-soft px-4 py-3 text-sm">
+          <span className="font-semibold text-accent-soft-fg">
             {t("Importing {current} of {total}.", { current: importTotal - importQueue.length + 1, total: importTotal })}
           </span>{" "}
           <span className="text-muted">
@@ -648,96 +604,67 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         </div>
       )}
 
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {mode === "edit" ? (
-            <>
-              <span className="truncate text-sm font-semibold text-foreground">
-                {name || t("Untitled automation")}
-              </span>
-              <span className="rounded bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{typeLabel}</span>
-              <span
-                className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                  isActive ? "bg-success/15 text-success" : "bg-zinc-500/15 text-muted"
-                }`}
-              >
-                {isActive ? t("LIVE") : t("PAUSED")}
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted">{t("New automation · {type}", { type: typeLabel })}</span>
+      {/* Header: breadcrumb, title and the actions */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="mb-2 text-[13px] text-faint">
+            <Link href={`/automations?tipo=${automationTypeSlug(automationType)}`} className="rounded-sm text-accent-fg hover:text-accent-fg-hover">
+              {t("Automations")}
+            </Link>{" "}
+            / {typeLabel}
+          </p>
+          <h1 className="title-page break-words">
+            {mode === "edit" ? name || t("Untitled automation") : t("New automation · {type}", { type: typeLabel })}
+          </h1>
+          {mode === "edit" && (
+            <StatusDot tone={isActive ? "success" : "neutral"} className="mt-2">
+              {isActive ? t("LIVE") : t("PAUSED")}
+            </StatusDot>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {importQueue && (
-            <button
-              type="button"
-              onClick={skipRow}
-              disabled={saving}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
-            >
+            <Button onClick={skipRow} disabled={saving}>
               {importQueue.length > 1 ? t("Skip") : t("Skip & finish")}
-            </button>
+            </Button>
           )}
           {mode === "edit" &&
             (isActive ? (
-              <button
-                type="button"
-                onClick={() => handleSubmit(false)}
-                disabled={saving}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
-              >
+              <Button onClick={() => handleSubmit(false)} disabled={saving} icon="pause">
                 {t("Stop")}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                onClick={() => handleSubmit(true)}
-                disabled={saveBlocked}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
-              >
+              <Button onClick={() => handleSubmit(true)} disabled={saveBlocked} icon="play">
                 {t("Go Live")}
-              </button>
+              </Button>
             ))}
-          <button
-            type="button"
-            onClick={() => handleSubmit(mode === "new" ? true : isActive)}
-            disabled={saveBlocked}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-          >
+          <Button variant="primary" onClick={() => handleSubmit(mode === "new" ? true : isActive)} disabled={saveBlocked} loading={saving}>
             {saving ? t("Saving…") : mode === "new" ? t("Go Live") : t("Save changes")}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* min-w-0 on the cells: a grid item defaults to min-width:auto, so a
           long string widens the whole page instead of wrapping. */}
       {/* Plain-language summary of what the automation does, live. */}
-      <div className="rounded-lg border border-accent/30 bg-accent/5 px-4 py-3" aria-live="polite">
-        <p className="text-xs font-semibold uppercase tracking-wide text-accent">{t("In short")}</p>
-        <p className="mt-1 text-sm text-foreground">{summary}</p>
-      </div>
+      <HowItWorks summary={summary} live />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
+      <div className="grid items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_340px]">
       {/* Left: controls */}
-      <div className="space-y-8 min-w-0">
-        {error && (
-          <div role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
-            {error}
-          </div>
-        )}
+      <div className="min-w-0 space-y-4">
+        {error && <Alert tone="error">{error}</Alert>}
 
-        <div className="space-y-3">
-          <label className="text-sm font-semibold text-foreground">
+        <div className="card space-y-3 p-5">
+          <label htmlFor="automation-name" className="label">
             {t("Automation name")}{" "}
             <span className="font-normal text-muted">{t("(optional)")}</span>
           </label>
           <input
+            id="automation-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("e.g. Price list on Direct")}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+            className="field"
             maxLength={100}
           />
           {accounts.length > 1 && (
@@ -757,22 +684,32 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         </div>
 
         {/* 1. When */}
-        <Step number={1} title={t("When")}>
+        <Step number={1} title={t("When")} aside={username ? `@${username}` : undefined}>
           {isComments && (
             <>
-              <p className="text-sm text-muted">{t("Someone comments on")}</p>
-              <Radio
-                checked={triggerScope === "posts"}
-                onSelect={() => setTriggerScope("posts")}
-                help={
+              <p className="text-muted">{t("Someone comments on")}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <SegmentedControl
+                  label={t("Someone comments on")}
+                  value={triggerScope}
+                  onChange={setTriggerScope}
+                  items={[
+                    { value: "posts", label: selectedPosts.length ? t("the posts and reels checked below") : t("all posts and reels") },
+                    { value: "next", label: t("next post or reel") },
+                  ]}
+                />
+                {triggerScope === "posts" ? (
                   <Help
                     text={t("By default the automation answers on all your posts and reels. Check one or more below to limit it to those. A checked post takes priority over another automation that answers on all posts.")}
                     example={t("Check only the reel of the launch, so the other posts keep their own automations.")}
                   />
-                }
-              >
-                {selectedPosts.length ? t("the posts and reels checked below") : t("all posts and reels")}
-              </Radio>
+                ) : (
+                  <Help
+                    text={t("The automation waits and attaches itself to the next reel you publish.")}
+                    example={t("Create it before posting the launch reel.")}
+                  />
+                )}
+              </div>
               {triggerScope === "posts" && (
                 <PostGrid
                   instagramAccountId={selectedAccountId}
@@ -782,25 +719,13 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   max={MAX_POSTS}
                 />
               )}
-              <Radio
-                checked={triggerScope === "next"}
-                onSelect={() => setTriggerScope("next")}
-                help={
-                  <Help
-                    text={t("The automation waits and attaches itself to the next reel you publish.")}
-                    example={t("Create it before posting the launch reel.")}
-                  />
-                }
-              >
-                {t("next post or reel")}
-              </Radio>
               {mode === "new" && (
-                <label className="flex items-start gap-3 rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+                <label className="flex items-start gap-3 rounded-control border border-border-subtle bg-surface px-3.5 py-3 text-foreground">
                   <input
                     type="checkbox"
                     checked={replyToRecentComments}
                     onChange={(e) => setReplyToRecentComments(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-[var(--color-accent,#4f46e5)]"
+                    className="mt-0.5 h-4 w-4 accent-accent"
                   />
                   <span className="flex-1">
                     {t("Also reply to people who commented in the last 72h")}
@@ -815,8 +740,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           )}
           {automationType === "STORIES" && (
             <>
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-                <span className="text-sm text-foreground">
+              <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
+                <span className="text-foreground">
                   {t("Someone replies to one of your stories")}
                   <Help
                     text={t("Answers the message a person sends when replying to any of your stories.")}
@@ -825,8 +750,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 </span>
                 <Toggle label={t("Someone replies to one of your stories")} on={triggerStoryReplies} onToggle={() => setTriggerStoryReplies(!triggerStoryReplies)} />
               </div>
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-                <span className="text-sm text-foreground">
+              <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
+                <span className="text-foreground">
                   {t("Someone mentions you in their story")}
                   <Help
                     text={t("Answers when a person tags your account in their own story. A mention has no text, so it only works without keywords (step 2). Instagram only reports mentions from public accounts.")}
@@ -836,14 +761,14 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 <Toggle label={t("Someone mentions you in their story")} on={triggerStoryMentions} onToggle={() => setTriggerStoryMentions(!triggerStoryMentions)} />
               </div>
               {triggerStoryMentions && matchMode !== "any" && (
-                <p className="rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
+                <p className="rounded-control border border-warning-border bg-warning-soft px-3.5 py-2.5 text-[13px] text-warning">
                   {t("Story mentions have no text, so they only work without keywords. Choose “any reply” in step 2.")}
                 </p>
               )}
             </>
           )}
           {automationType === "DIRECT" && (
-            <p className="rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+            <p className="rounded-control border border-border-subtle bg-surface px-3.5 py-3 text-foreground">
               {t("Someone sends you a direct message")}
               <Help
                 text={t("Any DM to your account that is not a reply to a story (those go to Stories automations).")}
@@ -855,30 +780,49 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
         {/* 2. Keyword */}
         <Step number={2} title={t("Keyword")}>
-          <Radio
-            checked={matchMode === "specific"}
-            onSelect={() => setMatchMode("specific")}
-            help={
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedControl
+              label={t("Keyword")}
+              value={matchMode}
+              onChange={setMatchMode}
+              items={[
+                { value: "specific", label: t("only when it contains a keyword") },
+                { value: "any", label: isComments ? t("any comment") : automationType === "STORIES" ? t("any reply") : t("any message") },
+              ]}
+            />
+            {matchMode === "specific" ? (
               <Help
                 text={t("The automation only answers when the text contains one of these words. With several automations, the one with a keyword wins over one without.")}
                 example={t("LINK, PRICE, COUPON")}
               />
-            }
-          >
-            {t("only when it contains a keyword")}
-          </Radio>
+            ) : (
+              <Help
+                text={t("Answers everything that arrives, without needing a keyword.")}
+                example={isComments ? t("Every comment on the post gets the DM.") : t("Every new conversation gets a welcome message.")}
+              />
+            )}
+          </div>
           {matchMode === "specific" && (
-            <div className="space-y-1">
+            <div className="space-y-2">
               <input
                 value={keywordText}
                 onChange={(e) => setKeywordText(e.target.value)}
                 placeholder={t("Enter a word or multiple")}
                 aria-label={t("Keywords")}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                className="field"
               />
-              <p className="text-xs text-muted">{t("Use commas to separate words")}</p>
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-                <span className="text-sm text-foreground">
+              <p className="hint">{t("Use commas to separate words")}</p>
+              {keywords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5" aria-hidden="true">
+                  {keywords.map((kw) => (
+                    <KeywordChip key={kw} size="md">
+                      {kw}
+                    </KeywordChip>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
+                <span className="text-foreground">
                   {t("Match part of a word")}
                   <Help
                     text={t("Off: only the exact word counts. On: also counts when the keyword is part of a longer word.")}
@@ -889,20 +833,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               </div>
             </div>
           )}
-          <Radio
-            checked={matchMode === "any"}
-            onSelect={() => setMatchMode("any")}
-            help={
-              <Help
-                text={t("Answers everything that arrives, without needing a keyword.")}
-                example={isComments ? t("Every comment on the post gets the DM.") : t("Every new conversation gets a welcome message.")}
-              />
-            }
-          >
-            {isComments ? t("any comment") : automationType === "STORIES" ? t("any reply") : t("any message")}
-          </Radio>
           {answersEveryComment && (
-            <div role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+            <div role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
               <p className="font-semibold">{t("Careful: this sends a DM to everyone who comments on any of your posts")}</p>
               <p className="mt-1 text-xs">
                 {t("Every comment on every post and reel gets the automatic reply. To limit it, check some posts in step 1 or answer only comments with a keyword.")}
@@ -910,7 +842,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             </div>
           )}
           {automationType === "DIRECT" && matchMode === "any" && (
-            <div role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+            <div role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
               <p className="font-semibold">{t("Careful: this answers EVERY direct message")}</p>
               <p className="mt-1 text-xs">
                 {t("Including customers who already talk to your team. To avoid spam, each person gets at most one automatic reply per interval below, and nothing is sent while someone from your team is talking to them (24 h after their last message).")}
@@ -918,7 +850,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             </div>
           )}
           {!isComments && matchMode === "any" && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+            <div className="flex flex-wrap items-center gap-2 rounded-control border border-border-subtle bg-surface px-3.5 py-2.5 text-foreground">
               <span>{t("Reply to the same person at most once every")}</span>
               <input
                 type="number"
@@ -927,7 +859,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 value={replyCooldownHours}
                 aria-label={t("Hours between replies to the same person")}
                 onChange={(e) => setReplyCooldownHours(Math.max(1, Math.min(168, Math.floor(Number(e.target.value) || 24))))}
-                className="w-16 rounded-lg border border-border bg-surface px-2 py-1 text-sm focus:border-accent/40 focus:outline-none"
+                className="field !min-h-9 !w-20 !px-2 !py-1"
               />
               <span>{t("hours")}</span>
               <Help text={t("Prevents the same person from getting the automatic reply every time they write. Default: 24 hours.")} />
@@ -940,9 +872,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           <StorageUsage version={storageVersion} />
 
           {isComments && (
-            <div className="rounded-lg border border-border p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-foreground">
+            <div className="rounded-control border border-border-subtle bg-surface p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-heading">
                   {t("an opening DM with a button")}
                   <Help
                     text={t("Instagram lets you send only one text message in reply to a comment. With an opening DM, the person taps the button and the conversation opens — then the link, images and videos can be sent.")}
@@ -959,7 +891,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     placeholder={t("Hey there! I'm so happy you're here 😊")}
                     rows={3}
                     aria-label={t("Opening DM text")}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                    className="field resize-none"
                     maxLength={1000}
                   />
                   <input
@@ -967,18 +899,18 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
                     placeholder={t("Send me the link")}
                     aria-label={t("Button label")}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                    className="field"
                     maxLength={64}
                   />
-                  <p className="text-xs text-muted">{t("This first message is text only: Instagram does not allow images or videos in it.")}</p>
+                  <p className="hint">{t("This first message is text only: Instagram does not allow images or videos in it.")}</p>
                 </div>
               )}
             </div>
           )}
 
-          <div className="rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground">
+          <div className="rounded-control border border-border-subtle bg-surface p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold text-heading">
                 {t("follow me to unlock")}
                 <Help
                   text={t("The content is only sent after the person follows the account and taps the button. If Instagram cannot confirm the follow, it is sent anyway.")}
@@ -995,7 +927,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   placeholder={t("Follow me and tap the button below to get it 💛")}
                   rows={3}
                   aria-label={t("Follow request text")}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                  className="field resize-none"
                   maxLength={1000}
                 />
                 <input
@@ -1003,7 +935,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
                   placeholder={t("i'm following")}
                   aria-label={t("Button label")}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="field"
                   maxLength={20}
                 />
                 <MediaPicker
@@ -1016,8 +948,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             )}
           </div>
 
-          <div className="rounded-lg border border-border p-3 space-y-2">
-            <span className="text-sm text-foreground">
+          <div className="space-y-2.5 rounded-control border border-border-subtle bg-surface p-3.5">
+            <span className="font-semibold text-heading">
               {t("the main message")}
               <Help
                 text={t("Write the message. {link} becomes your tracked link (we count clicks) and {username} becomes the person's name.", { link: "{link}", username: "{username}" })}
@@ -1030,7 +962,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               placeholder={t("Write a message")}
               rows={3}
               aria-label={t("Main message text")}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+              className="field resize-none"
               maxLength={1000}
             />
             {linkOpen ? (
@@ -1041,37 +973,37 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   onBlur={ensureLinkToken}
                   placeholder="https://yourlink.com/offer"
                   aria-label={t("Link")}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="field"
                 />
                 <input
                   value={linkButtonLabel}
                   onChange={(e) => setLinkButtonLabel(e.target.value)}
                   placeholder={t("Button label (e.g. Open link)")}
                   maxLength={20}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="field"
                 />
                 {secondLinkOpen ? (
-                  <div className="space-y-2 border-t border-border pt-2">
+                  <div className="space-y-2 border-t border-border-subtle pt-2.5">
                     <input
                       value={secondaryDestinationUrl}
                       onChange={(e) => setSecondaryDestinationUrl(e.target.value)}
                       placeholder="https://yourlink.com/second"
                       aria-label={t("Second link")}
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                      className="field"
                     />
                     <input
                       value={secondaryButtonLabel}
                       onChange={(e) => setSecondaryButtonLabel(e.target.value)}
                       placeholder={t("Second button label")}
                       maxLength={20}
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                      className="field"
                     />
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setSecondLinkOpen(true)}
-                    className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+                    className="btn btn-secondary btn-sm w-full border-dashed"
                   >
                     {t("+ Add A Second Link")}
                   </button>
@@ -1081,7 +1013,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               <button
                 type="button"
                 onClick={() => setLinkOpen(true)}
-                className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+                className="btn btn-secondary btn-sm w-full border-dashed"
               >
                 {t("+ Add A Link")}
               </button>
@@ -1094,9 +1026,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             />
           </div>
 
-          <div className="rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground">
+          <div className="rounded-control border border-border-subtle bg-surface p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold text-heading">
                 {t("a thank-you message")}
                 <Help
                   text={t("A short extra message sent some minutes after the main one (up to 24 hours, Instagram's messaging window).")}
@@ -1113,11 +1045,11 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   placeholder={t("Btw just wanted to say thanks for following me, I appreciate the support 🙌")}
                   rows={3}
                   aria-label={t("Thank-you message text")}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                  className="field resize-none"
                   maxLength={1000}
                 />
-                <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-                  <span className="text-xs text-muted">{t("Send it")}</span>
+                <div className="flex flex-wrap items-center gap-2 text-foreground">
+                  <span className="hint">{t("Send it")}</span>
                   <input
                     type="number"
                     min={0}
@@ -1127,9 +1059,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     onChange={(e) =>
                       setFollowUpDelayMinutes(Math.max(0, Math.min(1440, Math.floor(Number(e.target.value) || 0))))
                     }
-                    className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                    className="field !min-h-9 !w-20 !px-2 !py-1"
                   />
-                  <span className="text-xs text-muted">{t("minutes after the link")}</span>
+                  <span className="hint">{t("minutes after the link")}</span>
                 </div>
                 <MediaPicker
                   items={media.FOLLOW_UP}
@@ -1142,7 +1074,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           </div>
 
           {mediaBlockedInComments && (
-            <p role="alert" className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+            <p role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
               {t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media.")}
             </p>
           )}
@@ -1151,8 +1083,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         {/* 4. Extras — Comments only */}
         {isComments && (
           <Step number={4} title={t("Extras")}>
-            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-              <span className="text-sm text-foreground">
+            <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
+              <span className="font-semibold text-heading">
                 {t("reply to the comment publicly")}
                 <Help
                   text={t("Also answers under the comment, visible to everyone. Add several variations: one is picked at random each time.")}
@@ -1173,13 +1105,13 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                       placeholder={t("Sent you a DM! 📩")}
                       aria-label={t("Public reply {number}", { number: i + 1 })}
                       maxLength={1000}
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                      className="field"
                     />
                     {publicReplyMessages.length > 1 && (
                       <button
                         type="button"
                         onClick={() => setPublicReplyMessages((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="shrink-0 px-2 text-muted hover:text-error"
+                        className="btn btn-danger-ghost btn-icon shrink-0"
                         aria-label={t("Remove reply")}
                       >
                         ✕
@@ -1191,7 +1123,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   <button
                     type="button"
                     onClick={() => setPublicReplyMessages((prev) => [...prev, ""])}
-                    className="text-xs font-medium text-accent hover:underline"
+                    className="text-[13px] font-medium text-accent-fg hover:text-accent-fg-hover hover:underline"
                   >
                     {t("+ Add another reply")}
                   </button>
@@ -1202,10 +1134,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         )}
       </div>
 
-      {/* Right: preview */}
-      <div>
-        <p className="mb-4 text-sm text-muted">{t("Preview")}</p>
-        <div className="flex min-w-0 justify-center lg:sticky lg:top-6 lg:block">
+      {/* Right: preview (stacks under the steps on narrower screens) */}
+      <div className="min-w-0 xl:sticky xl:top-6">
           <CampaignPreview
             tab={previewTab}
             onTabChange={setPreviewTab}
@@ -1237,7 +1167,6 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             followUpMessage={followUpMessage}
             followUpDelayMinutes={followUpDelayMinutes}
           />
-        </div>
       </div>
       </div>
     </div>

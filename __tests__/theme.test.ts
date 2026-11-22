@@ -82,6 +82,8 @@ const PAIRS: [string, string[]][] = [
   ["accent-soft-fg", ["bg", "accent-soft"]],
   ["accent-soft-fg", ["bg", "card", "accent-soft"]],
   ["accent-soft-fg", ["bg", "card", "chip"]],
+  ["heading", ["bg", "summary"]],
+  ["accent-fg", ["bg", "summary"]],
   ["text", ["preview", "bubble-in"]],
   ["text-2", ["preview"]],
   ["success", ["bg", "card"]],

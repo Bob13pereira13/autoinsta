@@ -32,12 +32,12 @@ export function Help({ text, example }: { text: string; example?: string }) {
         aria-expanded={open}
         aria-controls={id}
         aria-label={t("What is this?")}
-        className="ml-1 inline-grid h-5 w-5 place-items-center rounded-full border border-border text-[11px] font-semibold text-muted hover:border-accent hover:text-accent"
+        className="ml-1 inline-grid h-6 w-6 place-items-center rounded-full border border-border text-[11px] font-semibold text-muted transition-colors hover:border-accent-fg hover:text-accent-fg"
       >
         ?
       </button>
       {open && (
-        <span id={id} role="note" className="mt-2 block rounded-lg border border-border bg-surface p-3 text-xs font-normal leading-5 text-muted">
+        <span id={id} role="note" className="mt-2 block rounded-control border border-border-subtle bg-surface p-3 text-[13px] font-normal leading-5 text-muted">
           {text}
           {example && (
             <span className="mt-1 block text-foreground">
@@ -50,14 +50,19 @@ export function Help({ text, example }: { text: string; example?: string }) {
   );
 }
 
-/** A labelled step of the editor. */
-export function Step({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+/** A numbered step of the editor: a card with the step number in the gradient. */
+export function Step({ number, title, aside, children }: { number: number; title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="space-y-3" aria-labelledby={`step-${number}`}>
-      <h2 id={`step-${number}`} className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-accent text-xs font-bold text-white">{number}</span>
-        {title}
-      </h2>
+    <section className="card space-y-4 p-5" aria-labelledby={`step-${number}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-accent text-[13px] font-bold text-on-accent">
+          {number}
+        </span>
+        <h2 id={`step-${number}`} className="title-section">
+          {title}
+        </h2>
+        {aside && <span className="ml-auto text-[13px] text-faint">{aside}</span>}
+      </div>
       {children}
     </section>
   );
@@ -88,14 +93,14 @@ export function StorageUsage({ version }: { version: number }) {
   const full = pct >= 100;
   return (
     <div className="space-y-1" aria-live="polite">
-      <div className="flex justify-between text-xs text-muted">
+      <div className="flex justify-between text-xs text-faint">
         <span>{t("Media storage")}</span>
         <span className={full ? "font-semibold text-error" : ""}>
           {t("{used} MB of {quota} MB", { used: formatMb(usage.usedBytes), quota: formatMb(usage.quotaBytes) })}
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <div className={`h-full ${full ? "bg-error" : pct > 80 ? "bg-warning" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-switch-off" role="progressbar" aria-label={t("Media storage")} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <div className={`h-full rounded-full ${full ? "bg-danger" : pct > 80 ? "bg-warning-dot" : "bg-gradient-accent"}`} style={{ width: `${pct}%` }} />
       </div>
       {full && <p className="text-xs text-error">{t("Your media storage is full. Remove media from automations you no longer use and try again.")}</p>}
     </div>
@@ -176,20 +181,20 @@ export function MediaPicker({
       {items.length > 0 && (
         <ul className="flex flex-wrap gap-2" aria-label={t("Images and videos")}>
           {items.map((item) => (
-            <li key={item.id} className="relative h-20 w-16 overflow-hidden rounded-lg border border-border bg-zinc-100">
+            <li key={item.id} className="relative h-24 w-24 overflow-hidden rounded-control border border-border-subtle bg-surface">
               {item.kind === "VIDEO" ? (
                 <video src={item.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
               ) : (
                 <img src={item.url} alt={item.originalName ?? ""} className="h-full w-full object-cover" />
               )}
               {item.kind === "VIDEO" && (
-                <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] text-white">{t("Video")}</span>
+                <span className="absolute bottom-1.5 left-1.5 rounded-md bg-scrim px-1.5 py-0.5 text-[11px] text-on-scrim">{t("Video")}</span>
               )}
               <button
                 type="button"
                 onClick={() => void remove(item)}
                 aria-label={t("Remove {name}", { name: item.originalName ?? t("file") })}
-                className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-xs text-white hover:bg-error"
+                className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-item bg-scrim text-sm text-on-scrim transition-colors hover:bg-danger"
               >
                 ✕
               </button>
@@ -198,7 +203,7 @@ export function MediaPicker({
         </ul>
       )}
       {blockedReason ? (
-        <p className="rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning">{blockedReason}</p>
+        <p className="rounded-control border border-warning-border bg-warning-soft px-3.5 py-2.5 text-[13px] text-warning">{blockedReason}</p>
       ) : (
         !full && (
           <>
@@ -218,16 +223,16 @@ export function MediaPicker({
               type="button"
               disabled={busy}
               onClick={() => input.current?.click()}
-              className="w-full rounded-lg border border-dashed border-border py-2 text-sm text-muted hover:border-accent hover:text-foreground disabled:opacity-60"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-control border-[1.5px] border-dashed border-accent-soft-border text-[13px] font-medium text-accent-fg transition-colors hover:border-accent-fg hover:bg-accent-soft disabled:opacity-60"
             >
               {busy ? t("Uploading…") : t("+ Add image or video")}
             </button>
-            <p className="text-[11px] text-muted">{t("PNG or JPEG up to 8 MB (max 5) · MP4, MOV or WEBM up to 25 MB (max 1)")}</p>
+            <p className="text-xs text-faint">{t("PNG or JPEG up to 8 MB (max 5) · MP4, MOV or WEBM up to 25 MB (max 1)")}</p>
           </>
         )
       )}
       {error && (
-        <p role="alert" className="text-xs text-error">
+        <p role="alert" className="text-[13px] text-error">
           {error}
         </p>
       )}

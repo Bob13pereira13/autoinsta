@@ -3,9 +3,9 @@
 /**
  * Campaign Detail
  *
- * Clicking a campaign opens this read-only view: a summary of the automation
- * on the left, and Insights / Preview tabs on the right. Edit and Stop/Resume
- * live in the top bar.
+ * Clicking a campaign opens this read-only view: "How it works" on top, what
+ * the automation does on the left, and Insights / Preview tabs on the right.
+ * Edit and Stop/Resume sit next to the title.
  */
 
 import { useI18n } from "@/lib/i18n/provider";
@@ -15,6 +15,11 @@ import Link from "next/link";
 import CampaignPreview, { type PreviewMedia, type PreviewTab } from "@/components/campaign-preview";
 import { automationSummary } from "@/lib/automation/summary";
 import { automationTypeSlug } from "@/lib/automation/type-slugs";
+import HowItWorks from "@/components/how-it-works";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { KeywordChip } from "@/components/ui/chip";
+import { SegmentedControl } from "@/components/ui/segmented";
+import { StatusDot } from "@/components/ui/status";
 
 type AutomationType = "COMMENTS" | "STORIES" | "DIRECT";
 type Slot = "FOLLOW_PROMPT" | "MAIN" | "FOLLOW_UP";
@@ -140,18 +145,21 @@ export default function CampaignDetailPage() {
   }
 
   if (loading) {
-    return <div className="panel h-64 rounded" />;
+    return (
+      <div className="space-y-5" aria-busy="true">
+        <div className="h-16 max-w-md rounded-card bg-surface" />
+        <div className="card h-24" />
+        <div className="card h-64" />
+      </div>
+    );
   }
   if (notFound || !campaign) {
     return (
-      <div className="panel rounded p-8 text-center">
+      <div className="card p-8 text-center">
         <p className="text-sm text-muted">{t("Campaign not found.")}</p>
-        <button
-          onClick={() => router.push("/automations")}
-          className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
-        >
+        <Button onClick={() => router.push("/automations")} className="mt-4" icon="arrowLeft">
           {t("Back to automations")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -228,33 +236,36 @@ export default function CampaignDetailPage() {
   ];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
-      {/* Left: config summary */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/automations?tipo=${automationTypeSlug(type)}`}
-            className="text-sm text-muted hover:text-foreground"
-          >
-            {t("← Automations")}
-          </Link>
-        </div>
-        <div className="flex items-center gap-2">
-          <h1 className="truncate text-lg font-semibold">{campaign.name}</h1>
-          <span
-            className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${
-              campaign.isActive
-                ? "bg-success/10 text-success"
-                : "bg-zinc-500/10 text-muted"
-            }`}
-          >
+    <div className="space-y-6">
+      {/* Header: breadcrumb, name, status and the actions */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="mb-2 text-[13px] text-faint">
+            <Link href={`/automations?tipo=${automationTypeSlug(type)}`} className="rounded-sm text-accent-fg hover:text-accent-fg-hover">
+              {t("Automations")}
+            </Link>{" "}
+            / {typeLabel}
+          </p>
+          <h1 className="title-page break-words">{campaign.name}</h1>
+          <StatusDot tone={campaign.isActive ? "success" : "neutral"} className="mt-2">
             {campaign.isActive ? t("LIVE") : t("Paused")}
-          </span>
-          <span className="shrink-0 rounded bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{typeLabel}</span>
+          </StatusDot>
         </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button onClick={toggleActive} disabled={busy} icon={campaign.isActive ? "pause" : "play"}>
+            {campaign.isActive ? t("Stop") : t("Resume")}
+          </Button>
+          <ButtonLink href={`/campaigns/${campaign.id}/edit`} variant="primary" icon="edit">
+            {t("Edit")}
+          </ButtonLink>
+        </div>
+      </div>
 
-        <p className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-foreground">{summary}</p>
+      <HowItWorks summary={summary} />
 
+      <div className="grid items-start gap-[22px] lg:grid-cols-[minmax(0,1fr)_360px]">
+      {/* Left: what the automation does */}
+      <div className="card min-w-0 space-y-5 p-5">
         {type === "STORIES" && (
           <Summary title={t("When")}>
             <FieldBox>{storyTrigger || t("No trigger selected")}</FieldBox>
@@ -268,7 +279,7 @@ export default function CampaignDetailPage() {
 
         {isComments && (
         <Summary title={t("When someone comments on")}>
-          <p className="text-sm text-foreground">{trigger}</p>
+          <p className="text-foreground">{trigger}</p>
           {markedPosts.length > 0 && !campaign.matchAnyPost && (
             <ul className="flex flex-wrap gap-2" aria-label={t("Posts and reels")}>
               {markedPosts.slice(0, 12).map((p, i) => (
@@ -277,7 +288,7 @@ export default function CampaignDetailPage() {
                     href={p.postUrl ?? undefined}
                     target="_blank"
                     rel="noreferrer"
-                    className="grid h-14 w-14 place-items-center overflow-hidden rounded bg-surface-hover text-[10px] text-muted"
+                    className="grid aspect-[4/5] w-14 place-items-center overflow-hidden rounded-item bg-switch-off px-1 text-center text-[10px] leading-tight text-muted"
                     title={p.postUrl ?? undefined}
                   >
                     {thumbs[p.postId] ? (
@@ -290,7 +301,7 @@ export default function CampaignDetailPage() {
                 </li>
               ))}
               {markedPosts.length > 12 && (
-                <li className="grid h-14 w-14 place-items-center rounded bg-surface-hover text-xs text-muted">+{markedPosts.length - 12}</li>
+                <li className="grid aspect-[4/5] w-14 place-items-center rounded-item bg-switch-off text-xs text-muted">+{markedPosts.length - 12}</li>
               )}
             </ul>
           )}
@@ -298,9 +309,19 @@ export default function CampaignDetailPage() {
         )}
 
         <Summary title={isComments ? t("And this comment has") : t("Keyword")}>
-          <FieldBox>{matchText}</FieldBox>
+          {campaign.matchAnyWord || campaign.keywords.length === 0 ? (
+            <FieldBox>{matchText}</FieldBox>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {campaign.keywords.map((kw) => (
+                <KeywordChip key={kw} size="md">
+                  {kw}
+                </KeywordChip>
+              ))}
+            </div>
+          )}
           {!isComments && campaign.matchAnyWord && (
-            <p className="text-xs text-muted">
+            <p className="hint">
               {t("At most one automatic reply per person every {hours} h, and none while your team is talking to them.", {
                 hours: campaign.replyCooldownHours ?? 24,
               })}
@@ -308,7 +329,7 @@ export default function CampaignDetailPage() {
           )}
           {isComments && campaign.publicReplyEnabled && publicReplies.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-xs text-muted">{t("Public reply under the post")}</p>
+              <p className="hint">{t("Public reply under the post")}</p>
               {publicReplies.map((m, i) => (
                 <FieldBox key={i}>{m}</FieldBox>
               ))}
@@ -355,12 +376,12 @@ export default function CampaignDetailPage() {
               ?.filter((link) => link.destinationUrl)
               .map((link, i) => (
                 <div key={i} className="space-y-1">
-                  <div className="rounded border border-border bg-surface px-3 py-2">
-                    <p className="select-all break-all font-mono text-xs text-foreground">
+                  <div className="rounded-item border border-border-subtle bg-surface px-3 py-2">
+                    <p className="select-all break-all font-mono text-[13px] text-foreground">
                       {link.trackedUrl ?? link.destinationUrl}
                     </p>
                   </div>
-                  <p className="text-xs text-muted">
+                  <p className="hint">
                     {link.label ? `${link.label} · ` : ""}{t("redirects to")}{" "}
                     <span className="break-all">{link.destinationUrl}</span>
                   </p>
@@ -372,7 +393,7 @@ export default function CampaignDetailPage() {
         {campaign.followUpEnabled && campaign.followUpMessage && (
           <Summary title={t("Then a follow-up message")}>
             <FieldBox>{campaign.followUpMessage}</FieldBox>
-            <p className="text-xs text-muted">
+            <p className="hint">
               {campaign.followUpDelayMinutes && campaign.followUpDelayMinutes > 0
                 ? t("Sent {minutes} min after the link.", { minutes: campaign.followUpDelayMinutes })
                 : t("Sent right after the link.")}
@@ -382,53 +403,32 @@ export default function CampaignDetailPage() {
         )}
       </div>
 
-      {/* Right: top bar + tabs */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 border-b border-border pb-3">
-          <div className="flex gap-4">
-            <TabButton active={tab === "insights"} onClick={() => setTab("insights")}>
-              {t("Insights")}
-            </TabButton>
-            <TabButton active={tab === "preview"} onClick={() => setTab("preview")}>
-              {t("Preview")}
-            </TabButton>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/campaigns/${campaign.id}/edit`}
-              className="rounded border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground"
-            >
-              {t("Edit")}
-            </Link>
-            <button
-              onClick={toggleActive}
-              disabled={busy}
-              className={`rounded border px-3 py-1.5 text-sm disabled:opacity-50 ${
-                campaign.isActive
-                  ? "border-error/30 text-error hover:bg-error/10"
-                  : "border-success/30 text-success hover:bg-success/10"
-              }`}
-            >
-              {campaign.isActive ? t("Stop") : t("Resume")}
-            </button>
-          </div>
-        </div>
+      {/* Right: numbers and preview */}
+      <div className="min-w-0 space-y-4 lg:sticky lg:top-6">
+        <SegmentedControl
+          kind="tabs"
+          label={t("Automation details")}
+          value={tab}
+          onChange={setTab}
+          items={[
+            { value: "insights", label: t("Insights"), icon: "diagnostics" },
+            { value: "preview", label: t("Preview"), icon: "eye" },
+          ]}
+        />
 
         {tab === "insights" && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3">
             {metrics.map((m) => (
-              <div key={m.label} className="panel rounded p-4">
-                <p className="text-sm text-muted">{m.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">
-                  {m.value}
-                </p>
+              <div key={m.label} className="card flex flex-col-reverse gap-1 p-4">
+                <dt className="text-[13px] text-muted">{m.label}</dt>
+                <dd className="font-display text-[28px] font-semibold leading-none text-heading">{m.value}</dd>
               </div>
             ))}
-          </div>
+          </dl>
         )}
 
         {tab === "preview" && (
-          <div className="flex justify-center sm:justify-start">
+          <div>
           <CampaignPreview
             tab={previewTab}
             onTabChange={setPreviewTab}
@@ -468,6 +468,7 @@ export default function CampaignDetailPage() {
           </div>
         )}
       </div>
+      </div>
     </div>
   );
 }
@@ -475,7 +476,7 @@ export default function CampaignDetailPage() {
 function Summary({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <h2 className="font-semibold text-heading">{title}</h2>
       {children}
     </div>
   );
@@ -483,32 +484,9 @@ function Summary({ title, children }: { title: string; children: React.ReactNode
 
 function FieldBox({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground">
+    <div className="whitespace-pre-wrap rounded-item border border-border-subtle bg-surface px-3 py-2.5 text-foreground">
       {children}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`border-b-2 pb-2 text-sm font-medium ${
-        active
-          ? "border-accent text-foreground"
-          : "border-transparent text-muted hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -518,10 +496,10 @@ function MediaThumbs({ items }: { items: PreviewMedia[] }) {
     <div className="flex flex-wrap gap-2">
       {items.map((m, i) =>
         m.kind === "VIDEO" ? (
-          <video key={i} src={m.url} muted playsInline preload="metadata" className="h-16 w-12 rounded object-cover" />
+          <video key={i} src={m.url} muted playsInline preload="metadata" className="aspect-[4/5] w-16 rounded-item object-cover" />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={i} src={m.url} alt="" className="h-16 w-12 rounded object-cover" />
+          <img key={i} src={m.url} alt="" className="aspect-[4/5] w-16 rounded-item object-cover" />
         )
       )}
     </div>

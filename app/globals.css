@@ -82,6 +82,7 @@
   --bubble-in: #f1f0f7;
   --chart: #8b5cf6;
   --focus: #6d28d9;
+  --summary: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(192, 38, 211, 0.05));
 }
 
 /* ------------------------- dark (saved choice) ----------------------------- */
@@ -149,6 +150,7 @@
   --bubble-in: rgba(255, 255, 255, 0.08);
   --chart: #a78bfa;
   --focus: #c4b5fd;
+  --summary: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(192, 38, 211, 0.08));
 }
 
 /* ------------------- dark (system, no saved choice) ------------------------ */
@@ -217,6 +219,7 @@
     --bubble-in: rgba(255, 255, 255, 0.08);
     --chart: #a78bfa;
     --focus: #c4b5fd;
+    --summary: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(192, 38, 211, 0.08));
   }
 }
 
@@ -308,6 +311,10 @@
   --shadow-preview: var(--preview-shadow);
 }
 
+/* The "How it works" summary background. */
+@utility bg-summary {
+  background-image: var(--summary);
+}
 /* The brand gradient as a background utility (bg-gradient-accent). */
 @utility bg-gradient-accent {
   background-image: var(--gradient);
@@ -656,6 +663,17 @@ select:focus-visible {
     }
   }
 
+  /* Post thumbnail in the post grid: grows a little on hover. */
+  .post-tile {
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.2s ease,
+      border-color 0.15s ease;
+  }
+  .post-tile:hover {
+    transform: scale(1.02);
+  }
+
   /* Keyword chip (monospace) and code. */
   .chip {
     display: inline-flex;
@@ -758,6 +776,7 @@ dialog.ui-dialog::backdrop {
     scroll-behavior: auto !important;
   }
   .card-interactive:hover,
+  .post-tile:hover,
   .btn:active {
     transform: none !important;
   }

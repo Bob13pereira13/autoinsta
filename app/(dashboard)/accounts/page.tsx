@@ -12,6 +12,14 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/provider";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
+import { Alert } from "@/components/ui/alert";
+import { Button, ButtonAnchor, buttonClass } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cx } from "@/components/ui/cx";
+import { Dialog } from "@/components/ui/dialog";
+import { Icon } from "@/components/ui/icons";
+import { PageHeader } from "@/components/ui/page-header";
+import { Switch } from "@/components/ui/switch";
 
 interface Account {
   id: string;
@@ -105,71 +113,72 @@ export default function AccountsPage() {
       );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       {/* ?instagram= codes the login routes redirect back with. useSearchParams
           needs a Suspense boundary in a prerendered client page. */}
       <Suspense fallback={null}>
         <InstagramConnectNotice />
       </Suspense>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-xl">
-          <p className="text-sm text-foreground">
+      <PageHeader
+        title={t("Accounts")}
+        description={
+          <>
+            {!loading && (
+              <span className="font-medium text-foreground">
+                {accountLimit === null
+                  ? t(accounts.length === 1 ? "{count} account connected" : "{count} accounts connected", { count: accounts.length })
+                  : t("{count} of {max} accounts", { count: accounts.length, max: accountLimit })}
+                .{" "}
+              </span>
+            )}
             {t("The Instagram accounts your automations answer from. Turn an account off to pause all of its automations at once, without deleting anything.")}
-          </p>
-          {!loading && (
-            <p className="mt-1 text-xs text-muted">
-              {accountLimit === null
-                ? t(accounts.length === 1 ? "{count} account connected" : "{count} accounts connected", { count: accounts.length })
-                : t("{count} of {max} accounts", { count: accounts.length, max: accountLimit })}
-            </p>
-          )}
-        </div>
-        {canManage && !loading && !atLimit && (
-          <a
-            href={CONNECT_URL}
-            className="shrink-0 rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"
-          >
-            {t("Connect Instagram account")}
-          </a>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          canManage &&
+          !loading &&
+          !atLimit && (
+            <ButtonAnchor href={CONNECT_URL} variant="primary" icon="plus">
+              {t("Connect Instagram account")}
+            </ButtonAnchor>
+          )
+        }
+      />
 
-      {error && (
-        <p role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
-          {error}
-        </p>
-      )}
+      {error && <Alert tone="error">{error}</Alert>}
 
       {canManage && !loading && atLimit && accounts.length > 0 && (
-        <p className="rounded border border-border bg-surface px-3 py-2 text-sm text-muted">{limitText}</p>
+        <Alert tone="info" role={null}>
+          {limitText}
+        </Alert>
       )}
 
       {!canManage && !loading && accounts.length > 0 && (
-        <p className="text-xs text-muted">{t("Only owners and admins can connect, turn off or remove accounts.")}</p>
+        <p className="hint">{t("Only owners and admins can connect, turn off or remove accounts.")}</p>
       )}
 
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy="true">
           {[0, 1].map((i) => (
-            <div key={i} className="panel h-20 rounded" />
+            <div key={i} className="card h-20" />
           ))}
         </div>
       ) : accounts.length === 0 ? (
-        <div className="panel rounded p-8 text-center sm:p-12">
-          <h3 className="mb-2 text-lg font-semibold">{t("No Instagram account connected")}</h3>
-          <p className="mx-auto mb-6 max-w-sm text-sm text-muted">
+        <Card className="flex flex-col items-center gap-3 p-8 text-center sm:p-12">
+          <span className="grid h-12 w-12 place-items-center rounded-control border border-accent-soft-border bg-accent-soft text-accent-soft-icon">
+            <Icon name="accounts" size={22} />
+          </span>
+          <h2 className="title-section">{t("No Instagram account connected")}</h2>
+          <p className="max-w-sm text-sm text-muted">
             {t("Connect an Instagram professional account to start answering comments, stories and direct messages.")}
           </p>
           {canManage && (
-            <a
-              href={CONNECT_URL}
-              className="inline-flex rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
-            >
+            <ButtonAnchor href={CONNECT_URL} variant="primary" icon="plus" className="mt-2">
               {t("Connect Instagram account")}
-            </a>
+            </ButtonAnchor>
           )}
-        </div>
+        </Card>
       ) : (
         <ul className="space-y-3">
           {accounts.map((account) => (
@@ -185,23 +194,22 @@ export default function AccountsPage() {
         </ul>
       )}
 
-      {removing && (
-        <RemoveDialog
-          account={removing}
-          busy={busy === `remove:${removing.id}`}
-          onCancel={() => setRemoving(null)}
-          onRemove={() => void remove(removing)}
-          onDeactivate={() => {
-            void setEnabled(removing, false);
-            setRemoving(null);
-          }}
-        />
-      )}
+      <RemoveDialog
+        account={removing}
+        busy={removing ? busy === `remove:${removing.id}` : false}
+        onCancel={() => setRemoving(null)}
+        onRemove={() => removing && void remove(removing)}
+        onDeactivate={() => {
+          if (!removing) return;
+          void setEnabled(removing, false);
+          setRemoving(null);
+        }}
+      />
     </div>
   );
 }
 
-function Avatar({ accountId, username }: { accountId: string; username: string }) {
+function Avatar({ accountId, username, on }: { accountId: string; username: string; on: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -216,12 +224,16 @@ function Avatar({ accountId, username }: { accountId: string; username: string }
       cancelled = true;
     };
   }, [accountId]);
-  if (url && !failed) {
-    return <img src={url} alt="" onError={() => setFailed(true)} className="h-11 w-11 shrink-0 rounded-full object-cover" />;
-  }
+  // A ring in the brand gradient while the account answers; neutral when off.
   return (
-    <span aria-hidden="true" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold uppercase text-accent">
-      {username.slice(0, 1)}
+    <span aria-hidden="true" className={cx("h-12 w-12 shrink-0 rounded-full p-[2px]", on ? "bg-gradient-accent" : "bg-switch-off")}>
+      {url && !failed ? (
+        <img src={url} alt="" onError={() => setFailed(true)} className="h-full w-full rounded-full border-2 border-[color:var(--bg)] object-cover" />
+      ) : (
+        <span className="grid h-full w-full place-items-center rounded-full border-2 border-[color:var(--bg)] bg-accent-soft text-[15px] font-bold uppercase text-accent-soft-fg">
+          {username.slice(0, 2)}
+        </span>
+      )}
     </span>
   );
 }
@@ -241,58 +253,56 @@ function AccountRow({
 }) {
   const { t } = useI18n();
   const on = account.automationsEnabled;
+  const expired = Boolean(account.tokenInvalidAt);
   return (
-    <li className="panel rounded p-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <Avatar accountId={account.id} username={account.username} />
-        <div className="min-w-[10rem] flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">@{account.username}</p>
-          <p className="mt-0.5 text-xs text-muted">
+    <li
+      className={cx(
+        "card card-interactive flex flex-wrap items-center gap-x-5 gap-y-3.5 px-[18px] py-4 hover:!translate-y-0",
+        expired && "!border-warning-border"
+      )}
+    >
+      <div className="flex min-w-0 flex-[1_1_300px] items-center gap-3.5">
+        <Avatar accountId={account.id} username={account.username} on={on} />
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="truncate font-display text-base font-semibold text-heading">@{account.username}</p>
+          <p className="text-[13px] text-muted">
+            {account.name ? `${account.name} · ` : ""}
             {on
               ? t(account.automationCount === 1 ? "Active · {count} automation" : "Active · {count} automations", { count: account.automationCount })
               : t("Turned off · no automation of this account is answering")}
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className={`text-xs font-medium ${on ? "text-success" : "text-muted"}`}>{on ? t("Active") : t("Turned off")}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={on}
-            aria-label={t("Automations of @{username}", { username: account.username })}
-            disabled={!canManage || busy === `toggle:${account.id}`}
-            onClick={() => onToggle(!on)}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "bg-accent" : "bg-zinc-300"}`}
-          >
-            <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${on ? "left-6" : "left-1"}`} />
-          </button>
-          {canManage && (
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label={t("Remove @{username}", { username: account.username })}
-              className="grid h-9 w-9 place-items-center rounded border border-border text-muted hover:border-error/40 hover:bg-error/10 hover:text-error"
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                <path d="M10 11v6M14 11v6" />
-              </svg>
-            </button>
-          )}
-        </div>
       </div>
-      {account.tokenInvalidAt && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-error/20 bg-error/10 px-3 py-2">
-          <p className="text-xs font-medium text-error">
+      {expired && (
+        <div className="order-last flex flex-[1_1_100%] flex-wrap items-center gap-2.5 border-t border-border-subtle pt-3">
+          <span className="flex min-w-0 flex-1 items-start gap-1.5 text-[13px] text-warning">
+            <Icon name="alert" size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
             {t("Instagram access expired or was revoked. Nothing is being answered from this account until you reconnect it.")}
-          </p>
+          </span>
           {canManage && (
-            <a href={CONNECT_URL} className="shrink-0 rounded bg-error px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90">
+            <a
+              href={CONNECT_URL}
+              className="btn btn-sm shrink-0 border border-warning-border bg-warning-soft text-warning hover:border-warning-dot"
+            >
               {t("Reconnect")}
             </a>
           )}
         </div>
       )}
+      <div className="ml-auto flex flex-none items-center gap-1.5">
+        <span className={cx("min-w-[88px] text-right text-[13px] font-medium", on ? "text-success" : "text-faint")}>{on ? t("Active") : t("Turned off")}</span>
+        <Switch
+          checked={on}
+          onChange={(next) => onToggle(next)}
+          label={t("Automations of @{username}", { username: account.username })}
+          disabled={!canManage || busy === `toggle:${account.id}`}
+        />
+        {canManage && (
+          <button type="button" onClick={onRemove} aria-label={t("Remove @{username}", { username: account.username })} className={buttonClass("danger-ghost", "icon")}>
+            <Icon name="trash" size={18} strokeWidth={1.9} />
+          </button>
+        )}
+      </div>
     </li>
   );
 }
@@ -304,67 +314,47 @@ function RemoveDialog({
   onRemove,
   onDeactivate,
 }: {
-  account: Account;
+  account: Account | null;
   busy: boolean;
   onCancel: () => void;
   onRemove: () => void;
   onDeactivate: () => void;
 }) {
   const { t } = useI18n();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center" onClick={onCancel}>
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="remove-title"
-        aria-describedby="remove-body"
-        className="w-full max-w-md rounded-lg border border-border bg-background p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 id="remove-title" className="text-base font-semibold text-foreground">
-          {t("Remove @{username}?", { username: account.username })}
-        </h2>
-        <div id="remove-body" className="mt-3 space-y-3 text-sm text-muted">
-          <p>
-            {t(
-              account.automationCount === 1
-                ? "This permanently deletes this account's {count} automation, its send history and its tracked links. It cannot be undone."
-                : "This permanently deletes this account's {count} automations, their send history and their tracked links. It cannot be undone.",
-              { count: account.automationCount }
-            )}
-          </p>
-          {account.automationsEnabled && (
-            <p className="rounded border border-warning/30 bg-warning/10 p-2 text-warning">
-              {t("Just want it to stop answering? Turn the account off instead: nothing is deleted and you can turn it back on whenever you want.")}
-            </p>
-          )}
-        </div>
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button type="button" onClick={onCancel} className="rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground">
-            {t("Cancel")}
-          </button>
-          {account.automationsEnabled && (
-            <button type="button" onClick={onDeactivate} className="rounded border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent/10">
+    <Dialog
+      open={account !== null}
+      onClose={onCancel}
+      tone="danger"
+      title={account ? t("Remove @{username}?", { username: account.username }) : ""}
+      description={
+        account &&
+        t(
+          account.automationCount === 1
+            ? "This permanently deletes this account's {count} automation, its send history and its tracked links. It cannot be undone."
+            : "This permanently deletes this account's {count} automations, their send history and their tracked links. It cannot be undone.",
+          { count: account.automationCount }
+        )
+      }
+      footer={
+        <>
+          <Button onClick={onCancel}>{t("Cancel")}</Button>
+          {account?.automationsEnabled && (
+            <Button variant="soft" onClick={onDeactivate}>
               {t("Turn off instead")}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={busy}
-            className="rounded bg-error px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-          >
+          <Button variant="danger" onClick={onRemove} disabled={busy}>
             {busy ? t("Removing…") : t("Remove for good")}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      {account?.automationsEnabled && (
+        <p className="text-sm leading-relaxed text-muted">
+          {t("Just want it to stop answering? Turn the account off instead: nothing is deleted and you can turn it back on whenever you want.")}
+        </p>
+      )}
+    </Dialog>
   );
 }
