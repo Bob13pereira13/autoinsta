@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/client";
 import { retryPendingDataDeletions } from "@/lib/privacy/data-deletion";
 import { RETENTION_DAYS, retentionCutoff } from "@/lib/privacy/retention";
 import { purgeStaleMedia } from "@/lib/media/storage";
+import { purgeExpiredSignups } from "@/lib/privacy/signup-retention";
 
 /** Daily retention job: enforces the periods published in /privacidade. */
 export async function purgeExpiredData(now = new Date()) {
@@ -34,6 +35,8 @@ export async function purgeExpiredData(now = new Date()) {
     }),
   ]);
   const media = await purgeStaleMedia(now);
+  // Unconfirmed sign-ups (7 days) and rejected clients (30 days).
+  const signups = await purgeExpiredSignups(now);
 
   return {
     botMessagesDeleted: botMessages.count,
@@ -44,5 +47,6 @@ export async function purgeExpiredData(now = new Date()) {
     operationalEventsDeleted: operationalEvents.count,
     deletionRequestsDeleted: deletionRequests.count,
     retriedDeletions,
+    ...signups,
   };
 }

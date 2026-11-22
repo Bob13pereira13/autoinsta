@@ -227,7 +227,8 @@ npm run user -- create revisor.meta@suaempresa.com.br --name "Meta Reviewer" --w
 ```
 
 Abra o link impresso, defina a senha e conecte antes a conta Instagram de demonstração (assim o revisor
-encontra tudo pronto). No campo **App Review → Instructions** cole (em inglês):
+encontra tudo pronto). Contas criadas pelo comando (ou em `/admin` → Novo cliente) já entram **Ativas**;
+não use o cadastro público para o revisor, porque ele ficaria aguardando a sua aprovação. No campo **App Review → Instructions** cole (em inglês):
 
 > Test login: https://app.suaempresa.com.br/login
 > E-mail: revisor.meta@suaempresa.com.br — Password: (the password you set)

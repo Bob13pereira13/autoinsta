@@ -11,6 +11,12 @@ As mensagens podem levar link rastreado, botão, pedido para seguir, agradecimen
 vídeos**. Cada comentário ou mensagem dispara no máximo uma automação. Em Comentários, a automação vale
 para todas as publicações ou só para as marcadas na grade (até 100).
 
+**Clientes**: qualquer pessoa pode se cadastrar em `/cadastro` (com confirmação de e-mail e
+Cloudflare Turnstile); o acesso fica **aguardando aprovação** até um operador aprovar na área de
+gestão `/admin` (só para os e-mails de `ADMIN_EMAILS`), onde também se ativa/desativa clientes,
+define o limite de contas do Instagram, acompanha a receita estimada e vê a auditoria. Também é
+possível criar clientes por lá (ou com `npm run user`).
+
 As contas do Instagram ficam na aba **Contas**: conectar, reconectar, **desativar** (pausa todas as
 automações da conta sem apagar nada) ou remover (apaga a conta e tudo dela). Funciona **exclusivamente pela API
 oficial da Meta**.
@@ -86,7 +92,14 @@ dados) aparecem na Política de Privacidade e nos Termos — **preencha antes de
 
 ## Contas dos clientes
 
-O cadastro é fechado: só entra quem você cadastrou ou quem foi convidado para um espaço de trabalho.
+Há três jeitos de criar um cliente:
+
+- **Cadastro público** em `/cadastro`: e-mail confirmado + Turnstile; o cliente fica "Aguardando
+  aprovação" (vê só uma tela de análise) até você aprovar em `/admin`. Os e-mails de `ADMIN_EMAILS`
+  recebem um aviso a cada cadastro confirmado. Para fechar o cadastro público, deixe as chaves do
+  Turnstile vazias em produção ou defina `ALLOWED_EMAILS`.
+- **Área de gestão** `/admin` → Novo cliente: já entra Ativo e recebe o convite para definir a senha.
+- **Linha de comando** (como antes), também Ativo:
 
 ```bash
 npm run user -- create cliente@loja.com.br --name "Maria" --workspace "Loja da Maria"

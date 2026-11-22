@@ -59,8 +59,24 @@ export default function PrivacidadePage() {
         <ul>
           <li>Nome e e-mail de acesso.</li>
           <li>Senha, armazenada somente como hash irreversível (scrypt) — nunca em texto.</li>
+          <li>Nome da empresa e telefone (WhatsApp) informados no cadastro.</li>
+          <li>CPF ou CNPJ, apenas se você informar (é opcional).</li>
+          <li>
+            Versão dos Termos de Uso e desta Política que você aceitou e a data do aceite, além do idioma
+            escolhido na interface (para os e-mails).
+          </li>
+          <li>
+            Situação da conta (aguardando aprovação, ativa, desativada ou recusada), com as datas e, em caso
+            de recusa, o motivo informado a você.
+          </li>
           <li>Espaço de trabalho, função (proprietário, administrador ou membro) e convites enviados.</li>
         </ul>
+        <p>
+          Para bloquear robôs, o formulário de cadastro usa o <strong>Cloudflare Turnstile</strong>: a
+          Cloudflare recebe o seu endereço IP e sinais técnicos do navegador para fazer a verificação. Também
+          usamos o endereço IP, em forma de hash irreversível e por no máximo uma hora, para limitar
+          tentativas repetidas de cadastro e de login.
+        </p>
 
         <h3>3.2 Dados da conta do Instagram conectada</h3>
         <p>
@@ -186,8 +202,15 @@ export default function PrivacidadePage() {
             conforme as instruções do cliente e sob a base legal escolhida por ele como controlador.
           </li>
           <li>
+            <strong>Analisar e aprovar o cadastro e falar com você</strong> — nome, empresa, telefone e,
+            quando informado, CPF/CNPJ servem para identificar o cliente, decidir sobre a aprovação, prestar
+            suporte e, no futuro, emitir a cobrança e a nota fiscal (procedimentos preliminares e execução de
+            contrato, art. 7º, V).
+          </li>
+          <li>
             <strong>Segurança, prevenção a fraudes e abuso</strong>, como verificação de assinaturas, limites
-            de envio e deduplicação (legítimo interesse, art. 7º, IX).
+            de envio e deduplicação, a verificação anti-robô no cadastro e o registro de auditoria das ações
+            da nossa equipe sobre as contas dos clientes (legítimo interesse, art. 7º, IX).
           </li>
           <li>
             <strong>Cumprir obrigações legais e regulatórias</strong> (art. 7º, II), incluindo a guarda de
@@ -225,6 +248,9 @@ export default function PrivacidadePage() {
             <strong>Operadores de infraestrutura</strong> que nos ajudam a prestar o serviço — hospedagem da
             aplicação, banco de dados, fila de processamento e envio de e-mails transacionais — sob contrato,
             com obrigações de confidencialidade e segurança.
+          </li>
+          <li>
+            <strong>Cloudflare</strong>, apenas na verificação anti-robô (Turnstile) do formulário de cadastro.
           </li>
           <li>Autoridades públicas, quando houver obrigação legal ou ordem judicial.</li>
         </ul>
@@ -288,6 +314,21 @@ export default function PrivacidadePage() {
               <td>
                 Enquanto durar o contrato, e depois pelo prazo necessário ao cumprimento de obrigações legais.
               </td>
+            </tr>
+            <tr>
+              <td>Cadastro cujo e-mail nunca foi confirmado</td>
+              <td>7 dias</td>
+            </tr>
+            <tr>
+              <td>Cadastro recusado</td>
+              <td>
+                30 dias após a recusa. Depois disso fica só o registro da decisão (data, motivo e o e-mail em
+                hash irreversível), e você pode se cadastrar de novo.
+              </td>
+            </tr>
+            <tr>
+              <td>Registro de auditoria das ações da nossa equipe sobre a sua conta</td>
+              <td>Enquanto a conta existir.</td>
             </tr>
           </tbody>
         </table>

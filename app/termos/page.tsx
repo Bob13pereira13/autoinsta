@@ -137,6 +137,13 @@ export default function TermosPage() {
           apagar dados. Para encerrar o cadastro de acesso, basta solicitar pelo
           e-mail de suporte. Podemos encerrar o acesso em caso de violação destes Termos ou do contrato.
         </p>
+        <p>
+          Cadastros novos passam por análise antes de liberar o painel e podem ser recusados, com o motivo
+          informado por e-mail. Podemos desativar uma conta de cliente (por exemplo, por falta de pagamento
+          ou uso indevido): as automações param de responder, nada é apagado e tudo volta como estava se a
+          conta for reativada. O número de contas do Instagram que o cliente pode conectar é definido no
+          plano contratado.
+        </p>
       </section>
 
       <section>
