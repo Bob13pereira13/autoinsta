@@ -4,7 +4,7 @@
  *
  * - "all"   → matchAnyPost, no marked posts (also the posts published later);
  * - "posts" → the marked posts (at least one);
- * - "next"  → pendingNextReel (binds itself to the next post or reel).
+ * - "next"  → pendingNextReel (binds itself to the next reel).
  *
  * The marks in the grid only count with "posts": switching to another option
  * keeps them on screen (switching back restores them) but they are not saved.

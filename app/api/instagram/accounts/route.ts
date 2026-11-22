@@ -35,6 +35,7 @@ export async function GET() {
       name: true,
       automationsEnabled: true,
       tokenInvalidAt: true,
+      tokenExpiresAt: true,
       connectedAt: true,
       _count: { select: { automations: true } },
     },

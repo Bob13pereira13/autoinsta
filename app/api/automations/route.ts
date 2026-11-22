@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
+import { findConflicts, type Conflict } from "@/lib/automation/conflicts";
 import { deleteMediaFiles, mediaKeysForAutomations } from "@/lib/media/storage";
 import {
   enabledMediaSlots,
@@ -118,7 +119,8 @@ const createAutomationSchema = z
   // Media kinds are checked in the handler, once the uploads are looked up.
   .superRefine((d, ctx) => {
     const postIds = normalizePostInput(d)?.map((p) => p.id);
-    for (const issue of automationRuleIssues({ ...d, postIds, media: [] })) {
+    const hasLink = Boolean(d.trackedDestinationUrl?.trim());
+    for (const issue of automationRuleIssues({ ...d, postIds, media: [], hasLink })) {
       ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message });
     }
   });
@@ -189,7 +191,46 @@ const RULE_FIELDS = [
   "triggerStoryMentions",
   "requireFollow",
   "followUpEnabled",
+  // The texts and button labels are checked against Instagram's limits.
+  "dmMessage",
+  "followPromptMessage",
+  "followPromptButtonLabel",
+  "followUpMessage",
+  "linkButtonLabel",
 ] as const;
+
+/**
+ * Other active automations of the same account and channel that catch the same
+ * events as this one (saved and active). Returned with the save so the editor
+ * can list them; saving is never blocked by a conflict.
+ */
+async function conflictsOf(automationId: string, workspaceId: string): Promise<Conflict[]> {
+  const select = {
+    id: true,
+    name: true,
+    type: true,
+    createdAt: true,
+    isActive: true,
+    instagramAccountId: true,
+    keywords: true,
+    matchAnyWord: true,
+    wholeWordMatch: true,
+    matchAnyPost: true,
+    pendingNextReel: true,
+    postId: true,
+    triggerStoryReplies: true,
+    triggerStoryMentions: true,
+    posts: { select: { postId: true } },
+  } as const;
+  const self = await prisma.automation.findFirst({ where: { id: automationId, workspaceId }, select });
+  if (!self?.isActive) return [];
+  const others = await prisma.automation.findMany({
+    where: { workspaceId, instagramAccountId: self.instagramAccountId, type: self.type, isActive: true, id: { not: self.id } },
+    select,
+  });
+  const candidate = (a: typeof self) => ({ ...a, postIds: a.posts.map((p) => p.postId) });
+  return findConflicts(candidate(self), others.map(candidate));
+}
 
 function invalidRules(issues: RuleIssue[]) {
   const fieldErrors: Record<string, string[]> = {};
@@ -219,7 +260,7 @@ export async function GET(request: NextRequest) {
     where: { workspaceId, ...accountFilter },
     include: {
       instagramAccount: {
-        select: { username: true, instagramId: true, automationsEnabled: true },
+        select: { username: true, instagramId: true, automationsEnabled: true, tokenInvalidAt: true, tokenExpiresAt: true },
       },
       posts: POSTS_SELECT,
       _count: {
@@ -410,6 +451,7 @@ export async function POST(request: NextRequest) {
     ...parsed.data,
     postIds: normalizePostInput(parsed.data)?.map((p) => p.id),
     media: mediaItems.filter((m) => mediaSlots.has(m.slot)),
+    hasLink: Boolean(parsed.data.trackedDestinationUrl?.trim()),
   });
   if (ruleIssues.length) return invalidRules(ruleIssues);
 
@@ -544,7 +586,7 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json(
-    { success: true, data: automation },
+    { success: true, data: automation, conflicts: await conflictsOf(automation.id, workspaceId) },
     { status: 201 }
   );
 }
@@ -591,7 +633,7 @@ export async function PATCH(request: NextRequest) {
 
   const existing = await prisma.automation.findFirst({
     where: { id: automationId, workspaceId },
-    include: { posts: { select: { postId: true } } },
+    include: { posts: { select: { postId: true } }, trackedLinks: { select: { id: true } } },
   });
 
   if (!existing) {
@@ -709,11 +751,18 @@ export async function PATCH(request: NextRequest) {
   // working even if it predates a rule.
   const touchesRules =
     mediaInput !== undefined ||
+    trackedDestinationUrl !== undefined ||
+    secondaryButtonLabel !== undefined ||
     RULE_FIELDS.some((field) => (automationData as Record<string, unknown>)[field] !== undefined);
   if (touchesRules) {
+    // A link is set after this save: the one sent now, or the one it has.
+    const hasLink =
+      trackedDestinationUrl !== undefined ? Boolean(trackedDestinationUrl?.trim()) : existing.trackedLinks.length > 0;
     const ruleIssues = automationRuleIssues({
       ...merged,
       media: mediaItems.filter((m) => mediaSlots.has(m.slot)),
+      hasLink,
+      secondaryButtonLabel: secondaryButtonLabel ?? undefined,
     });
     if (ruleIssues.length) return invalidRules(ruleIssues);
   }
@@ -754,7 +803,7 @@ export async function PATCH(request: NextRequest) {
   });
   await deleteMediaFiles(removedMediaKeys);
 
-  return NextResponse.json({ success: true, data: updated });
+  return NextResponse.json({ success: true, data: updated, conflicts: await conflictsOf(updated.id, workspaceId) });
 }
 
 export async function DELETE(request: NextRequest) {

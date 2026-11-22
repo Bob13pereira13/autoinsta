@@ -2,7 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { storageState } from "@/lib/automation/editor-warnings";
 import { useI18n } from "@/lib/i18n/provider";
 
 export type AutomationKind = "COMMENTS" | "STORIES" | "DIRECT";
@@ -15,39 +16,6 @@ export interface BuilderMedia {
   originalName?: string | null;
   /** Already saved on the automation (removing it takes effect on save). */
   attached: boolean;
-}
-
-/* --------------------------------- help --------------------------------- */
-
-/** A "?" button that reveals a short explanation and an example. */
-export function Help({ text, example }: { text: string; example?: string }) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <span className="inline-flex flex-col">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={id}
-        aria-label={t("What is this?")}
-        className="ml-1 inline-grid h-6 w-6 place-items-center rounded-full border border-border text-[11px] font-semibold text-muted transition-colors hover:border-accent-fg hover:text-accent-fg"
-      >
-        ?
-      </button>
-      {open && (
-        <span id={id} role="note" className="mt-2 block rounded-control border border-border-subtle bg-surface p-3 text-[13px] font-normal leading-5 text-muted">
-          {text}
-          {example && (
-            <span className="mt-1 block text-foreground">
-              {t("Example:")} {example}
-            </span>
-          )}
-        </span>
-      )}
-    </span>
-  );
 }
 
 /** A numbered step of the editor: a card with the step number in the gradient. */
@@ -90,7 +58,8 @@ export function StorageUsage({ version }: { version: number }) {
   }, [version]);
   if (!usage) return null;
   const pct = Math.min(100, Math.round((usage.usedBytes / usage.quotaBytes) * 100));
-  const full = pct >= 100;
+  const state = storageState(usage.usedBytes, usage.quotaBytes);
+  const full = state === "full";
   return (
     <div className="space-y-1" aria-live="polite">
       <div className="flex justify-between text-xs text-faint">
@@ -100,9 +69,19 @@ export function StorageUsage({ version }: { version: number }) {
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-switch-off" role="progressbar" aria-label={t("Media storage")} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <div className={`h-full rounded-full ${full ? "bg-danger" : pct > 80 ? "bg-warning-dot" : "bg-gradient-accent"}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${full ? "bg-danger" : state === "near" ? "bg-warning-dot" : "bg-gradient-accent"}`} style={{ width: `${pct}%` }} />
       </div>
-      {full && <p className="text-xs text-error">{t("Your media storage is full. Remove media from automations you no longer use and try again.")}</p>}
+      <p className="text-xs text-faint">{t("The images and videos of every automation use this space.")}</p>
+      {state === "near" && (
+        <p data-note="storageNear" data-tone="warning" className="rounded-control border border-warning-border bg-warning-soft px-3 py-2 text-xs text-warning">
+          {t("Media space almost full ({used} MB of {quota} MB). Remove media from automations you no longer use.", { used: formatMb(usage.usedBytes), quota: formatMb(usage.quotaBytes) })}
+        </p>
+      )}
+      {full && (
+        <p data-note="storageFull" data-tone="danger" className="rounded-control border border-error-border bg-error-soft px-3 py-2 text-xs text-error">
+          {t("Your media storage is full. Remove media from automations you no longer use and try again.")}
+        </p>
+      )}
     </div>
   );
 }

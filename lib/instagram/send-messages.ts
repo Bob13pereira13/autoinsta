@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import * as meta from "@/lib/meta/client";
 import {
+  BUTTON_TEXT_MAX_CHARS,
+  BUTTON_TITLE_MAX_CHARS,
+  TEXT_MAX_BYTES,
+  truncateChars,
+  truncateUtf8,
+} from "@/lib/automation/message-limits";
+import {
   zernioRequest,
   ZernioApiError,
   ZernioDeliveryUnconfirmedError,
@@ -31,7 +38,7 @@ async function sendZernioMessage({
     : `/inbox/conversations/${encodeURIComponent(recipientId!)}/messages`;
   const body = {
     accountId: context.accountId,
-    message: buttons ? text.slice(0, 640) : text,
+    message: buttons ? truncateChars(text, BUTTON_TEXT_MAX_CHARS) : truncateUtf8(text, TEXT_MAX_BYTES),
     ...(buttons ? { buttons } : {}),
   };
   const idempotencyKey = createHash("sha256")
@@ -70,7 +77,7 @@ async function sendZernioMessage({
 function linkButtons(buttons: meta.LinkButton[]): Button[] {
   return buttons
     .slice(0, 3)
-    .map(({ title, url }) => ({ type: "url", title: title.slice(0, 20), url }));
+    .map(({ title, url }) => ({ type: "url", title: truncateChars(title, BUTTON_TITLE_MAX_CHARS), url }));
 }
 
 export async function sendPrivateReply({
@@ -127,7 +134,7 @@ export async function sendPrivateReplyWithButton({
     commentId,
     postId,
     text: text,
-    buttons: [{ type: "postback", title: buttonTitle.slice(0, 20), payload }],
+    buttons: [{ type: "postback", title: truncateChars(buttonTitle, BUTTON_TITLE_MAX_CHARS), payload }],
   });
 }
 
@@ -159,7 +166,7 @@ export async function sendDirectMessageWithButton({
     context,
     recipientId: userId,
     text: text,
-    buttons: [{ type: "postback", title: buttonTitle.slice(0, 20), payload }],
+    buttons: [{ type: "postback", title: truncateChars(buttonTitle, BUTTON_TITLE_MAX_CHARS), payload }],
   });
 }
 

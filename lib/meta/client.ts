@@ -1,4 +1,11 @@
 import { getMetaGraphApiVersion, requireSecret } from "@/lib/env";
+import {
+  BUTTON_TEXT_MAX_CHARS,
+  BUTTON_TITLE_MAX_CHARS,
+  TEXT_MAX_BYTES,
+  truncateChars,
+  truncateUtf8,
+} from "@/lib/automation/message-limits";
 
 /**
  * A Meta access token and the setup that issued it. A bare string is an
@@ -187,7 +194,8 @@ export async function sendPrivateReply(
       },
       body: JSON.stringify({
         recipient: { comment_id: commentId },
-        message: { text: message },
+        // Plain text: at most 1000 bytes of UTF-8 (cut between characters).
+        message: { text: truncateUtf8(message, TEXT_MAX_BYTES) },
       }),
     }
   );
@@ -225,10 +233,10 @@ export async function sendPrivateReplyWithButton(
             type: "template",
             payload: {
               template_type: "button",
-              // Button template text is capped at 640 chars by Meta.
-              text: text.slice(0, 640),
+              // Button template text is capped at 640 characters by Meta.
+              text: truncateChars(text, BUTTON_TEXT_MAX_CHARS),
               buttons: [
-                { type: "postback", title: buttonTitle.slice(0, 20), payload },
+                { type: "postback", title: truncateChars(buttonTitle, BUTTON_TITLE_MAX_CHARS), payload },
               ],
             },
           },
@@ -269,9 +277,9 @@ export async function sendDirectMessageWithButton(
             type: "template",
             payload: {
               template_type: "button",
-              text: text.slice(0, 640),
+              text: truncateChars(text, BUTTON_TEXT_MAX_CHARS),
               buttons: [
-                { type: "postback", title: buttonTitle.slice(0, 20), payload },
+                { type: "postback", title: truncateChars(buttonTitle, BUTTON_TITLE_MAX_CHARS), payload },
               ],
             },
           },
@@ -357,7 +365,7 @@ export interface LinkButton {
 function toWebUrlButtons(buttons: LinkButton[]) {
   return buttons
     .slice(0, 3)
-    .map((b) => ({ type: "web_url", url: b.url, title: b.title.slice(0, 20) }));
+    .map((b) => ({ type: "web_url", url: b.url, title: truncateChars(b.title, BUTTON_TITLE_MAX_CHARS) }));
 }
 
 /**
@@ -388,7 +396,7 @@ export async function sendPrivateReplyWithLinkButton(
             type: "template",
             payload: {
               template_type: "button",
-              text: text.slice(0, 640),
+              text: truncateChars(text, BUTTON_TEXT_MAX_CHARS),
               buttons: toWebUrlButtons(buttons),
             },
           },
@@ -421,7 +429,8 @@ export async function sendDirectMessage(
       },
       body: JSON.stringify({
         recipient: { id: userId },
-        message: { text: message },
+        // Plain text: at most 1000 bytes of UTF-8 (cut between characters).
+        message: { text: truncateUtf8(message, TEXT_MAX_BYTES) },
       }),
     }
   );
@@ -503,7 +512,7 @@ export async function sendDirectMessageWithLinkButton(
             type: "template",
             payload: {
               template_type: "button",
-              text: text.slice(0, 640),
+              text: truncateChars(text, BUTTON_TEXT_MAX_CHARS),
               buttons: toWebUrlButtons(buttons),
             },
           },

@@ -35,6 +35,22 @@ export function replaceUrlWithTrackedPlaceholder(
 }
 
 /**
+ * Put the person's name in place of {username}. Without a name (Instagram did
+ * not give one), the token goes away with the space or comma before it, so
+ * "Oi {username}!" reads "Oi!" and "Olá, {username}, aqui está" reads
+ * "Olá, aqui está" — never a placeholder word in another language.
+ */
+export function renderUsername(message: string, commenterName?: string | null): string {
+  const name = commenterName?.trim();
+  if (name) return message.replace(/\{username\}/gi, name);
+  return message
+    .replace(/[ \t]*,?[ \t]*\{username\}/gi, "")
+    .replace(/^[ \t]*[,;:][ \t]*/gm, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+/**
  * Personalize {username} and strip the {link} token — used when the link is
  * delivered as a separate button rather than inline in the message text.
  */
@@ -45,8 +61,7 @@ export function renderMessageWithoutLink({
   message: string;
   commenterName?: string | null;
 }) {
-  return message
-    .replace(/\{username\}/gi, commenterName ?? "there")
+  return renderUsername(message, commenterName)
     .replace(/\s*\{link\}\s*/gi, " ")
     .trim();
 }
@@ -79,7 +94,7 @@ export function renderMessageWithTracking({
   baseUrl?: string;
   recipientToken?: string;
 }) {
-  let rendered = message.replace(/\{username\}/gi, commenterName ?? "there");
+  let rendered = renderUsername(message, commenterName);
   const primaryLink = trackedLinks?.[0];
 
   if (!primaryLink) return rendered;

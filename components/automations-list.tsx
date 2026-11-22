@@ -21,6 +21,8 @@ import { Icon, type IconName } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { StatusDot, type StatusTone } from "@/components/ui/status";
+import { accountNeedsReconnect } from "@/lib/automation/account-status";
+import { findConflicts, type ConflictCandidate } from "@/lib/automation/conflicts";
 import { Switch } from "@/components/ui/switch";
 
 type AutomationType = "COMMENTS" | "STORIES" | "DIRECT";
@@ -58,6 +60,8 @@ interface Campaign {
     username: string;
     instagramId: string;
     automationsEnabled?: boolean;
+    tokenInvalidAt?: string | null;
+    tokenExpiresAt?: string | null;
   };
   postIds?: string[];
   reportShareSlug: string | null;
@@ -314,10 +318,28 @@ export default function AutomationsList({ initialType }: { initialType: Automati
     },
   };
   const newHref = `/campaigns/new?tipo=${automationTypeSlug(activeType)}`;
-  // Accounts turned off in the Accounts tab: their automations answer nothing.
-  const pausedAccounts = Array.from(
-    new Set(automations.filter((a) => a.instagramAccount.automationsEnabled === false).map((a) => a.instagramAccount.username))
+  // Accounts that answer nothing: disconnected (reconnect in Accounts) or
+  // turned off in the Accounts tab.
+  const reconnectAccounts = Array.from(
+    new Set(automations.filter((a) => accountNeedsReconnect(a.instagramAccount)).map((a) => a.instagramAccount.username))
   );
+  const pausedAccounts = Array.from(
+    new Set(
+      automations
+        .filter((a) => a.instagramAccount.automationsEnabled === false && !accountNeedsReconnect(a.instagramAccount))
+        .map((a) => a.instagramAccount.username)
+    )
+  );
+  // Active automations that catch the same events as another one.
+  const candidates: ConflictCandidate[] = automations.map((a) => ({
+    ...a,
+    type: typeOf(a),
+    postIds: a.postIds ?? [],
+  }));
+  const conflictsOf = (id: string) => {
+    const self = candidates.find((c) => c.id === id);
+    return self?.isActive ? findConflicts(self, candidates) : [];
+  };
 
   const query = search.trim().toLowerCase();
   const filtered = ofType.filter((a) => {
@@ -356,6 +378,24 @@ export default function AutomationsList({ initialType }: { initialType: Automati
         }
       />
 
+      {reconnectAccounts.length > 0 && (
+        <Alert
+          tone="error"
+          role="status"
+          action={
+            <Link href="/accounts" className="font-semibold underline underline-offset-4">
+              {t("Open Accounts")}
+            </Link>
+          }
+        >
+          {t(
+            reconnectAccounts.length === 1
+              ? "@{accounts}'s connection to Instagram expired: its automations won't answer until you reconnect."
+              : "The connection of @{accounts} to Instagram expired: their automations won't answer until you reconnect.",
+            { accounts: reconnectAccounts.join(", @") }
+          )}
+        </Alert>
+      )}
       {pausedAccounts.length > 0 && (
         <Alert
           tone="warning"
@@ -366,7 +406,7 @@ export default function AutomationsList({ initialType }: { initialType: Automati
             </Link>
           }
         >
-          {t(pausedAccounts.length === 1 ? "@{accounts} is turned off: none of its automations is answering." : "@{accounts} are turned off: none of their automations is answering.", {
+          {t(pausedAccounts.length === 1 ? "@{accounts} is turned off: its automations won't answer until you turn it back on." : "@{accounts} are turned off: their automations won't answer until you turn them back on.", {
             accounts: pausedAccounts.join(", @"),
           })}
         </Alert>
@@ -433,10 +473,14 @@ export default function AutomationsList({ initialType }: { initialType: Automati
           const thumb = auto.postId ? thumbnails[auto.postId] : undefined;
           const type = typeOf(auto);
           const accountOff = auto.instagramAccount.automationsEnabled === false;
+          const reconnect = accountNeedsReconnect(auto.instagramAccount);
+          const rowConflicts = conflictsOf(auto.id);
           const nameId = `automation-${auto.id}`;
           const status: { tone: StatusTone; text: string } = !auto.isActive
             ? { tone: "neutral", text: t("Paused") }
-            : accountOff
+            : reconnect
+              ? { tone: "error", text: t("Reconnect account") }
+              : accountOff
               ? { tone: "warning", text: t("Account turned off") }
               : auto.pendingNextReel
                 ? { tone: "warning", text: t("Waiting for next reel") }
@@ -500,6 +544,14 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                     ))}
                     {auto.keywords.length > 4 && <span className="text-xs text-faint">+{auto.keywords.length - 4}</span>}
                     {facts.length > 0 && <span className="ml-0.5">{facts.join(" · ")}</span>}
+                    {rowConflicts.length > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-warning-border bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning" data-note="conflict">
+                        <Icon name="alert" size={13} strokeWidth={2} />
+                        {rowConflicts.length === 1
+                          ? t("Conflict with “{name}”", { name: rowConflicts[0].other.name })
+                          : t("Conflicts with {count} automations", { count: rowConflicts.length })}
+                      </span>
+                    )}
                   </div>
                   <p className="truncate text-[13px] text-faint">&ldquo;{auto.dmMessage}{t("”")}</p>
                 </div>

@@ -119,7 +119,9 @@ function renderMessage(text: string, hasLink: boolean, linkUrl: string | undefin
 function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode; opening: boolean }) {
   const { t } = useI18n();
   const resolved = props.revealMessage.replace(/\{username\}/g, SAMPLE_USER);
-  const showCard = props.hasLink && resolved.includes("{link}");
+  // As when sending: with a link, it always goes as a button under the text
+  // ({link} is taken out of it).
+  const showCard = props.hasLink;
   const bodyText = showCard ? resolved.replace(/\s*\{link\}\s*/g, " ").trim() : resolved;
   const linkButtons = showCard
     ? [props.linkButtonLabel || "Open link", ...(props.hasSecondLink ? [props.secondLinkButtonLabel || "Open link"] : [])]

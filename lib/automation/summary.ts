@@ -39,7 +39,7 @@ export function automationSummary({ t }: Pick<I18n, "t">, s: SummaryInput): stri
       s.scope === "any"
         ? t("on any of your posts")
         : s.scope === "next"
-          ? t("on your next post or reel")
+          ? t("on your next reel")
           : count > 1
             ? t("on the {count} selected posts", { count })
             : t("on the selected post");

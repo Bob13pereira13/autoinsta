@@ -5,6 +5,7 @@ import { MAX_POSTS_PER_AUTOMATION, normalizePostInput, postIdsOf, postsCreateDat
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
+import { automationRuleIssues } from "@/lib/automation/rules";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -28,7 +29,17 @@ const campaignSchema = z.object({
 const importSchema = z.object({
   instagramAccountId: z.string().min(1),
   campaigns: z
-    .array(campaignSchema.refine((c) => Boolean(c.postId) || Boolean(c.postIds?.length), { message: "postId or postIds is required" }))
+    .array(
+      campaignSchema
+        .refine((c) => Boolean(c.postId) || Boolean(c.postIds?.length), { message: "postId or postIds is required" })
+        // The message must go out whole (Instagram's limits) and never show "{link}".
+        .superRefine((c, ctx) => {
+          const hasLink = Boolean(c.trackedUrl && /^https?:\/\//i.test(c.trackedUrl));
+          for (const issue of automationRuleIssues({ type: "COMMENTS", matchAnyPost: true, keywords: c.keywords, dmMessage: c.dmMessage, hasLink })) {
+            ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message });
+          }
+        })
+    )
     .min(1)
     .max(200),
 });

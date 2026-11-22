@@ -20,6 +20,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { Switch } from "@/components/ui/switch";
+import { accountNeedsReconnect } from "@/lib/automation/account-status";
 
 interface Account {
   id: string;
@@ -27,6 +28,7 @@ interface Account {
   name: string | null;
   automationsEnabled: boolean;
   tokenInvalidAt: string | null;
+  tokenExpiresAt?: string | null;
   connectedAt: string;
   automationCount: number;
 }
@@ -132,7 +134,7 @@ export default function AccountsPage() {
                 .{" "}
               </span>
             )}
-            {t("The Instagram accounts your automations answer from. Turn an account off to pause all of its automations at once, without deleting anything.")}
+            {t("The Instagram accounts your automations answer from. Turning an account off pauses all of its automations at once, without deleting anything; what arrives while it is off is not answered later.")}
           </>
         }
         actions={
@@ -253,12 +255,12 @@ function AccountRow({
 }) {
   const { t } = useI18n();
   const on = account.automationsEnabled;
-  const expired = Boolean(account.tokenInvalidAt);
+  const expired = accountNeedsReconnect(account);
   return (
     <li
       className={cx(
         "card card-interactive flex flex-wrap items-center gap-x-5 gap-y-3.5 px-[18px] py-4 hover:!translate-y-0",
-        expired && "!border-warning-border"
+        expired && "!border-error-border"
       )}
     >
       <div className="flex min-w-0 flex-[1_1_300px] items-center gap-3.5">
@@ -275,14 +277,14 @@ function AccountRow({
       </div>
       {expired && (
         <div className="order-last flex flex-[1_1_100%] flex-wrap items-center gap-2.5 border-t border-border-subtle pt-3">
-          <span className="flex min-w-0 flex-1 items-start gap-1.5 text-[13px] text-warning">
+          <span role="status" data-note="accountReconnect" data-tone="danger" className="flex min-w-0 flex-1 items-start gap-1.5 text-[13px] text-error">
             <Icon name="alert" size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-            {t("Instagram access expired or was revoked. Nothing is being answered from this account until you reconnect it.")}
+            {t("The connection to Instagram expired or was revoked. Nothing from this account is answered until you reconnect.")}
           </span>
           {canManage && (
             <a
               href={CONNECT_URL}
-              className="btn btn-sm shrink-0 border border-warning-border bg-warning-soft text-warning hover:border-warning-dot"
+              className="btn btn-sm shrink-0 border border-error-border bg-error-soft text-error hover:border-danger"
             >
               {t("Reconnect")}
             </a>
@@ -331,8 +333,8 @@ function RemoveDialog({
         account &&
         t(
           account.automationCount === 1
-            ? "This permanently deletes this account's {count} automation, its send history and its tracked links. It cannot be undone."
-            : "This permanently deletes this account's {count} automations, their send history and their tracked links. It cannot be undone.",
+            ? "This permanently deletes this account's {count} automation, its send history, its tracked links and its images and videos. It cannot be undone."
+            : "This permanently deletes this account's {count} automations, their send history, their tracked links and their images and videos. It cannot be undone.",
           { count: account.automationCount }
         )
       }

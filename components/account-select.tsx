@@ -8,6 +8,10 @@ export interface AccountOption {
   username: string;
   instagramId: string;
   name?: string | null;
+  /** Off in Accounts, or the connection expired: its automations answer nothing. */
+  automationsEnabled?: boolean;
+  tokenInvalidAt?: string | null;
+  tokenExpiresAt?: string | null;
 }
 
 interface AccountSelectProps {

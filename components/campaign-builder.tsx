@@ -11,7 +11,7 @@
  */
 
 import { useI18n } from "@/lib/i18n/provider";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
@@ -20,12 +20,12 @@ import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview"
 import HowItWorks from "@/components/how-it-works";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { KeywordChip } from "@/components/ui/chip";
 import { CheckCards, RadioCards } from "@/components/ui/choice-cards";
 import { StatusDot } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
 import {
-  Help,
   MediaPicker,
   Step,
   StorageUsage,
@@ -34,12 +34,24 @@ import {
   type MediaSlot,
 } from "@/components/automation-builder-parts";
 import { automationSummary } from "@/lib/automation/summary";
+import { editorWarnings, mainMessageKind, type EditorDraft, type WarningId } from "@/lib/automation/editor-warnings";
+import { messageLimit } from "@/lib/automation/message-limits";
+import { accountProblem } from "@/lib/automation/account-status";
+import { findConflicts, sharedNextReel, type Conflict, type ConflictCandidate } from "@/lib/automation/conflicts";
 import {
-  postScopeBlocked,
+  AccountNote,
+  ConflictNotes,
+  Counter,
+  FieldNotes,
+  Hint,
+  Note,
+  useConflictText,
+  useWarningText,
+} from "@/components/editor-notes";
+import {
   postScopeOf,
   postScopePayload,
   showsPostGrid,
-  storyTriggerProblem,
   summaryScopeOf,
   type PostScope,
 } from "@/lib/automation/editor-scope";
@@ -57,6 +69,7 @@ type MatchMode = "specific" | "any";
 interface LoadedCampaign {
   id: string;
   name: string;
+  createdAt?: string;
   postId: string | null;
   postUrl: string | null;
   postIds?: string[];
@@ -99,6 +112,30 @@ interface CampaignBuilderProps {
 
 const EMPTY_MEDIA: Record<MediaSlot, BuilderMedia[]> = { FOLLOW_PROMPT: [], MAIN: [], FOLLOW_UP: [] };
 
+/** Required fields left empty: shown once the person tries to save, not on a blank form. */
+const MISSING: WarningId[] = ["postScopeEmpty", "keywordMissing", "mainMissing", "openingIncomplete"];
+
+/** An automation from the list, as the conflict check reads it. */
+function candidateOf(a: LoadedCampaign): ConflictCandidate {
+  return {
+    id: a.id,
+    name: a.name,
+    type: a.type ?? "COMMENTS",
+    createdAt: a.createdAt ?? new Date(0),
+    isActive: a.isActive,
+    instagramAccountId: a.instagramAccountId,
+    keywords: a.keywords,
+    matchAnyWord: a.matchAnyWord,
+    wholeWordMatch: a.wholeWordMatch ?? true,
+    matchAnyPost: a.matchAnyPost,
+    pendingNextReel: a.pendingNextReel,
+    postIds: a.posts?.map((p) => p.postId) ?? a.postIds ?? [],
+    postId: a.postId,
+    triggerStoryReplies: a.triggerStoryReplies ?? true,
+    triggerStoryMentions: a.triggerStoryMentions ?? false,
+  };
+}
+
 function Toggle({
   on,
   onToggle,
@@ -119,7 +156,15 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const [loading, setLoading] = useState(mode === "edit");
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode>(null);
+  // Set on the first save attempt: from then on empty required fields show.
+  const [triedToSave, setTriedToSave] = useState(false);
+  // Conflicts the API listed for the save just made (the save went through).
+  const [savedConflicts, setSavedConflicts] = useState<{ conflicts: Conflict[]; next: () => void } | null>(null);
+  // Every automation of the workspace, for the live conflict check.
+  const [others, setOthers] = useState<LoadedCampaign[]>([]);
+  // When this automation was created (now, for a new one): the oldest wins a tie.
+  const [createdAt, setCreatedAt] = useState(() => new Date().toISOString());
 
   const [name, setName] = useState("");
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -244,6 +289,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         const c = (payload.data as LoadedCampaign[]).find((x) => x.id === campaignId);
         if (!c) return setNotFound(true);
         setName(c.name);
+        if (c.createdAt) setCreatedAt(c.createdAt);
         setSelectedAccountId(c.instagramAccountId);
         // A "next post" automation that already found its reel opens on
         // "Specific posts" with that reel checked.
@@ -308,6 +354,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       .then((r) => r.json())
       .then((payload) => {
         if (cancelled || !payload.success) return;
+        setOthers(payload.data as LoadedCampaign[]);
         const map: Record<string, string> = {};
         for (const a of payload.data as LoadedCampaign[]) {
           if (!a.isActive || (a.type ?? "COMMENTS") !== "COMMENTS") continue;
@@ -404,9 +451,65 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const bumpStorage = () => setStorageVersion((v) => v + 1);
   const saveBlocked = saving || mediaBlockedInComments;
 
-  // Comments on every post with no keyword: anyone who comments anything on
-  // any post gets the DM. Allowed, but said loudly.
-  const answersEveryComment = isComments && postScope === "all" && matchMode === "any";
+  // Everything the editor warns about (lib/automation/editor-warnings.ts).
+  const hasLink = Boolean(trackedDestinationUrl.trim());
+  const hasSecondLink = secondLinkOpen && Boolean(secondaryDestinationUrl.trim());
+  const draft: EditorDraft = {
+    type: automationType,
+    postScope,
+    selectedPostCount: selectedPosts.length,
+    matchAnyWord: matchMode === "any",
+    keywords,
+    wholeWordMatch,
+    triggerStoryReplies,
+    triggerStoryMentions,
+    openingDmEnabled,
+    openingDmMessage,
+    openingDmButtonLabel,
+    requireFollow,
+    followPromptMessage,
+    followPromptButtonLabel,
+    dmMessage,
+    hasLink,
+    linkButtonLabel,
+    hasSecondLink,
+    secondaryButtonLabel,
+    mediaCount: totalMedia,
+    followUpEnabled,
+    followUpMessage,
+    followUpDelayMinutes,
+    publicReplyEnabled,
+    publicReplyMessages,
+  };
+  const allWarnings = editorWarnings(draft);
+  // Empty required fields only count as shown once a save was attempted.
+  const warnings = triedToSave ? allWarnings : allWarnings.filter((w) => !MISSING.includes(w.id));
+  const warningText = useWarningText();
+  const conflictText = useConflictText();
+
+  // Conflicts with the other active automations of this account and channel.
+  const selfCandidate: ConflictCandidate = {
+    id: campaignId ?? "new",
+    name: name.trim() || t("Untitled automation"),
+    type: automationType,
+    createdAt,
+    isActive: true,
+    instagramAccountId: selectedAccountId,
+    keywords: matchMode === "any" ? [] : keywords,
+    matchAnyWord: matchMode === "any",
+    wholeWordMatch,
+    matchAnyPost: postScope === "all",
+    pendingNextReel: postScope === "next",
+    postIds: postScope === "posts" ? selectedPosts.map((p) => p.id) : [],
+    triggerStoryReplies,
+    triggerStoryMentions: triggerStoryMentions && matchMode === "any",
+  };
+  const otherCandidates = others.map(candidateOf);
+  const conflicts = findConflicts(selfCandidate, otherCandidates);
+  const nextReelShared = isComments ? sharedNextReel(selfCandidate, otherCandidates) : null;
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const accountIssue = accountProblem(selectedAccount);
+  const notes = (field: Parameters<typeof FieldNotes>[0]["field"]) => <FieldNotes warnings={warnings} field={field} anyLabel={anyLabel} />;
 
   function ensureLinkToken() {
     setDmMessage((cur) => (cur.includes("{link}") ? cur : `${cur.trim()} {link}`.trim()));
@@ -416,26 +519,10 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     setError(null);
 
     if (!selectedAccountId) return setError(t("Connect an Instagram account first."));
-    // "Specific posts" needs at least one checked post (an imported row too).
-    if (isComments && postScopeBlocked(postScope, selectedPosts)) return setError(t("Check at least one post"));
-    if (matchMode === "specific" && keywords.length === 0)
-      return setError(t("Add at least one keyword, or choose “{any}”.", { any: anyLabel }));
-    if (automationType === "STORIES") {
-      const problem = storyTriggerProblem({
-        replies: triggerStoryReplies,
-        mentions: triggerStoryMentions,
-        anyReply: matchMode === "any",
-      });
-      if (problem === "none") return setError(t("Choose at least one: story replies or story mentions"));
-      if (problem === "mentionsNeedAnyReply") return setError(t("Story mentions have no text, so they only work without keywords"));
-    }
-    if (!dmMessage.trim()) return setError(t("Add the DM with the link."));
-    if (isComments && openingDmEnabled && (!openingDmMessage.trim() || !openingDmButtonLabel.trim()))
-      return setError(t("Your opening DM needs a message and a button label."));
-    // Comments: media only goes out after the opening DM's button (Meta sends
-    // the first reply to a comment as text only). Without it, it never would.
-    if (mediaBlockedInComments)
-      return setError(t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media."));
+    // What cannot be saved yet: shown next to its field and here.
+    setTriedToSave(true);
+    const blocking = allWarnings.find((w) => w.tone === "error");
+    if (blocking) return setError(warningText(blocking, { anyLabel }));
 
     setSaving(true);
 
@@ -501,6 +588,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           const assigned = selectedPosts.map((p) => p.id);
           setUsedPosts((prev) => ({ ...prev, ...Object.fromEntries(assigned.map((id) => [id, payload.name])) }));
         }
+        // The next imported row checks conflicts against this one too.
+        if (data.data?.id) setOthers((prev) => [...prev.filter((o) => o.id !== data.data.id), data.data as LoadedCampaign]);
+        const proceed = () => {
         // Importing: advance to the next queued row instead of leaving.
         if (importQueue && importQueue.length > 1) {
           const remaining = importQueue.slice(1);
@@ -530,6 +620,15 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         // instead of landing on a stale (empty) list.
         router.push(`/automations?tipo=${automationTypeSlug(automationType)}`);
         router.refresh();
+        };
+        // Saved. Conflicts with other active automations are listed (the save
+        // already went through); closing the list carries on.
+        const saved: Conflict[] = Array.isArray(data.conflicts) ? data.conflicts : [];
+        if (saved.length) {
+          setSavedConflicts({ conflicts: saved, next: proceed });
+          return;
+        }
+        proceed();
       } else {
         // Surface the specific rule that failed instead of "Invalid input".
         const fieldErrors = data.details?.fieldErrors as
@@ -690,6 +789,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               />
             </div>
           )}
+          <AccountNote problem={accountIssue} username={selectedAccount?.username ?? username} />
         </div>
 
         {/* 1. When */}
@@ -717,11 +817,23 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   },
                   {
                     value: "next",
-                    title: t("Next post or reel"),
+                    title: t("Next reel"),
                     description: t("Set it up before posting: it starts on the next reel you publish."),
                   },
                 ]}
               />
+              {postScope === "next" && (
+                <Hint>{t("Photos and carousels published before the reel are ignored. Once you publish the reel, the automation attaches to it within 5 minutes.")}</Hint>
+              )}
+              {nextReelShared && (
+                <Note tone="warning" id="nextReelShared">
+                  {t("“{name}” is also waiting for the next reel. Both will attach to the same reel and only one answers each comment: the one with a keyword; if tied, the oldest (“{oldest}”).", {
+                    name: nextReelShared.others.map((o) => o.name).join("”, “"),
+                    oldest: nextReelShared.oldest.id === selfCandidate.id ? t("this one") : nextReelShared.oldest.name,
+                  })}
+                </Note>
+              )}
+              {notes("scope")}
               {showsPostGrid(postScope) && (
                 <PostGrid
                   instagramAccountId={selectedAccountId}
@@ -741,13 +853,13 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   />
                   <span className="flex-1">
                     {t("Also reply to people who commented in the last 72h")}
-                    <Help
-                      text={t("Off: only comments made after the automation is turned on are answered. On: comments from up to 72 hours before are answered too, if nobody from your account replied to them yet.")}
-                      example={t("You posted the reel yesterday and people already commented LINK.")}
-                    />
+                    <Hint className="mt-1">
+                      {t("On: when you save, comments from the last 72 h that match this automation and that nobody from your account answered also get the reply, within a few minutes. Off: only comments made after saving.")}
+                    </Hint>
                   </span>
                 </label>
               )}
+              <Hint>{t("If more than one automation applies to the same comment, only one answers: first the one with a keyword, then the one on specific posts, then the oldest.")}</Hint>
             </>
           )}
           {automationType === "STORIES" && (
@@ -768,15 +880,12 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   {
                     value: "mentions",
                     title: t("Story mentions"),
-                    description: t("When someone tags your account in their own story (public accounts only)."),
+                    description: t("When someone tags your account in their own story. Only arrives from public profiles or private profiles that follow your account. It has no text, so it only works without a keyword."),
                   },
                 ]}
               />
-              {triggerStoryMentions && matchMode !== "any" && (
-                <p className="rounded-control border border-warning-border bg-warning-soft px-3.5 py-2.5 text-[13px] text-warning">
-                  {t("Story mentions have no text, so they only work without keywords. Choose “Any reply” in step 2.")}
-                </p>
-              )}
+              {notes("storyTriggers")}
+              <Hint>{t("If more than one automation applies to the same reply or mention, only one answers: first the one with a keyword, then the oldest.")}</Hint>
             </>
           )}
           {automationType === "DIRECT" && (
@@ -784,6 +893,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               <p className="choice-title">{t("Someone sends you a direct message")}</p>
               <p className="choice-desc">{t("Any DM to your account that is not a reply to a story (those go to Stories automations).")}</p>
             </div>
+          )}
+          {automationType === "DIRECT" && (
+            <Hint>{t("If more than one automation applies to the same message, only one answers: first the one with a keyword, then the oldest.")}</Hint>
           )}
         </Step>
 
@@ -820,7 +932,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 aria-label={t("Keywords")}
                 className="field"
               />
-              <p className="hint">{t("Use commas to separate words")}</p>
+              <Hint>{t("Separate with commas (up to 10). Case, accents, punctuation and emojis don't matter: PREÇO, preço and preco are the same.")}</Hint>
               {keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1.5" aria-hidden="true">
                   {keywords.map((kw) => (
@@ -830,34 +942,20 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   ))}
                 </div>
               )}
-              <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
-                <span className="text-foreground">
-                  {t("Match part of a word")}
-                  <Help
-                    text={t("Off: only the exact word counts. On: also counts when the keyword is part of a longer word.")}
-                    example={t("With “link” on, “links” also matches.")}
-                  />
-                </span>
-                <Toggle label={t("Match part of a word")} on={!wholeWordMatch} onToggle={() => setWholeWordMatch(!wholeWordMatch)} />
+              {notes("keywords")}
+              <div className="rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-foreground">{t("Match part of a word")}</span>
+                  <Toggle label={t("Match part of a word")} on={!wholeWordMatch} onToggle={() => setWholeWordMatch(!wholeWordMatch)} />
+                </div>
+                <Hint className="pb-1.5 pr-2">
+                  {t("Off: only the whole word (“link” answers “I want the link!”, not “links”). On: also inside other words (“link” answers “links” and “linking”).")}
+                </Hint>
               </div>
             </div>
           )}
-          {answersEveryComment && (
-            <div role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
-              <p className="font-semibold">{t("Careful: this sends a DM to everyone who comments on any of your posts")}</p>
-              <p className="mt-1 text-xs">
-                {t("Every comment on every post and reel gets the automatic reply. To limit it, choose “Specific posts” in step 1 or “With a keyword” in step 2.")}
-              </p>
-            </div>
-          )}
-          {automationType === "DIRECT" && matchMode === "any" && (
-            <div role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
-              <p className="font-semibold">{t("Careful: this answers EVERY direct message")}</p>
-              <p className="mt-1 text-xs">
-                {t("Including customers who already talk to your team. To avoid spam, each person gets at most one automatic reply per interval below, and nothing is sent while someone from your team is talking to them (24 h after their last message).")}
-              </p>
-            </div>
-          )}
+          {notes("match")}
+          <ConflictNotes conflicts={conflicts} />
           {!isComments && matchMode === "any" && (
             <div className="flex flex-wrap items-center gap-2 rounded-control border border-border-subtle bg-surface px-3.5 py-2.5 text-foreground">
               <span>{t("Reply to the same person at most once every")}</span>
@@ -871,7 +969,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 className="field !min-h-9 !w-20 !px-2 !py-1"
               />
               <span>{t("hours")}</span>
-              <Help text={t("Prevents the same person from getting the automatic reply every time they write. Default: 24 hours.")} />
+              <Hint className="basis-full">
+                {t("Each person gets at most one reply from this automation every {hours} h (default 24). If someone from your team talks to the person in the Instagram app or Business Suite, the automation stays quiet with that person for 24 h.", { hours: replyCooldownHours })}
+              </Hint>
             </div>
           )}
         </Step>
@@ -883,15 +983,12 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           {isComments && (
             <div className="rounded-control border border-border-subtle bg-surface p-3.5">
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-heading">
-                  {t("an opening DM with a button")}
-                  <Help
-                    text={t("Instagram lets you send only one text message in reply to a comment. With an opening DM, the person taps the button and the conversation opens — then the link, images and videos can be sent.")}
-                    example={t("“Want the link? Tap below 👇” + button “Send me the link”.")}
-                  />
-                </span>
+                <span className="font-semibold text-heading">{t("an opening DM with a button")}</span>
                 <Toggle label={t("an opening DM with a button")} on={openingDmEnabled} onToggle={() => setOpeningDmEnabled(!openingDmEnabled)} />
               </div>
+              <Hint className="mt-1.5">
+                {t("The first reply to a comment can only be text (Instagram's rule). With the opening DM, the person taps the button, the conversation opens and then the link, images and videos go. If they read it and don't tap, the main message goes by itself 5 minutes later.")}
+              </Hint>
               {openingDmEnabled && (
                 <div className="mt-3 space-y-2">
                   <textarea
@@ -903,15 +1000,18 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     className="field resize-none"
                     maxLength={1000}
                   />
+                  <Counter limit={messageLimit(openingDmMessage, "button")} />
+                  {notes("opening")}
                   <input
                     value={openingDmButtonLabel}
                     onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
                     placeholder={t("Send me the link")}
                     aria-label={t("Button label")}
                     className="field"
-                    maxLength={64}
+                    maxLength={20}
                   />
-                  <p className="hint">{t("This first message is text only: Instagram does not allow images or videos in it.")}</p>
+                  {notes("openingLabel")}
+                  <Hint>{t("This first message is text only: Instagram does not allow images or videos in it.")}</Hint>
                 </div>
               )}
             </div>
@@ -919,15 +1019,12 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
           <div className="rounded-control border border-border-subtle bg-surface p-3.5">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-semibold text-heading">
-                {t("follow me to unlock")}
-                <Help
-                  text={t("The content is only sent after the person follows the account and taps the button. If Instagram cannot confirm the follow, it is sent anyway.")}
-                  example={t("“Follow me and tap the button to get the coupon”.")}
-                />
-              </span>
+              <span className="font-semibold text-heading">{t("follow me to unlock")}</span>
               <Toggle label={t("follow me to unlock")} on={requireFollow} onToggle={() => setRequireFollow(!requireFollow)} />
             </div>
+            <Hint className="mt-1.5">
+              {t("Before the content, the person gets a request to follow with a button. They follow, tap the button and the app checks with Instagram (if it doesn't show yet, it checks again for up to 1 minute). If Instagram can't confirm, the content goes anyway. Asking to follow usually reduces how many people reach the content.")}
+            </Hint>
             {requireFollow && (
               <div className="mt-3 space-y-2">
                 <textarea
@@ -939,6 +1036,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   className="field resize-none"
                   maxLength={1000}
                 />
+                <Counter limit={messageLimit(followPromptMessage, "button")} />
+                {notes("follow")}
                 <input
                   value={followPromptButtonLabel}
                   onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
@@ -947,6 +1046,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   className="field"
                   maxLength={20}
                 />
+                {notes("followLabel")}
                 <MediaPicker
                   items={media.FOLLOW_PROMPT}
                   onChange={setSlotMedia("FOLLOW_PROMPT")}
@@ -958,13 +1058,10 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           </div>
 
           <div className="space-y-2.5 rounded-control border border-border-subtle bg-surface p-3.5">
-            <span className="font-semibold text-heading">
-              {t("the main message")}
-              <Help
-                text={t("Write the message. {link} becomes your tracked link (we count clicks) and {username} becomes the person's name.", { link: "{link}", username: "{username}" })}
-                example={t("“Hi {username}! Here is the catalogue: {link}”", { link: "{link}", username: "{username}" })}
-              />
-            </span>
+            <span className="font-semibold text-heading">{t("the main message")}</span>
+            <Hint>
+              {t("{username} becomes the person's @. With a link, it goes as a button right below the message; {link} marks where the link goes if Instagram doesn't accept the button.", { link: "{link}", username: "{username}" })}
+            </Hint>
             <textarea
               value={dmMessage}
               onChange={(e) => setDmMessage(e.target.value)}
@@ -974,6 +1071,8 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               className="field resize-none"
               maxLength={1000}
             />
+            <Counter limit={messageLimit(dmMessage, mainMessageKind(draft))} />
+            {notes("main")}
             {linkOpen ? (
               <div className="space-y-2">
                 <input
@@ -984,13 +1083,16 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   aria-label={t("Link")}
                   className="field"
                 />
+                <Hint>{t("Clicks are counted.")}</Hint>
                 <input
                   value={linkButtonLabel}
                   onChange={(e) => setLinkButtonLabel(e.target.value)}
                   placeholder={t("Button label (e.g. Open link)")}
+                  aria-label={t("Button label")}
                   maxLength={20}
                   className="field"
                 />
+                {notes("linkLabel")}
                 {secondLinkOpen ? (
                   <div className="space-y-2 border-t border-border-subtle pt-2.5">
                     <input
@@ -1004,9 +1106,11 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                       value={secondaryButtonLabel}
                       onChange={(e) => setSecondaryButtonLabel(e.target.value)}
                       placeholder={t("Second button label")}
+                      aria-label={t("Second button label")}
                       maxLength={20}
                       className="field"
                     />
+                    {notes("secondLinkLabel")}
                   </div>
                 ) : (
                   <button
@@ -1037,15 +1141,10 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
           <div className="rounded-control border border-border-subtle bg-surface p-3.5">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-semibold text-heading">
-                {t("a thank-you message")}
-                <Help
-                  text={t("A short extra message sent some minutes after the main one (up to 24 hours, Instagram's messaging window).")}
-                  example={t("“Thanks for the follow, enjoy! 🙌”")}
-                />
-              </span>
+              <span className="font-semibold text-heading">{t("a thank-you message")}</span>
               <Toggle label={t("a thank-you message")} on={followUpEnabled} onToggle={() => setFollowUpEnabled(!followUpEnabled)} />
             </div>
+            <Hint className="mt-1.5">{t("A short message sent after the main message, with the delay you choose (up to 24 h). It goes once per person.")}</Hint>
             {followUpEnabled && (
               <div className="mt-3 space-y-2">
                 <textarea
@@ -1057,6 +1156,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   className="field resize-none"
                   maxLength={1000}
                 />
+                <Counter limit={messageLimit(followUpMessage, "text")} />
                 <div className="flex flex-wrap items-center gap-2 text-foreground">
                   <span className="hint">{t("Send it")}</span>
                   <input
@@ -1072,6 +1172,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   />
                   <span className="hint">{t("minutes after the link")}</span>
                 </div>
+                {notes("followUp")}
                 <MediaPicker
                   items={media.FOLLOW_UP}
                   onChange={setSlotMedia("FOLLOW_UP")}
@@ -1082,25 +1183,20 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             )}
           </div>
 
-          {mediaBlockedInComments && (
-            <p role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
-              {t("In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media.")}
-            </p>
-          )}
+          {notes("media")}
         </Step>
 
         {/* 4. Extras — Comments only */}
         {isComments && (
           <Step number={4} title={t("Extras")}>
-            <div className="flex items-center justify-between gap-3 rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
-              <span className="font-semibold text-heading">
-                {t("reply to the comment publicly")}
-                <Help
-                  text={t("Also answers under the comment, visible to everyone. Add several variations: one is picked at random each time.")}
-                  example={t("“Sent you a DM! 📩”")}
-                />
-              </span>
-              <Toggle label={t("reply to the comment publicly")} on={publicReplyEnabled} onToggle={() => setPublicReplyEnabled(!publicReplyEnabled)} />
+            <div className="rounded-control border border-border-subtle bg-surface py-1.5 pl-3.5 pr-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-heading">{t("reply to the comment publicly")}</span>
+                <Toggle label={t("reply to the comment publicly")} on={publicReplyEnabled} onToggle={() => setPublicReplyEnabled(!publicReplyEnabled)} />
+              </div>
+              <Hint className="pb-1.5 pr-2">
+                {t("Answers under the comment, visible to everyone. Each comment gets one of the variations, picked at random. It goes even if the DM fails.")}
+              </Hint>
             </div>
             {publicReplyEnabled && (
               <div className="space-y-2">
@@ -1137,6 +1233,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                     {t("+ Add another reply")}
                   </button>
                 )}
+                {notes("publicReply")}
               </div>
             )}
           </Step>
@@ -1178,6 +1275,40 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           />
       </div>
       </div>
+
+      <Dialog
+        open={savedConflicts !== null}
+        onClose={() => {
+          const next = savedConflicts?.next;
+          setSavedConflicts(null);
+          next?.();
+        }}
+        title={t("Automation saved")}
+        description={t("Heads-up: it shares triggers with other active automations. Only one answers each comment or message.")}
+        footer={
+          <Button
+            variant="primary"
+            onClick={() => {
+              const next = savedConflicts?.next;
+              setSavedConflicts(null);
+              next?.();
+            }}
+          >
+            {importQueue && importQueue.length > 1 ? t("Continue") : t("See automations")}
+          </Button>
+        }
+      >
+        <ul className="space-y-2.5">
+          {savedConflicts?.conflicts.map((c) => (
+            <li key={c.other.id} data-tone={c.never ? "danger" : "warning"} className={c.never ? "text-sm leading-relaxed text-error" : "text-sm leading-relaxed text-warning"}>
+              {conflictText(c)}{" "}
+              <Link href={`/campaigns/${c.other.id}`} className="font-semibold underline underline-offset-4">
+                {t("Open “{name}”", { name: c.other.name })}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Dialog>
     </div>
   );
 }

@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
         tokenInvalidAt: true,
         metaLogin: true,
         webhookSubscribed: true,
+        automationsEnabled: true,
       },
     }),
     prisma.automation.count({ where: { workspaceId, ...accountFilter } }),
