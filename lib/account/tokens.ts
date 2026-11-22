@@ -10,6 +10,7 @@ const HOUR_MS = 60 * 60 * 1000;
 export const AUTH_TOKEN_TTL_MS: Record<AuthTokenPurpose, number> = {
   WELCOME: 7 * 24 * HOUR_MS,
   RESET: HOUR_MS,
+  VERIFY_EMAIL: 48 * HOUR_MS,
 };
 /** Minimum gap between two reset e-mails for the same account. */
 const RESET_EMAIL_COOLDOWN_MS = 60 * 1000;
@@ -40,6 +41,11 @@ export async function createAuthToken(userId: string, purpose: AuthTokenPurpose)
 }
 
 export function authTokenUrl(token: string, purpose: AuthTokenPurpose): string {
+  if (purpose === "VERIFY_EMAIL") {
+    const confirm = new URL("/confirmar-email", getBaseUrl());
+    confirm.searchParams.set("token", token);
+    return confirm.toString();
+  }
   const url = new URL("/redefinir-senha", getBaseUrl());
   url.searchParams.set("token", token);
   if (purpose === "WELCOME") url.searchParams.set("boas-vindas", "1");
@@ -62,7 +68,8 @@ export type SetPasswordResult = { ok: true; email: string | null } | { ok: false
 
 export async function setPasswordWithToken(token: string, password: unknown): Promise<SetPasswordResult> {
   const record = await findValidAuthToken(token);
-  if (!record) {
+  // A sign-up confirmation link only confirms the address; it never sets a password.
+  if (!record || (record.purpose !== "WELCOME" && record.purpose !== "RESET")) {
     return { ok: false, error: "Este link é inválido, expirou ou já foi usado. Peça um novo." };
   }
   const invalid = validateNewPassword(password, record.user.email);
@@ -134,4 +141,25 @@ export async function requestPasswordReset(rawEmail: string): Promise<void> {
   } catch (err) {
     console.error("[password-reset] Could not send e-mail:", err);
   }
+}
+
+export type ConfirmEmailResult =
+  | { ok: true; userId: string; email: string | null; firstConfirmation: boolean }
+  | { ok: false };
+
+/**
+ * Sign-up confirmation link: marks the address as confirmed. Returns whether
+ * this was the first confirmation, so the admins are told about a new sign-up
+ * only once.
+ */
+export async function confirmEmailWithToken(token: string | null | undefined): Promise<ConfirmEmailResult> {
+  const record = await findValidAuthToken(token);
+  if (!record || record.purpose !== "VERIFY_EMAIL") return { ok: false };
+  const used = await prisma.authToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: new Date() } });
+  if (used.count === 0) return { ok: false };
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: record.userId }, select: { emailVerified: true } });
+  if (!user.emailVerified) {
+    await prisma.user.update({ where: { id: record.userId }, data: { emailVerified: new Date() } });
+  }
+  return { ok: true, userId: record.userId, email: record.user.email, firstConfirmation: !user.emailVerified };
 }

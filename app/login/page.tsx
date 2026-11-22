@@ -4,6 +4,8 @@ import { AuthError } from "next-auth";
 import { auth, EMAIL_PROVIDER_ID, PASSWORD_PROVIDER_ID, signIn } from "@/lib/auth";
 import { getI18n } from "@/lib/i18n/server";
 import BrandMark from "@/components/brand-mark";
+import { brand } from "@/config/brand";
+import { isSignupAvailable } from "@/lib/security/turnstile";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -68,7 +70,13 @@ export default async function LoginPage({
   }
 
   let errorMessage: string | null = null;
-  if (params.code === "rate_limited") {
+  // The password was right, the e-mail was never confirmed: offer a new link.
+  const unconfirmed = params.code === "email_not_verified";
+  if (unconfirmed) {
+    errorMessage = t("Confirm your e-mail before signing in: open the link we sent when you signed up.");
+  } else if (params.code === "account_disabled") {
+    errorMessage = t("Account disabled, contact support: {email}", { email: brand.support.email });
+  } else if (params.code === "rate_limited") {
     errorMessage = t("Too many attempts. Wait 15 minutes or reset your password.");
   } else if (params.error === "CredentialsSignin") {
     errorMessage = t("Incorrect e-mail or password.");
@@ -102,9 +110,14 @@ export default async function LoginPage({
 
         <div className="panel rounded p-8 space-y-6">
           {errorMessage && (
-            <p role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
-              {errorMessage}
-            </p>
+            <div role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
+              <p>{errorMessage}</p>
+              {unconfirmed && (
+                <Link href="/confirmar-email" className="mt-2 inline-block font-semibold underline underline-offset-2">
+                  {t("Resend the confirmation link")}
+                </Link>
+              )}
+            </div>
           )}
           {successMessage && (
             <p role="status" className="rounded border border-success/20 bg-success/10 p-3 text-sm text-success">
@@ -179,6 +192,15 @@ export default async function LoginPage({
             </form>
           </details>
         </div>
+
+        {isSignupAvailable() && (
+          <p className="mt-6 text-center text-sm text-muted">
+            {t("New here?")}{" "}
+            <Link href="/cadastro" className="font-medium text-accent hover:underline">
+              {t("Create account")}
+            </Link>
+          </p>
+        )}
 
         <p className="mt-6 text-center text-xs text-muted">
           <Link href="/privacidade" className="hover:text-foreground">

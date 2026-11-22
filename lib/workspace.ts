@@ -99,3 +99,16 @@ export async function getPrimaryWorkspace(userId: string): Promise<Workspace | n
   const membership = await getWorkspaceMembership(userId);
   return membership?.workspace ?? null;
 }
+
+/**
+ * The workspace the dashboard APIs act on, for a signed-in user — only when
+ * the client is ACTIVE. Pending, rejected and disabled clients get null, so
+ * every API answers them 401 (they only see a status screen).
+ */
+export async function resolveActiveWorkspaceId(userId: string): Promise<string | null> {
+  const workspace = await getPrimaryWorkspace(userId);
+  if (workspace) return workspace.status === "ACTIVE" ? workspace.id : null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  const created = await ensureWorkspaceForUser(userId, user?.email);
+  return created.status === "ACTIVE" ? created.id : null;
+}

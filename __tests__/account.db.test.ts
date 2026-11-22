@@ -141,7 +141,7 @@ describe.skipIf(!databaseUrl)("password accounts on real PostgreSQL", () => {
   it("authorize() accepts the right password and throttles repeated failures", async () => {
     const { authorizeWithPassword: authorize, LoginRateLimitedError } = await import("../lib/account/authorize");
     const email = `login-${randomBytes(3).toString("hex")}@loja.test`;
-    await state.db.user.create({ data: { email, passwordHash: await hashPassword("senha-certa-2026") } });
+    await state.db.user.create({ data: { email, emailVerified: new Date(), passwordHash: await hashPassword("senha-certa-2026") } });
     const request = new Request("https://app.test/api/auth/callback/credentials", {
       // Unique per run: the throttle state lives in Redis across runs.
       headers: { "x-forwarded-for": `10.${randomBytes(3).join(".")}` },

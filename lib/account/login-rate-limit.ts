@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import Redis from "ioredis";
+import { getFastRedis } from "@/lib/redis/fast";
 
 /**
  * Failed-login throttling, per e-mail and per IP, in fixed 15-minute windows.
@@ -9,29 +9,8 @@ import Redis from "ioredis";
  * already makes each guess expensive, and locking every customer out because
  * of a cache outage would be worse.
  */
-// A dedicated connection that fails fast: the queue connection is configured
-// for BullMQ (maxRetriesPerRequest: null), which would make a login hang for as
-// long as Redis is down instead of failing open. With the offline queue off,
-// commands sent before the socket is ready fail — so the first use awaits the
-// connection instead of silently skipping the throttle on every cold start.
-let connecting: Promise<Redis> | null = null;
-function getRedisConnection(): Promise<Redis> {
-  connecting ??= (async () => {
-    const client = new Redis(process.env.REDIS_URL!, {
-      lazyConnect: true,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-      connectTimeout: 2000,
-    });
-    client.on("error", (err) => console.error("[login-rate-limit] Redis error:", err.message));
-    await client.connect();
-    return client;
-  })().catch((err) => {
-    connecting = null;
-    throw err;
-  });
-  return connecting;
-}
+// Fails fast; see lib/redis/fast.ts.
+const getRedisConnection = getFastRedis;
 
 export const LOGIN_WINDOW_SECONDS = 15 * 60;
 export const MAX_FAILURES_PER_EMAIL = 5;
@@ -83,7 +62,6 @@ export async function clearLoginFailures(email: string): Promise<void> {
   }
 }
 
-export function getClientIp(headers: Headers): string | null {
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || headers.get("x-real-ip") || null;
-}
+// The last X-Forwarded-For entry (added by Traefik), never one the visitor
+// can forge — see lib/http/client-ip.ts.
+export { getClientIp } from "@/lib/http/client-ip";

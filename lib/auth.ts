@@ -6,9 +6,14 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { brand } from "@/config/brand";
 import { usableSecret } from "@/lib/env-safety";
 import { prisma } from "@/lib/db/client";
-import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
-import { canReceiveMagicLink, isSessionStillValid } from "@/lib/account/access";
-import { authorizeWithPassword, LoginRateLimitedError } from "@/lib/account/authorize";
+import { ensureWorkspaceForUser, resolveActiveWorkspaceId } from "@/lib/workspace";
+import { canReceiveMagicLink, isClientDisabled, isSessionStillValid } from "@/lib/account/access";
+import {
+  AccountDisabledError,
+  authorizeWithPassword,
+  EmailNotVerifiedError,
+  LoginRateLimitedError,
+} from "@/lib/account/authorize";
 import { getEmailFrom, sendEmail } from "@/lib/email/send";
 import { magicLinkEmail } from "@/lib/email/templates";
 
@@ -28,6 +33,14 @@ export const PASSWORD_PROVIDER_ID = "credentials";
 /** Shown as ?code=rate_limited on the login page. */
 class TooManyAttempts extends CredentialsSignin {
   code = "rate_limited";
+}
+/** ?code=email_not_verified: sign-up e-mail not confirmed yet. */
+class EmailNotConfirmed extends CredentialsSignin {
+  code = "email_not_verified";
+}
+/** ?code=account_disabled: the client was turned off in the admin area. */
+class ClientDisabled extends CredentialsSignin {
+  code = "account_disabled";
 }
 
 async function sendMagicLink({ identifier, url }: { identifier: string; url: string }) {
@@ -49,6 +62,8 @@ export const authConfig = {
           return await authorizeWithPassword(credentials, request);
         } catch (err) {
           if (err instanceof LoginRateLimitedError) throw new TooManyAttempts();
+          if (err instanceof EmailNotVerifiedError) throw new EmailNotConfirmed();
+          if (err instanceof AccountDisabledError) throw new ClientDisabled();
           throw err;
         }
       },
@@ -69,6 +84,7 @@ export const authConfig = {
       // opened. Closed sign-up — see lib/account/access.ts. An unknown address
       // gets the same "check your e-mail" page as a known one (no e-mail is
       // sent), so the form cannot be used to discover who has an account.
+      if (await isClientDisabled(user?.email)) return "/login?code=account_disabled";
       return (await canReceiveMagicLink(user?.email)) ? true : "/verify-request";
     },
     async jwt({ token, user }) {
@@ -132,14 +148,5 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
   const userId = await getCurrentUserId();
   if (!userId) return null;
 
-  const workspace = await getPrimaryWorkspace(userId);
-  if (workspace) return workspace.id;
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true },
-  });
-
-  const createdWorkspace = await ensureWorkspaceForUser(userId, user?.email);
-  return createdWorkspace.id;
+  return resolveActiveWorkspaceId(userId);
 }

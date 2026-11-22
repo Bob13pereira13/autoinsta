@@ -30,7 +30,9 @@ export default async function RedefinirSenhaPage({
   const params = await searchParams;
   const token = params.token ?? "";
   const welcome = params["boas-vindas"] === "1";
-  const record = await findValidAuthToken(token);
+  const found = await findValidAuthToken(token);
+  // A sign-up confirmation link cannot set a password.
+  const record = found && (found.purpose === "WELCOME" || found.purpose === "RESET") ? found : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 pb-10">

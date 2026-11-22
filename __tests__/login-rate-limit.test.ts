@@ -68,10 +68,15 @@ describe("login throttle", () => {
     await expect(rl.recordLoginFailure("d@loja.test", "10.0.0.3")).resolves.toBeUndefined();
   });
 
-  it("reads the client IP from proxy headers", async () => {
+  it("reads the client IP Traefik appended (the last X-Forwarded-For entry), never a forgeable one", async () => {
     const { getClientIp } = await import("@/lib/account/login-rate-limit");
-    expect(getClientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
-    expect(getClientIp(new Headers({ "x-real-ip": "203.0.113.8" }))).toBe("203.0.113.8");
+    // The visitor sent "203.0.113.7"; Traefik appended the real address.
+    expect(getClientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 198.51.100.4" }))).toBe("198.51.100.4");
+    expect(getClientIp(new Headers({ "x-forwarded-for": "198.51.100.4" }))).toBe("198.51.100.4");
+    // Headers only a proxy in front would set are ignored: there is none.
+    expect(getClientIp(new Headers({ "x-real-ip": "203.0.113.8" }))).toBeNull();
+    expect(getClientIp(new Headers({ "cf-connecting-ip": "203.0.113.9" }))).toBeNull();
+    expect(getClientIp(new Headers({ "x-forwarded-for": "1.1.1.1, not-an-ip" }))).toBeNull();
     expect(getClientIp(new Headers())).toBeNull();
   });
 });

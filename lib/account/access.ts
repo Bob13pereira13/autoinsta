@@ -36,3 +36,14 @@ export async function isSessionStillValid(userId: string, authenticatedAt: numbe
   if (user.passwordChangedAt && user.passwordChangedAt.getTime() > authenticatedAt) return null;
   return user;
 }
+
+/** The user's client (primary workspace) is DISABLED: no sign-in at all. */
+export async function isClientDisabled(rawEmail: string | null | undefined): Promise<boolean> {
+  if (!rawEmail) return false;
+  const membership = await prisma.workspaceMember.findFirst({
+    where: { user: { email: normalizeEmail(rawEmail) } },
+    select: { workspace: { select: { status: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return membership?.workspace.status === "DISABLED";
+}

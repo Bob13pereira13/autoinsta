@@ -25,6 +25,8 @@ model User {
   /// legal pages' revision date, config/brand.ts) and when.
   termsVersion      String?
   termsAcceptedAt   DateTime?
+  /// Interface language at sign-up ("pt-BR" | "en"), for the e-mails sent later.
+  locale            String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

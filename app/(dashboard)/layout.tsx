@@ -2,6 +2,7 @@ import { I18nProvider } from "@/lib/i18n/provider";
 import { getI18n } from "@/lib/i18n/server";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/dashboard-shell";
+import AccountStatusScreen from "@/components/account-status-screen";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { ensureWorkspaceForUser } from "@/lib/workspace";
@@ -27,6 +28,19 @@ export default async function DashboardLayout({
     session.user.id,
     session.user.email
   );
+
+  // Pending, rejected and disabled clients only see their status.
+  if (workspace.status !== "ACTIVE") {
+    return (
+      <I18nProvider locale={locale}>
+        <AccountStatusScreen
+          status={workspace.status}
+          rejectionReason={workspace.rejectionReason}
+          rejectedAt={workspace.rejectedAt}
+        />
+      </I18nProvider>
+    );
+  }
   const accounts = await prisma.instagramAccount.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { connectedAt: "desc" },

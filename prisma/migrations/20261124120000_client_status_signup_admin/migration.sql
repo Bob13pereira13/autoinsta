@@ -24,7 +24,8 @@ ALTER TYPE "AuthTokenPurpose" ADD VALUE 'VERIFY_EMAIL';
 
 -- AlterTable
 ALTER TABLE "User" ADD COLUMN     "termsAcceptedAt" TIMESTAMP(3),
-ADD COLUMN     "termsVersion" TEXT;
+ADD COLUMN     "termsVersion" TEXT,
+ADD COLUMN     "locale" TEXT;
 
 -- AlterTable
 ALTER TABLE "Workspace" ADD COLUMN     "approvedAt" TIMESTAMP(3),

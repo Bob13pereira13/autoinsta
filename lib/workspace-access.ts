@@ -42,6 +42,9 @@ export async function getCurrentWorkspaceContext(): Promise<WorkspaceContext | n
   });
 
   if (membership) {
+    // Only ACTIVE clients reach the dashboard APIs; pending, rejected and
+    // disabled ones only see a status screen.
+    if (membership.workspace.status !== "ACTIVE") return null;
     return {
       userId,
       workspaceId: membership.workspaceId,
