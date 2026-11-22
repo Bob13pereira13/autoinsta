@@ -4,6 +4,7 @@ import BrandMark from "@/components/brand-mark";
 import LanguageSwitcher from "@/components/language-switcher";
 import { getAdminEmail } from "@/lib/admin/auth";
 import { auth } from "@/lib/auth";
+import { signOutAction } from "@/lib/auth-actions";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { getI18n } from "@/lib/i18n/server";
 
@@ -54,6 +55,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <span className="hidden sm:inline">{adminEmail}</span>
               <Link href="/dashboard" className="hover:text-foreground">{t("Back to the dashboard")}</Link>
               <LanguageSwitcher />
+              <form action={signOutAction}>
+                <button type="submit" className="hover:text-foreground">{t("Sign out")}</button>
+              </form>
             </div>
           </div>
         </header>

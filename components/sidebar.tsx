@@ -7,6 +7,7 @@
  */
 
 import LanguageSwitcher from "@/components/language-switcher";
+import { signOutAction } from "@/lib/auth-actions";
 import { useI18n } from "@/lib/i18n/provider";
 import Link from "next/link";
 import Image from "next/image";
@@ -103,6 +104,14 @@ export default function Sidebar({
         <div className="px-5 py-4 border-t border-border">
           <div className="mb-4"><LanguageSwitcher /></div>
           <p className="text-sm text-foreground truncate">{workspaceName}</p>
+          <form action={signOutAction} className="mt-3">
+            <button
+              type="submit"
+              className="w-full rounded px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover hover:text-foreground"
+            >
+              {t("Sign out")}
+            </button>
+          </form>
         </div>
       </aside>
     </>
