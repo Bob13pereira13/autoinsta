@@ -18,8 +18,8 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 
 const SAMPLE = `keywords,dm_message,public_reply,tracked_url,opening_dm,opening_dm_button
-"yc","here it is: {link}","sent. check dms","https://events.ycombinator.com/startup-school-2026","hey! click below for the referral","send link"
-"LINK,SHOP","grab it here: {link}","dmed u",,,`;
+"CATALOGO","Aqui está o catálogo: {link}","Te mandei na DM!","https://sualoja.com.br/catalogo","Quer o catálogo? Toque abaixo","Me manda o link"
+"PRECO,PREÇO","A tabela de preços está nos destaques do perfil.","Olha a DM 📩",,,`;
 
 export default function ImportCampaignsPage() {
   const { t } = useI18n();

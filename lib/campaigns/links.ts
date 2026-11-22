@@ -1,7 +1,7 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import { TRACKED_LINK_ORDER } from "@/lib/tracking/link-order";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
-import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
+import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/defaults";
 
 // The primary button's title is stored on the campaign as `linkButtonLabel`,
 // so the primary link's own label is only a placeholder. Every later link

@@ -698,6 +698,31 @@ describe("DM Worker — Full Pipeline", () => {
     expect(mockSendPrivateReply).not.toHaveBeenCalled();
   });
 
+  it("comment follow gate with no texts of its own: the Portuguese request and “Já sigo”", async () => {
+    mockGetUserFollowStatus.mockResolvedValue(false);
+    mockPrisma.automation.findMany.mockResolvedValue([
+      {
+        ...mockAutomation,
+        requireFollow: true,
+        followPromptMessage: null,
+        followPromptButtonLabel: null,
+        trackedLinks: [{ slug: "abc123", label: "Primary campaign link", destinationUrl: "https://example.com" }],
+      },
+    ]);
+
+    const processor = getProcessor();
+    await processor(createMockJob());
+
+    expect(mockSendPrivateReplyWithButton).toHaveBeenCalledWith(
+      META_AUTH,
+      "ig_456",
+      "comment_555",
+      "Antes de te mandar o link, segue a gente aqui? Depois é só tocar no botão abaixo.",
+      "Já sigo",
+      "followcheck:auto_789"
+    );
+  });
+
   it("should skip the prompt and send the link when the commenter already follows", async () => {
     mockGetUserFollowStatus.mockResolvedValue(true); // already following
     mockPrisma.automation.findMany.mockResolvedValue([
@@ -1185,8 +1210,8 @@ describe("DM Worker — DM keyword trigger", () => {
       META_AUTH,
       "ig_456",
       "commenter_999",
-      expect.any(String),
-      "I'm following ✅",
+      "Antes de te mandar o link, segue a gente aqui? Depois é só tocar no botão abaixo.",
+      "Já sigo",
       "followcheck:auto_789"
     );
     expect(mockSendDirectMessage).not.toHaveBeenCalled();

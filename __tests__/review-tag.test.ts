@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { needsReview, textRuleIssues } from "@/lib/automation/text-rules";
 import { automationRuleIssues } from "@/lib/automation/rules";
-import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
+import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/defaults";
 import { DEFAULT_LINK_BUTTON_LABEL as FROM_LINKS } from "@/lib/campaigns/links";
 
 const fine = {

@@ -8,7 +8,7 @@
  * Edit and Stop/Resume sit next to the title.
  */
 
-import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
+import { DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL, DEFAULT_FOLLOW_PROMPT_MESSAGE, DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/defaults";
 import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -349,10 +349,10 @@ export default function CampaignDetailPage() {
           <Summary title={t("They must follow first")}>
             <FieldBox>
               {campaign.followPromptMessage ||
-                "quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over"}
+                DEFAULT_FOLLOW_PROMPT_MESSAGE}
             </FieldBox>
             <FieldBox>
-              {campaign.followPromptButtonLabel || "i'm following"}
+              {campaign.followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
             </FieldBox>
             <MediaThumbs items={mediaBySlot.FOLLOW_PROMPT} />
           </Summary>
@@ -460,7 +460,7 @@ export default function CampaignDetailPage() {
             requireFollow={campaign.requireFollow}
             followPromptMessage={campaign.followPromptMessage ?? ""}
             followPromptButtonLabel={
-              campaign.followPromptButtonLabel ?? "i'm following"
+              campaign.followPromptButtonLabel ?? DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
             }
             followUpEnabled={campaign.followUpEnabled ?? false}
             followUpMessage={campaign.followUpMessage ?? ""}

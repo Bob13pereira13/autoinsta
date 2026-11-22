@@ -57,7 +57,12 @@ import {
 } from "@/lib/automation/editor-scope";
 import { automationTypeSlug } from "@/lib/automation/type-slugs";
 import { readCache, writeCache } from "@/lib/client-cache";
-import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
+import {
+  DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL,
+  DEFAULT_FOLLOW_PROMPT_MESSAGE,
+  DEFAULT_LINK_BUTTON_LABEL,
+  DEFAULT_OPENING_BUTTON_LABEL,
+} from "@/lib/campaigns/defaults";
 import {
   IMPORT_QUEUE_KEY,
   IMPORT_ACCOUNT_KEY,
@@ -216,7 +221,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const [requireFollow, setRequireFollow] = useState(false);
   const [followPromptMessage, setFollowPromptMessage] = useState("");
   const [followPromptButtonLabel, setFollowPromptButtonLabel] =
-    useState("i'm following");
+    useState(DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL);
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(0);
@@ -335,7 +340,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         setRequireFollow(c.requireFollow ?? false);
         setFollowPromptMessage(c.followPromptMessage ?? "");
         setFollowPromptButtonLabel(
-          c.followPromptButtonLabel ?? "i'm following"
+          c.followPromptButtonLabel ?? DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
         );
         setFollowUpEnabled(c.followUpEnabled ?? false);
         setFollowUpMessage(c.followUpMessage ?? "");
@@ -387,7 +392,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     setOpeningDmEnabled(hasOpening);
     setOpeningDmMessage(row.openingDmMessage ?? "");
     setOpeningDmButtonLabel(
-      row.openingDmButtonLabel || (hasOpening ? "Send link" : "")
+      row.openingDmButtonLabel || (hasOpening ? DEFAULT_OPENING_BUTTON_LABEL : "")
     );
     const link = row.trackedUrl ?? "";
     setTrackedDestinationUrl(link);
@@ -558,7 +563,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       requireFollow,
       followPromptMessage: requireFollow ? followPromptMessage.trim() : "",
       followPromptButtonLabel: requireFollow
-        ? followPromptButtonLabel.trim() || "i'm following"
+        ? followPromptButtonLabel.trim() || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
         : "",
       followUpEnabled,
       followUpMessage: followUpEnabled ? followUpMessage.trim() : "",
@@ -1031,7 +1036,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 <textarea
                   value={followPromptMessage}
                   onChange={(e) => setFollowPromptMessage(e.target.value)}
-                  placeholder={t("Follow me and tap the button below to get it 💛")}
+                  placeholder={DEFAULT_FOLLOW_PROMPT_MESSAGE}
                   rows={3}
                   aria-label={t("Follow request text")}
                   className="field resize-none"
@@ -1042,7 +1047,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 <input
                   value={followPromptButtonLabel}
                   onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
-                  placeholder={t("i'm following")}
+                  placeholder={DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
                   aria-label={t("Button label")}
                   className="field"
                   maxLength={20}
@@ -1269,7 +1274,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             secondLinkButtonLabel={secondaryButtonLabel || DEFAULT_LINK_BUTTON_LABEL}
             requireFollow={requireFollow}
             followPromptMessage={followPromptMessage}
-            followPromptButtonLabel={followPromptButtonLabel || "i'm following"}
+            followPromptButtonLabel={followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
             followUpEnabled={followUpEnabled}
             followUpMessage={followUpMessage}
             followUpDelayMinutes={followUpDelayMinutes}

@@ -12,7 +12,7 @@
 import { useI18n } from "@/lib/i18n/provider";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { cx } from "@/components/ui/cx";
-import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
+import { DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL, DEFAULT_FOLLOW_PROMPT_MESSAGE, DEFAULT_LINK_BUTTON_LABEL, DEFAULT_LINK_ONLY_TEXT } from "@/lib/campaigns/defaults";
 
 export type PreviewTab = "post" | "comments" | "dm" | "conversation";
 
@@ -138,11 +138,11 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
       )}
       {props.requireFollow && (
         <>
-          <Incoming buttons={[props.followPromptButtonLabel || "i'm following"]}>
+          <Incoming buttons={[props.followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL]}>
             {props.followPromptMessage ||
-              "quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over"}
+              DEFAULT_FOLLOW_PROMPT_MESSAGE}
           </Incoming>
-          <Outgoing>{props.followPromptButtonLabel || "i'm following"}</Outgoing>
+          <Outgoing>{props.followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}</Outgoing>
           <MediaBubbles items={props.media?.FOLLOW_PROMPT} />
         </>
       )}
@@ -150,7 +150,7 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
         {!props.revealMessage
           ? t("Write a message")
           : showCard
-            ? bodyText || null
+            ? bodyText || DEFAULT_LINK_ONLY_TEXT
             : renderMessage(props.revealMessage, props.hasLink, props.linkUrl, t("your link"))}
       </Incoming>
       <MediaBubbles items={props.media?.MAIN} />
@@ -184,7 +184,7 @@ function CommentThread(props: CampaignPreviewProps) {
           <p className="text-xs">
             <span className="font-semibold text-heading">{SAMPLE_USER}</span> <span className="text-faint">{t("Now")}</span>
           </p>
-          <p className="text-foreground">{props.sampleComment || "yc"}</p>
+          <p className="text-foreground">{props.sampleComment || "LINK"}</p>
           <p className="mt-0.5 text-xs text-faint">{t("Reply")}</p>
         </div>
       </div>

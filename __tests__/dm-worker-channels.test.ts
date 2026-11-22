@@ -265,3 +265,31 @@ describe("echoes", () => {
     expect(m.guards.handleEcho).toHaveBeenCalledWith({ accountConnectionId: "acc_row", recipientId: "person_1", messageId: "phone_mid" });
   });
 });
+
+describe("default texts are in Portuguese", () => {
+  it("Direct follow gate with no texts of its own: the Portuguese request and “Já sigo”", async () => {
+    m.meta.getUserFollowStatus.mockResolvedValue(false);
+    m.prisma.automation.findMany.mockResolvedValue([
+      automation({ keywords: ["LINK"], requireFollow: true, followPromptMessage: null, followPromptButtonLabel: null }),
+    ]);
+    await processor()(message({ messageText: "LINK" }));
+    const [, , , text, button] = m.meta.sendDirectMessageWithButton.mock.calls[0];
+    expect(text).toBe("Antes de te mandar o link, segue a gente aqui? Depois é só tocar no botão abaixo.");
+    expect(button).toBe("Já sigo");
+  });
+
+  it("a message that is only {link}: “Aqui está o seu link:” above the “Abrir link” button", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([
+      automation({
+        keywords: ["LINK"],
+        dmMessage: "{link}",
+        trackedLinks: [{ slug: "s1", label: "Primary campaign link", destinationUrl: "https://loja.test" }],
+      }),
+    ]);
+    await processor()(message({ messageText: "LINK" }));
+    const [, , , text, buttons] = m.meta.sendDirectMessageWithLinkButton.mock.calls[0];
+    expect(text).toBe("Aqui está o seu link:");
+    expect(buttons[0].title).toBe("Abrir link");
+  });
+});
+
