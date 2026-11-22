@@ -31,11 +31,13 @@ export const brand = {
 
   /**
    * Logotipo. Coloque o arquivo em /public/brand/ e ajuste o caminho.
-   * Use SVG ou PNG com fundo transparente. Os ícones do app (favicon e
-   * instalação no celular) ficam em /public/icon-192.png, /public/icon-512.png
-   * e /public/apple-touch-icon.png — substitua esses arquivos mantendo os nomes.
-   * Para o Meta App Review você também precisa de um ícone de 1024x1024 px,
-   * enviado direto no painel da Meta.
+   * Use SVG ou PNG com fundo transparente. Os ícones do app ficam em
+   * /app/favicon.ico, /public/icon-192.png, /public/icon-512.png,
+   * /public/icon-maskable-512.png (Android, sem cantos: a arte fica no centro)
+   * e /public/apple-touch-icon.png (iOS, sem cantos) — substitua esses
+   * arquivos mantendo os nomes. Para o Meta App Review você também precisa de
+   * um ícone de 1024x1024 px, enviado direto no painel da Meta: veja
+   * docs/design/app-icon-1024.png.
    */
   logo: {
     src: "/brand/logo.svg",
@@ -45,15 +47,18 @@ export const brand = {
   },
 
   /**
-   * Cores. `primary` é usada em botões, links e destaques; `primaryHover` no
-   * estado de hover. O texto sobre `primary` é branco, então escolha uma cor
-   * com contraste suficiente (WCAG AA: 4,5:1).
+   * Cores. `primary` é o destaque do painel: botões, chaves, abas ativas e o
+   * início do gradiente de destaque; `primaryHover` é o hover. O texto sobre
+   * `primary` é branco, então escolha uma cor com contraste suficiente (WCAG
+   * AA: 4,5:1). Os temas claro e escuro ficam em app/globals.css.
    */
   colors: {
-    primary: "#4f46e5",
-    primaryHover: "#4338ca",
-    /** Cor da barra do navegador no celular e do app instalado. */
-    theme: "#18181b",
+    primary: "#7C3AED",
+    primaryHover: "#6D28D9",
+    /** Cor da barra do navegador no celular e do app instalado (segue a marca). */
+    theme: "#7C3AED",
+    /** Fundo da tela de abertura do app instalado. */
+    splash: "#08080E",
   },
 
   /** Contato exibido para clientes e para titulares de dados. */

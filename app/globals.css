@@ -1,38 +1,344 @@
 @import "tailwindcss";
 
-/* Design system — plain and functional. No gradients, glass, glow, or
-   animation. The accent color comes from config/brand.ts (see app/layout.tsx). */
+/*
+ * Design system "Tech com brilho" (docs/design/README.md): dark and light
+ * themes, a brand gradient with a soft glow, Space Grotesk for titles and
+ * Inter for text.
+ *
+ * Every color is a variable defined in this file; components never hard-code
+ * one (Tailwind's default palette is switched off below, so a class like
+ * bg-zinc-800 does not even compile). The accent comes from config/brand.ts
+ * (--brand-primary, set in app/layout.tsx).
+ *
+ * Theme choice: with no saved choice the panel follows the system
+ * (prefers-color-scheme); the theme button stores a cookie and the root layout
+ * sets data-theme on <html>, so the server renders the right theme. The dark
+ * values appear twice (saved choice and system); __tests__/theme.test.ts keeps
+ * the two copies identical and checks text contrast in both themes.
+ */
 
-@theme inline {
-  --color-background: #ffffff;
-  --color-foreground: #18181b;
-  --color-surface: #f7f7f8;
-  --color-surface-hover: #efeff1;
-  --color-border: #e4e4e7;
-  --color-border-hover: #d4d4d8;
-  --color-muted: #71717a;
-  --color-accent: var(--brand-primary, #4f46e5);
-  --color-accent-hover: var(--brand-primary-hover, #4338ca);
-  --color-success: #16a34a;
-  --color-error: #dc2626;
-  --color-warning: #d97706;
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, monospace;
-}
-
-html {
+/* ---------------------------------- light --------------------------------- */
+:root {
   color-scheme: light;
+  --bg: #f6f5fb;
+  --bg-glow: radial-gradient(900px 420px at 70% -120px, rgba(124, 58, 237, 0.16), transparent 70%);
+  --sidebar: rgba(255, 255, 255, 0.75);
+  --sidebar-border: rgba(20, 20, 40, 0.08);
+  --card: #ffffff;
+  --card-border: rgba(20, 20, 40, 0.08);
+  --card-shadow: 0 1px 2px rgba(20, 20, 40, 0.04);
+  --card-hover-border: rgba(124, 58, 237, 0.35);
+  --card-hover-shadow: 0 0 0 1px rgba(124, 58, 237, 0.1), 0 18px 44px -14px rgba(124, 58, 237, 0.35);
+  --surface: #f3f2f9;
+  --surface-hover: #eceaf5;
+  --control: #ffffff;
+  --control-border: rgba(20, 20, 40, 0.08);
+  --border: rgba(20, 20, 40, 0.12);
+  --border-subtle: rgba(20, 20, 40, 0.08);
+  --border-strong: rgba(20, 20, 40, 0.22);
+  --heading: #15151f;
+  --text: #15151f;
+  --text-2: #5e5e74;
+  --text-3: #66667c;
+  --placeholder: #75758a;
+  --accent-fg: #6d28d9;
+  --accent-fg-hover: #5b21b6;
+  --glow: 0 0 16px rgba(168, 85, 247, 0.3);
+  --glow-hover: 0 0 24px rgba(168, 85, 247, 0.45);
+  --switch-glow: 0 0 12px rgba(168, 85, 247, 0.35);
+  --accent-soft: #f3eeff;
+  --accent-soft-fg: #5b21b6;
+  --accent-soft-icon: #6d28d9;
+  --accent-soft-border: rgba(124, 58, 237, 0.2);
+  --chip: #f1ecff;
+  --nav-active: rgba(124, 58, 237, 0.09);
+  --nav-active-ring: rgba(124, 58, 237, 0.2);
+  --nav-hover: rgba(20, 20, 40, 0.05);
+  --success: #15803d;
+  --success-dot: #22c55e;
+  --success-soft: #f0fdf4;
+  --success-border: #bbf7d0;
+  --warning: #92400e;
+  --warning-dot: #f59e0b;
+  --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
+  --error: #b91c1c;
+  --error-soft: #fef2f2;
+  --error-border: #fecaca;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --neutral-dot: #a1a1aa;
+  --switch-off: rgba(20, 20, 40, 0.14);
+  --input: #ffffff;
+  --input-border: rgba(20, 20, 40, 0.16);
+  --overlay: rgba(20, 20, 40, 0.45);
+  --dialog: #ffffff;
+  --dialog-shadow: 0 30px 80px -20px rgba(20, 20, 40, 0.35);
+  --dialog-danger-border: #fecaca;
+  --dialog-danger-shadow: 0 30px 90px -20px rgba(239, 68, 68, 0.25);
+  --preview: #ffffff;
+  --preview-border: rgba(20, 20, 40, 0.1);
+  --preview-shadow: 0 30px 80px -30px rgba(124, 58, 237, 0.35);
+  --bubble-in: #f1f0f7;
+  --chart: #8b5cf6;
+  --focus: #6d28d9;
 }
 
+/* ------------------------- dark (saved choice) ----------------------------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #08080e;
+  --bg-glow: radial-gradient(900px 420px at 70% -120px, rgba(124, 58, 237, 0.28), transparent 70%);
+  --sidebar: rgba(12, 12, 20, 0.6);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --card: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-shadow: 0 0 #0000;
+  --card-hover-border: rgba(167, 139, 250, 0.45);
+  --card-hover-shadow: 0 0 0 1px rgba(167, 139, 250, 0.15), 0 18px 50px -12px rgba(124, 58, 237, 0.45);
+  --surface: rgba(255, 255, 255, 0.03);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --control: rgba(255, 255, 255, 0.04);
+  --control-border: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --heading: #f7f7fb;
+  --text: #e9e9f2;
+  --text-2: #a9a9c0;
+  --text-3: #9c9cb4;
+  --placeholder: #8b8ba3;
+  --accent-fg: #c4b5fd;
+  --accent-fg-hover: #ddd6fe;
+  --glow: 0 0 18px rgba(168, 85, 247, 0.4);
+  --glow-hover: 0 0 28px rgba(168, 85, 247, 0.65);
+  --switch-glow: 0 0 14px rgba(168, 85, 247, 0.5);
+  --accent-soft: rgba(124, 58, 237, 0.16);
+  --accent-soft-fg: #ddd6fe;
+  --accent-soft-icon: #c4b5fd;
+  --accent-soft-border: rgba(167, 139, 250, 0.28);
+  --chip: rgba(167, 139, 250, 0.14);
+  --nav-active: rgba(124, 58, 237, 0.18);
+  --nav-active-ring: rgba(167, 139, 250, 0.28);
+  --nav-hover: rgba(255, 255, 255, 0.05);
+  --success: #86efac;
+  --success-dot: #22c55e;
+  --success-soft: rgba(34, 197, 94, 0.1);
+  --success-border: rgba(134, 239, 172, 0.35);
+  --warning: #fcd34d;
+  --warning-dot: #f59e0b;
+  --warning-soft: rgba(245, 158, 11, 0.12);
+  --warning-border: rgba(252, 211, 77, 0.4);
+  --error: #fecaca;
+  --error-soft: rgba(239, 68, 68, 0.12);
+  --error-border: rgba(248, 113, 113, 0.45);
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --neutral-dot: #52525b;
+  --switch-off: rgba(255, 255, 255, 0.12);
+  --input: rgba(0, 0, 0, 0.25);
+  --input-border: rgba(255, 255, 255, 0.12);
+  --overlay: rgba(4, 4, 8, 0.72);
+  --dialog: #12121b;
+  --dialog-shadow: 0 30px 90px -20px rgba(0, 0, 0, 0.6);
+  --dialog-danger-border: rgba(248, 113, 113, 0.35);
+  --dialog-danger-shadow: 0 30px 90px -20px rgba(239, 68, 68, 0.35);
+  --preview: #0e0e16;
+  --preview-border: rgba(255, 255, 255, 0.1);
+  --preview-shadow: 0 30px 80px -30px rgba(124, 58, 237, 0.55);
+  --bubble-in: rgba(255, 255, 255, 0.08);
+  --chart: #a78bfa;
+  --focus: #c4b5fd;
+}
+
+/* ------------------- dark (system, no saved choice) ------------------------ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #08080e;
+    --bg-glow: radial-gradient(900px 420px at 70% -120px, rgba(124, 58, 237, 0.28), transparent 70%);
+    --sidebar: rgba(12, 12, 20, 0.6);
+    --sidebar-border: rgba(255, 255, 255, 0.06);
+    --card: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+    --card-border: rgba(255, 255, 255, 0.08);
+    --card-shadow: 0 0 #0000;
+    --card-hover-border: rgba(167, 139, 250, 0.45);
+    --card-hover-shadow: 0 0 0 1px rgba(167, 139, 250, 0.15), 0 18px 50px -12px rgba(124, 58, 237, 0.45);
+    --surface: rgba(255, 255, 255, 0.03);
+    --surface-hover: rgba(255, 255, 255, 0.06);
+    --control: rgba(255, 255, 255, 0.04);
+    --control-border: rgba(255, 255, 255, 0.07);
+    --border: rgba(255, 255, 255, 0.1);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --heading: #f7f7fb;
+    --text: #e9e9f2;
+    --text-2: #a9a9c0;
+    --text-3: #9c9cb4;
+    --placeholder: #8b8ba3;
+    --accent-fg: #c4b5fd;
+    --accent-fg-hover: #ddd6fe;
+    --glow: 0 0 18px rgba(168, 85, 247, 0.4);
+    --glow-hover: 0 0 28px rgba(168, 85, 247, 0.65);
+    --switch-glow: 0 0 14px rgba(168, 85, 247, 0.5);
+    --accent-soft: rgba(124, 58, 237, 0.16);
+    --accent-soft-fg: #ddd6fe;
+    --accent-soft-icon: #c4b5fd;
+    --accent-soft-border: rgba(167, 139, 250, 0.28);
+    --chip: rgba(167, 139, 250, 0.14);
+    --nav-active: rgba(124, 58, 237, 0.18);
+    --nav-active-ring: rgba(167, 139, 250, 0.28);
+    --nav-hover: rgba(255, 255, 255, 0.05);
+    --success: #86efac;
+    --success-dot: #22c55e;
+    --success-soft: rgba(34, 197, 94, 0.1);
+    --success-border: rgba(134, 239, 172, 0.35);
+    --warning: #fcd34d;
+    --warning-dot: #f59e0b;
+    --warning-soft: rgba(245, 158, 11, 0.12);
+    --warning-border: rgba(252, 211, 77, 0.4);
+    --error: #fecaca;
+    --error-soft: rgba(239, 68, 68, 0.12);
+    --error-border: rgba(248, 113, 113, 0.45);
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --neutral-dot: #52525b;
+    --switch-off: rgba(255, 255, 255, 0.12);
+    --input: rgba(0, 0, 0, 0.25);
+    --input-border: rgba(255, 255, 255, 0.12);
+    --overlay: rgba(4, 4, 8, 0.72);
+    --dialog: #12121b;
+    --dialog-shadow: 0 30px 90px -20px rgba(0, 0, 0, 0.6);
+    --dialog-danger-border: rgba(248, 113, 113, 0.35);
+    --dialog-danger-shadow: 0 30px 90px -20px rgba(239, 68, 68, 0.35);
+    --preview: #0e0e16;
+    --preview-border: rgba(255, 255, 255, 0.1);
+    --preview-shadow: 0 30px 80px -30px rgba(124, 58, 237, 0.55);
+    --bubble-in: rgba(255, 255, 255, 0.08);
+    --chart: #a78bfa;
+    --focus: #c4b5fd;
+  }
+}
+
+/* ------------------------ the same in both themes -------------------------- */
+:root {
+  --accent: var(--brand-primary, #7c3aed);
+  --accent-hover: var(--brand-primary-hover, #6d28d9);
+  --accent-2: #c026d3;
+  --gradient: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --on-accent: #ffffff;
+  /* Over photos and videos (post thumbnails, media previews). */
+  --scrim: rgba(0, 0, 0, 0.55);
+  --on-scrim: #ffffff;
+}
+
+/* Tailwind utilities read the variables above, so they switch with the theme. */
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-heading: var(--heading);
+  --color-muted: var(--text-2);
+  --color-faint: var(--text-3);
+  --color-placeholder: var(--placeholder);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-control: var(--control);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-hover: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-2: var(--accent-2);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-fg-hover: var(--accent-fg-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-fg: var(--accent-soft-fg);
+  --color-accent-soft-icon: var(--accent-soft-icon);
+  --color-accent-soft-border: var(--accent-soft-border);
+  --color-chip: var(--chip);
+  --color-on-accent: var(--on-accent);
+  --color-nav-active: var(--nav-active);
+  --color-nav-hover: var(--nav-hover);
+  --color-success: var(--success);
+  --color-success-dot: var(--success-dot);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-dot: var(--warning-dot);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
+  --color-error-border: var(--error-border);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-neutral-dot: var(--neutral-dot);
+  --color-switch-off: var(--switch-off);
+  --color-input: var(--input);
+  --color-input-border: var(--input-border);
+  --color-overlay: var(--overlay);
+  --color-dialog: var(--dialog);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-preview: var(--preview);
+  --color-preview-border: var(--preview-border);
+  --color-bubble-in: var(--bubble-in);
+  --color-chart: var(--chart);
+  --color-scrim: var(--scrim);
+  --color-on-scrim: var(--on-scrim);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-item: 10px;
+  --radius-chip: 8px;
+
+  --shadow-card: var(--card-shadow);
+  --shadow-card-hover: var(--card-hover-shadow);
+  --shadow-glow: var(--glow);
+  --shadow-glow-hover: var(--glow-hover);
+  --shadow-switch: var(--switch-glow);
+  --shadow-dialog: var(--dialog-shadow);
+  --shadow-preview: var(--preview-shadow);
+}
+
+/* --------------------------------- base ----------------------------------- */
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background-color: var(--bg);
+  background-image: var(--bg-glow);
+  background-repeat: no-repeat;
+  color: var(--text);
   font-family: var(--font-sans);
+  font-size: 14px;
 }
 
-/* Focus ring — visible, for keyboard users. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  color: var(--heading);
+  letter-spacing: -0.01em;
+}
+
+::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-soft-fg);
+}
+
+/* Focus ring — visible in both themes, for keyboard users. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -45,8 +351,8 @@ select:focus-visible {
 }
 
 /* iOS Safari zooms the whole page in when a focused field's text is under 16px,
-   and never zooms back out. Fields are text-sm (14px) throughout, so raise them
-   to 16px on phones and leave the desktop sizing alone. */
+   and never zooms back out. Fields are 14px throughout, so raise them to 16px
+   on phones and leave the desktop sizing alone. */
 @media (max-width: 640px) {
   input,
   textarea,
@@ -55,50 +361,345 @@ select:focus-visible {
   }
 }
 
-/* Panel — flat container. Replaces .glass / .glass-strong. */
-.panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+/* ------------------------------- components -------------------------------- */
+@layer components {
+  /* Page title (h1 30–32px) and section title (h2 18px). */
+  .title-page {
+    font-family: var(--font-display);
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: var(--heading);
+  }
+  @media (min-width: 1024px) {
+    .title-page {
+      font-size: 32px;
+    }
+  }
+  .title-section {
+    font-family: var(--font-display);
+    font-size: 18px;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--heading);
+  }
+
+  /* Card: the base container. `.panel` is the older name for it. */
+  .card,
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    border-radius: var(--radius-card);
+  }
+  .card-interactive {
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.25s ease,
+      transform 0.2s ease;
+  }
+  .card-interactive:hover {
+    border-color: var(--card-hover-border);
+    box-shadow: var(--card-hover-shadow);
+    transform: translateY(-2px);
+  }
+
+  /* Buttons. Primary: brand gradient with a glow that grows on hover. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: var(--radius-control);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      box-shadow 0.2s ease,
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.1s ease;
+  }
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .btn-sm {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+    border-radius: var(--radius-item);
+  }
+  .btn-icon {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0;
+    border-radius: var(--radius-item);
+  }
+  .btn-primary {
+    background: var(--gradient);
+    color: var(--on-accent);
+    box-shadow: var(--glow);
+  }
+  .btn-primary:not(:disabled):hover {
+    box-shadow: var(--glow-hover);
+  }
+  .btn-primary:not(:disabled):active,
+  .btn-danger:not(:disabled):active {
+    transform: translateY(1px);
+  }
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 500;
+  }
+  .btn-secondary:not(:disabled):hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-2);
+    font-weight: 500;
+  }
+  .btn-ghost:not(:disabled):hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .btn-soft {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-soft-border);
+    color: var(--accent-soft-fg);
+  }
+  .btn-soft:not(:disabled):hover {
+    border-color: var(--accent-fg);
+  }
+  .btn-danger {
+    background: var(--danger);
+    color: var(--on-accent);
+  }
+  .btn-danger:not(:disabled):hover {
+    background: var(--danger-hover);
+  }
+  .btn-danger-ghost {
+    background: transparent;
+    color: var(--text-3);
+  }
+  .btn-danger-ghost:not(:disabled):hover {
+    background: var(--error-soft);
+    color: var(--error);
+  }
+  /* Touch screens: every control is at least 44px tall. */
+  @media (pointer: coarse) {
+    .btn-sm {
+      min-height: 44px;
+    }
+  }
+
+  /* Text fields, selects and text areas. */
+  .field {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 14px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-control);
+    background: var(--input);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .field:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+  .field:focus,
+  .field:focus-visible {
+    outline: none;
+    border-color: var(--accent-fg);
+    box-shadow: 0 0 0 3px var(--accent-soft-border);
+  }
+  .field:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--error-border);
+  }
+  textarea.field {
+    resize: vertical;
+  }
+  .label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--heading);
+  }
+  .hint {
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  /* Segmented control: subtle track, active item with the gradient and glow. */
+  .seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--radius-control);
+    background: var(--control);
+    border: 1px solid var(--control-border);
+  }
+  .seg-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: var(--radius-item);
+    background: transparent;
+    color: var(--text-2);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .seg-item:hover {
+    color: var(--text);
+  }
+  .seg-item[aria-selected="true"],
+  .seg-item[aria-checked="true"],
+  .seg-item[aria-pressed="true"],
+  .seg-item[aria-current="page"] {
+    background: var(--gradient);
+    color: var(--on-accent);
+    box-shadow: var(--glow);
+  }
+  @media (pointer: coarse) {
+    .seg-item {
+      min-height: 44px;
+    }
+  }
+
+  /* Keyword chip (monospace) and code. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--chip);
+    color: var(--accent-soft-fg);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* Links in running text. */
+  .link {
+    color: var(--accent-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.15s ease;
+  }
+  .link:hover {
+    color: var(--accent-fg-hover);
+  }
+
+  /* A wide table scrolls inside its own box on small screens. */
+  .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .data-table th {
+    padding: 10px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+  .data-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+  }
+  .data-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .data-table tbody tr {
+    transition: background-color 0.15s ease;
+  }
+  .data-table tbody tr:hover {
+    background: var(--surface);
+  }
 }
 
-/* Kept as no-op aliases so existing markup degrades to plain surfaces
-   instead of breaking. Prefer .panel in new code. */
-.glass,
-.glass-strong {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
-
-.gradient-mesh {
-  background: none;
-}
-
-.animate-fade-in,
-.animate-slide-in,
-.animate-pulse-glow,
-.stagger > * {
-  animation: none;
-}
-
+/* -------------------------------- movement --------------------------------- */
+/* No movement for people who asked for less: colors still change, nothing
+   slides or lifts, and nothing animates. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: color, background-color, border-color, box-shadow, opacity !important;
+    scroll-behavior: auto !important;
+  }
+  .card-interactive:hover,
+  .btn:active {
+    transform: none !important;
   }
 }
 
 /* Long-form legal pages (/privacidade, /termos, /exclusao-dados). */
 .legal-content h2 {
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 0.75rem;
 }
 .legal-content h3 {
   font-size: 1rem;
   font-weight: 600;
   margin: 1rem 0 0.5rem;
+}
+.legal-content p,
+.legal-content li {
+  line-height: 1.65;
 }
 .legal-content p + p {
   margin-top: 0.75rem;
@@ -112,9 +713,12 @@ select:focus-visible {
   margin-top: 0.25rem;
 }
 .legal-content a {
-  color: var(--color-accent);
+  color: var(--accent-fg);
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+.legal-content a:hover {
+  color: var(--accent-fg-hover);
 }
 .legal-content table {
   width: 100%;
@@ -123,7 +727,7 @@ select:focus-visible {
 }
 .legal-content th,
 .legal-content td {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
   text-align: left;
   vertical-align: top;
