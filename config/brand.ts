@@ -30,8 +30,10 @@ export const brand = {
     "Plataforma de automação para contas profissionais do Instagram: quando alguém comenta uma palavra-chave no seu post ou reel, enviamos a resposta por mensagem direta usando a API oficial da Meta.",
 
   /**
-   * Logotipo. Coloque o arquivo em /public/brand/ e ajuste o caminho.
-   * Use SVG ou PNG com fundo transparente. Os ícones do app ficam em
+   * Logotipo (símbolo + nome), em duas versões: `light` para o tema claro (cor
+   * escura) e `dark` para o tema escuro (cor clara). Coloque os arquivos em
+   * /public/brand/ e ajuste os caminhos; `width` e `height` dão a proporção.
+   * Use SVG (ou PNG) com fundo transparente. Os ícones do app ficam em
    * /app/favicon.ico, /public/icon-192.png, /public/icon-512.png,
    * /public/icon-maskable-512.png (Android, sem cantos: a arte fica no centro)
    * e /public/apple-touch-icon.png (iOS, sem cantos) — substitua esses
@@ -40,10 +42,11 @@ export const brand = {
    * docs/design/app-icon-1024.png.
    */
   logo: {
-    src: "/brand/logo.svg",
+    light: "/brand/logo-light.svg",
+    dark: "/brand/logo-dark.svg",
     alt: "ChatIntegrAI",
-    width: 32,
-    height: 32,
+    width: 483.7,
+    height: 100,
   },
 
   /**

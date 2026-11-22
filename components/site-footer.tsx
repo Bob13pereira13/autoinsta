@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BrandMark from "@/components/brand-mark";
 import { brand, PLACEHOLDER } from "@/config/brand";
 
 function filled(value: string): string | null {
@@ -16,7 +17,7 @@ export default function SiteFooter() {
     <footer className="border-t border-border-subtle">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-5 py-10 text-sm text-muted sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <p className="font-display font-semibold text-heading">{brand.name}</p>
+          <BrandMark href={null} size="sm" className="mb-2" />
           {company && (
             <p>
               {company}
