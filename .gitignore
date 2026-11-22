@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Local media uploads (UPLOADS_DIR default)
 /uploads/
+
+# Local Redis snapshot (redis-server started in the repo folder)
+dump.rdb
