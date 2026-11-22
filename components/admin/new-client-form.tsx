@@ -12,7 +12,7 @@ export default function NewClientForm() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (field: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [field]: e.target.value }));
-  const input = "w-full rounded border border-border bg-surface px-3 py-2 text-sm";
+  const input = "field";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,8 +36,8 @@ export default function NewClientForm() {
   }
 
   return (
-    <form onSubmit={submit} className="panel max-w-lg space-y-4 rounded p-5">
-      {error && <p role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">{error}</p>}
+    <form onSubmit={submit} className="card max-w-lg space-y-4 p-5">
+      {error && <p role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">{error}</p>}
       {(
         [
           ["name", t("Your name"), "text", true],
@@ -48,21 +48,21 @@ export default function NewClientForm() {
         ] as const
       ).map(([field, label, type, required]) => (
         <label key={field} className="block space-y-1 text-sm">
-          <span className="font-medium">
+          <span className="label">
             {label} {!required && <span className="font-normal text-muted">{t("(optional)")}</span>}
           </span>
           <input type={type} required={required} value={values[field]} onChange={set(field)} className={input} />
         </label>
       ))}
       <label className="block space-y-1 text-sm">
-        <span className="font-medium">
+        <span className="label">
           {t("Instagram account limit")} <span className="font-normal text-muted">{t("(optional)")}</span>
         </span>
-        <input type="number" min={1} max={100} value={values.instagramAccountLimit} onChange={set("instagramAccountLimit")} className={`${input} w-28`} />
-        <span className="block text-xs text-muted">{t("Empty = follow the default limit (set in Settings).")}</span>
+        <input type="number" min={1} max={100} value={values.instagramAccountLimit} onChange={set("instagramAccountLimit")} className="field !w-28" />
+        <span className="hint block">{t("Empty = follow the default limit (set in Settings).")}</span>
       </label>
-      <p className="text-xs text-muted">{t("The client starts Active and gets an e-mail to set the password (link valid for 7 days).")}</p>
-      <button type="submit" disabled={saving} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+      <p className="text-xs text-faint">{t("The client starts Active and gets an e-mail to set the password (link valid for 7 days).")}</p>
+      <button type="submit" disabled={saving} className="btn btn-primary">
         {saving ? t("Saving…") : t("Create client and send invitation")}
       </button>
     </form>

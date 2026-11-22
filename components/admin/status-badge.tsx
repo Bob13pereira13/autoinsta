@@ -1,15 +1,17 @@
 import { getI18n } from "@/lib/i18n/server";
+import { StatusDot, type StatusTone } from "@/components/ui/status";
 
-const TONE: Record<string, string> = {
-  PENDING_APPROVAL: "bg-warning/10 text-warning",
-  ACTIVE: "bg-success/10 text-success",
-  DISABLED: "bg-zinc-500/10 text-muted",
-  REJECTED: "bg-error/10 text-error",
+const TONE: Record<string, StatusTone> = {
+  PENDING_APPROVAL: "warning",
+  ACTIVE: "success",
+  DISABLED: "neutral",
+  REJECTED: "error",
 };
 
+/** A client's status (Awaiting approval, Active, Disabled, Rejected) as a glowing dot + text. */
 export async function ClientStatusBadge({ status }: { status: string }) {
   const { t } = await getI18n();
   const label =
     status === "PENDING_APPROVAL" ? t("Awaiting approval") : status === "ACTIVE" ? t("Enabled") : status === "DISABLED" ? t("Disabled") : t("Rejected");
-  return <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${TONE[status] ?? ""}`}>{label}</span>;
+  return <StatusDot tone={TONE[status] ?? "neutral"}>{label}</StatusDot>;
 }

@@ -14,7 +14,7 @@ export default function DefaultLimitForm({ limit }: { limit: number | null }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <form
-      className="panel max-w-md space-y-3 rounded p-5"
+      className="card max-w-md space-y-3 p-5"
       onSubmit={async (e) => {
         e.preventDefault();
         setError(null);
@@ -34,7 +34,7 @@ export default function DefaultLimitForm({ limit }: { limit: number | null }) {
         router.refresh();
       }}
     >
-      <p className="text-sm font-medium">{t("Default account limit per client")}</p>
+      <p className="font-semibold text-heading">{t("Default account limit per client")}</p>
       <label className="flex items-center gap-2 text-sm">
         <input type="radio" name="default-limit" checked={mode === "none"} onChange={() => { setMode("none"); setState("idle"); }} />
         {t("No limit")}
@@ -51,17 +51,17 @@ export default function DefaultLimitForm({ limit }: { limit: number | null }) {
           required={mode === "number"}
           value={value}
           onChange={(e) => { setValue(e.target.value); setState("idle"); }}
-          className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm disabled:opacity-50"
+          className="field !min-h-9 !w-24 !px-2 !py-1"
         />
         {t("accounts")}
       </label>
-      <p className="text-xs text-muted">
+      <p className="hint">
         {t("Applies to every client that follows the default; a client with its own limit keeps it. Lowering it disconnects nothing.")}
       </p>
-      <button type="submit" disabled={state === "saving"} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+      <button type="submit" disabled={state === "saving"} className="btn btn-primary">
         {state === "saved" ? t("Saved") : t("Save")}
       </button>
-      {error && <p role="alert" className="text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-error">{error}</p>}
     </form>
   );
 }

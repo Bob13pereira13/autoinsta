@@ -12,7 +12,7 @@ export default function PriceForm({ cents }: { cents: number }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <form
-      className="panel max-w-md space-y-3 rounded p-5"
+      className="card max-w-md space-y-3 p-5"
       onSubmit={async (e) => {
         e.preventDefault();
         setError(null);
@@ -35,14 +35,14 @@ export default function PriceForm({ cents }: { cents: number }) {
       }}
     >
       <label className="block space-y-1 text-sm">
-        <span className="font-medium">{t("Price per Instagram account (R$ per month)")}</span>
-        <input inputMode="decimal" value={value} onChange={(e) => { setValue(e.target.value); setState("idle"); }} className="w-40 rounded border border-border bg-surface px-3 py-2 text-sm" />
+        <span className="label">{t("Price per Instagram account (R$ per month)")}</span>
+        <input inputMode="decimal" value={value} onChange={(e) => { setValue(e.target.value); setState("idle"); }} className="field !w-40" />
       </label>
-      <p className="text-xs text-muted">{t("Only used for the estimated revenue. Nobody is charged.")}</p>
-      <button type="submit" disabled={state === "saving"} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+      <p className="hint">{t("Only used for the estimated revenue. Nobody is charged.")}</p>
+      <button type="submit" disabled={state === "saving"} className="btn btn-primary">
         {state === "saved" ? t("Saved") : t("Save")}
       </button>
-      {error && <p role="alert" className="text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-error">{error}</p>}
     </form>
   );
 }

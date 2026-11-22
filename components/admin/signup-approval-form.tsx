@@ -13,7 +13,7 @@ export default function SignupApprovalForm({ required }: { required: boolean }) 
   const [error, setError] = useState<string | null>(null);
   return (
     <form
-      className="panel max-w-md space-y-3 rounded p-5"
+      className="card max-w-md space-y-3 p-5"
       onSubmit={async (e) => {
         e.preventDefault();
         setError(null);
@@ -41,7 +41,7 @@ export default function SignupApprovalForm({ required }: { required: boolean }) 
             setValue(e.target.checked);
             setState("idle");
           }}
-          className="mt-0.5 h-4 w-4"
+          className="mt-0.5 h-4 w-4 accent-accent"
         />
         <span>
           <span className="block font-medium">{t("Require approval of new sign-ups")}</span>
@@ -52,13 +52,13 @@ export default function SignupApprovalForm({ required }: { required: boolean }) 
           </span>
         </span>
       </label>
-      <p className="text-xs text-muted">
+      <p className="hint">
         {t("Changing it does not change anyone's status: clients awaiting approval keep waiting.")}
       </p>
-      <button type="submit" disabled={state === "saving"} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+      <button type="submit" disabled={state === "saving"} className="btn btn-primary">
         {state === "saved" ? t("Saved") : t("Save")}
       </button>
-      {error && <p role="alert" className="text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-error">{error}</p>}
     </form>
   );
 }

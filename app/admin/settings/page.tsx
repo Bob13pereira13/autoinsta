@@ -34,41 +34,41 @@ export default async function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">{t("Settings")}</h1>
+      <h1 className="title-page">{t("Settings")}</h1>
 
       <section className="space-y-3" aria-labelledby="signup-settings">
-        <h2 id="signup-settings" className="text-base font-semibold">{t("Sign-up")}</h2>
+        <h2 id="signup-settings" className="title-section">{t("Sign-up")}</h2>
         <SignupApprovalForm required={requireApproval} />
       </section>
 
       <section className="space-y-3" aria-labelledby="price-settings">
-        <h2 id="price-settings" className="text-base font-semibold">{t("Price and limits")}</h2>
+        <h2 id="price-settings" className="title-section">{t("Price and limits")}</h2>
         <PriceForm cents={cents} />
         <DefaultLimitForm limit={limit} />
       </section>
 
-      <section className="panel rounded p-5" aria-labelledby="settings-history">
-        <h2 id="settings-history" className="mb-3 text-base font-semibold">{t("Settings history")}</h2>
+      <section className="card p-5" aria-labelledby="settings-history">
+        <h2 id="settings-history" className="title-section mb-3">{t("Settings history")}</h2>
         {history.length === 0 ? (
           <p className="text-sm text-muted">{t("No change yet.")}</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+          <div className="table-scroll">
+            <table className="data-table min-w-[560px]">
               <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-4">{t("When")}</th>
-                  <th className="py-2 pr-4">{t("Who")}</th>
-                  <th className="py-2 pr-4">{t("Setting")}</th>
-                  <th className="py-2 pr-4">{t("Before → after")}</th>
+                <tr>
+                  <th scope="col">{t("When")}</th>
+                  <th scope="col">{t("Who")}</th>
+                  <th scope="col">{t("Setting")}</th>
+                  <th scope="col">{t("Before → after")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {history.map((log) => (
-                  <tr key={log.id} className="align-top">
-                    <td className="whitespace-nowrap py-2 pr-4 text-muted">{formatDate(log.createdAt, locale, true)}</td>
-                    <td className="py-2 pr-4 text-muted">{log.actorEmail}</td>
-                    <td className="py-2 pr-4">{actionLabel[log.action] ?? log.action}</td>
-                    <td className="py-2 pr-4 text-xs text-muted">{valueOf(log.before)} → {valueOf(log.after)}</td>
+                  <tr key={log.id}>
+                    <td className="whitespace-nowrap text-muted">{formatDate(log.createdAt, locale, true)}</td>
+                    <td className="text-muted">{log.actorEmail}</td>
+                    <td>{actionLabel[log.action] ?? log.action}</td>
+                    <td className="text-xs text-muted">{valueOf(log.before)} → {valueOf(log.after)}</td>
                   </tr>
                 ))}
               </tbody>

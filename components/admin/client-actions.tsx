@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n/provider";
+import { buttonClass } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 async function post(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -40,40 +42,40 @@ export function ClientStatusActions({ clientId, status, compact = false }: { cli
     }
   }
 
-  const button = "rounded px-3 py-1.5 text-sm font-medium disabled:opacity-50";
+  const size = compact ? "sm" : "md";
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         {(status === "PENDING_APPROVAL" || status === "REJECTED") && (
-          <button type="button" disabled={busy} onClick={() => void run("approve")} className={`${button} bg-success text-white hover:opacity-90`}>
+          <button type="button" disabled={busy} onClick={() => void run("approve")} className={buttonClass("primary", size)}>
             {t("Approve")}
           </button>
         )}
         {status === "PENDING_APPROVAL" && (
-          <button type="button" disabled={busy} onClick={() => setRejecting((v) => !v)} className={`${button} border border-error/40 text-error hover:bg-error/10`}>
+          <button type="button" disabled={busy} onClick={() => setRejecting((v) => !v)} className={buttonClass("secondary", size, "!border-error-border !text-error hover:!bg-error-soft")}>
             {t("Reject")}
           </button>
         )}
         {status === "DISABLED" && (
-          <button type="button" disabled={busy} onClick={() => void run("activate")} className={`${button} bg-success text-white hover:opacity-90`}>
+          <button type="button" disabled={busy} onClick={() => void run("activate")} className={buttonClass("primary", size)}>
             {t("Activate")}
           </button>
         )}
         {status === "ACTIVE" && !compact && (
-          <button type="button" disabled={busy} onClick={() => void run("deactivate")} className={`${button} border border-border text-muted hover:text-foreground`}>
+          <button type="button" disabled={busy} onClick={() => void run("deactivate")} className={buttonClass("secondary", size)}>
             {t("Deactivate")}
           </button>
         )}
       </div>
       {rejecting && (
         <form
-          className="space-y-2 rounded border border-border p-3"
+          className="space-y-2.5 rounded-control border border-error-border bg-error-soft p-3.5"
           onSubmit={(e) => {
             e.preventDefault();
             void run("reject", { reason });
           }}
         >
-          <label htmlFor={`reason-${clientId}`} className="block text-xs font-medium text-foreground">
+          <label htmlFor={`reason-${clientId}`} className="block text-[13px] font-semibold text-heading">
             {t("Reason (sent to the client by e-mail)")}
           </label>
           <textarea
@@ -84,9 +86,9 @@ export function ClientStatusActions({ clientId, status, compact = false }: { cli
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded border border-border bg-surface px-3 py-2 text-sm"
+            className="field"
           />
-          <button type="submit" disabled={busy || reason.trim().length < 3} className={`${button} bg-error text-white hover:opacity-90`}>
+          <button type="submit" disabled={busy || reason.trim().length < 3} className={buttonClass("danger", size)}>
             {t("Reject and send e-mail")}
           </button>
         </form>
@@ -141,13 +143,13 @@ export function LimitEditor({
         }
       }}
     >
-      <p className="text-xs text-muted">{t("Instagram account limit")}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-faint">{t("Instagram account limit")}</p>
       <label className="flex items-center gap-2 text-sm">
-        <input type="radio" name={name} checked={mode === "default"} onChange={() => { setMode("default"); setState("idle"); }} />
+        <input type="radio" name={name} checked={mode === "default"} onChange={() => { setMode("default"); setState("idle"); }} className="h-4 w-4 accent-accent" />
         {t("Follow the default ({limit})", { limit: limitLabel(platformDefault) })}
       </label>
       <label className="flex flex-wrap items-center gap-2 text-sm">
-        <input type="radio" name={name} checked={mode === "own"} onChange={() => { setMode("own"); setState("idle"); }} />
+        <input type="radio" name={name} checked={mode === "own"} onChange={() => { setMode("own"); setState("idle"); }} className="h-4 w-4 accent-accent" />
         {t("Own limit")}
         <input
           type="number"
@@ -158,19 +160,19 @@ export function LimitEditor({
           required={mode === "own"}
           value={value}
           onChange={(e) => { setValue(e.target.value); setState("idle"); }}
-          className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm disabled:opacity-50"
+          className="field !min-h-9 !w-24 !px-2 !py-1"
         />
       </label>
       <p className="text-sm">
         <span className="text-muted">{t("Limit in effect:")}</span> <strong>{limitLabel(effective)}</strong>
       </p>
-      <button type="submit" disabled={state === "saving" || unchanged} className="rounded border border-border px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50">
+      <button type="submit" disabled={state === "saving" || unchanged} className="btn btn-secondary">
         {state === "saved" ? t("Saved") : t("Save")}
       </button>
-      <p className="text-xs text-muted">
+      <p className="hint">
         {t("{count} connected now. Lowering the limit disconnects nothing; it only blocks new connections.", { count: connected })}
       </p>
-      {error && <p role="alert" className="text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-error">{error}</p>}
     </form>
   );
 }
@@ -199,11 +201,11 @@ export function NotesEditor({ clientId, notes }: { clientId: string; notes: stri
       }}
     >
       <label htmlFor="admin-notes" className="sr-only">{t("Internal notes")}</label>
-      <textarea id="admin-notes" rows={4} maxLength={5000} value={value} onChange={(e) => { setValue(e.target.value); setState("idle"); }} className="w-full rounded border border-border bg-surface px-3 py-2 text-sm" placeholder={t("Only admins see these notes.")} />
-      <button type="submit" disabled={state === "saving" || value === (notes ?? "")} className="rounded border border-border px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50">
+      <textarea id="admin-notes" rows={4} maxLength={5000} value={value} onChange={(e) => { setValue(e.target.value); setState("idle"); }} className="field" placeholder={t("Only admins see these notes.")} />
+      <button type="submit" disabled={state === "saving" || value === (notes ?? "")} className="btn btn-secondary">
         {state === "saved" ? t("Saved") : t("Save notes")}
       </button>
-      {error && <p role="alert" className="text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-error">{error}</p>}
     </form>
   );
 }
@@ -240,18 +242,13 @@ export function AdminAccountControls({
   }
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className={`text-xs font-medium ${enabled ? "text-success" : "text-muted"}`}>{enabled ? t("Active") : t("Turned off")}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        aria-label={t("Automations of @{username}", { username })}
+      <span className={`text-[13px] font-medium ${enabled ? "text-success" : "text-faint"}`}>{enabled ? t("Active") : t("Turned off")}</span>
+      <Switch
+        checked={enabled}
+        onChange={() => void act("PATCH", { automationsEnabled: !enabled })}
+        label={t("Automations of @{username}", { username })}
         disabled={busy}
-        onClick={() => void act("PATCH", { automationsEnabled: !enabled })}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${enabled ? "bg-accent" : "bg-zinc-300"}`}
-      >
-        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${enabled ? "left-6" : "left-1"}`} />
-      </button>
+      />
       <button
         type="button"
         disabled={busy}
@@ -264,7 +261,7 @@ export function AdminAccountControls({
           );
           if (window.confirm(text)) void act("DELETE");
         }}
-        className="rounded border border-error/30 px-2.5 py-1 text-xs text-error hover:bg-error/10 disabled:opacity-50"
+        className={buttonClass("secondary", "sm", "!border-error-border !text-error hover:!bg-error-soft")}
       >
         {t("Remove")}
       </button>
