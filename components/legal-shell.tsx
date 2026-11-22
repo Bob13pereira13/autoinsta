@@ -19,13 +19,13 @@ export default function LegalShell({
   children,
 }: LegalShellProps) {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border">
+    <div className="min-h-screen text-foreground">
+      <header className="border-b border-sidebar-border bg-sidebar backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
           <BrandMark />
           <Link
             href="/login"
-            className="text-sm font-semibold text-muted transition hover:text-foreground"
+            className="btn btn-secondary btn-sm"
           >
             Entrar
           </Link>
@@ -33,10 +33,10 @@ export default function LegalShell({
       </header>
 
       <main className="mx-auto max-w-3xl px-5 py-14">
-        <p className="text-sm font-semibold uppercase text-accent">
+        <p className="inline-flex rounded-full border border-accent-soft-border bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-soft-fg">
           Última atualização: {updatedAt ?? legalLastUpdatedLabel()}
         </p>
-        <h1 className="mt-4 text-3xl font-bold text-foreground sm:text-4xl">{title}</h1>
+        <h1 className="title-page mt-4 sm:!text-[40px]">{title}</h1>
         <p className="mt-5 text-base leading-8 text-muted">{description}</p>
         <div className="legal-content mt-10 space-y-8 text-sm leading-7 text-foreground">
           {children}

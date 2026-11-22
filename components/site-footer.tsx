@@ -13,10 +13,10 @@ export default function SiteFooter() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-border">
+    <footer className="border-t border-border-subtle">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-5 py-10 text-sm text-muted sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <p className="font-semibold text-foreground">{brand.name}</p>
+          <p className="font-display font-semibold text-heading">{brand.name}</p>
           {company && (
             <p>
               {company}
@@ -45,7 +45,7 @@ export default function SiteFooter() {
           </Link>
         </nav>
       </div>
-      <p className="mx-auto max-w-5xl px-5 pb-8 text-xs leading-5 text-muted">
+      <p className="mx-auto max-w-5xl px-5 pb-8 text-xs leading-5 text-faint">
         Instagram é uma marca registrada da Meta Platforms, Inc. {brand.name} usa a
         API oficial do Instagram e não é afiliado, patrocinado ou endossado pela Meta.
       </p>

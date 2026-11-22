@@ -29,7 +29,7 @@ async function RequestStatus({ code }: { code: string }) {
 
   if (!request) {
     return (
-      <div role="status" className="rounded border border-warning/30 bg-warning/10 p-4">
+      <div role="status" className="rounded-control border border-warning-border bg-warning-soft p-4">
         <p className="font-semibold">Código não encontrado</p>
         <p className="mt-1">
           Confira se o código <span className="font-mono">{code}</span> foi digitado corretamente. Se o
@@ -45,8 +45,8 @@ async function RequestStatus({ code }: { code: string }) {
   return (
     <div
       role="status"
-      className={`rounded border p-4 ${
-        done ? "border-success/30 bg-success/10" : "border-warning/30 bg-warning/10"
+      className={`rounded-control border p-4 ${
+        done ? "border-success-border bg-success-soft" : "border-warning-border bg-warning-soft"
       }`}
     >
       <p className="font-semibold">
@@ -109,11 +109,11 @@ export default async function ExclusaoDadosPage({
             defaultValue={code ?? ""}
             placeholder="Ex.: 9F2C04A1B7D35E60"
             autoComplete="off"
-            className="w-full rounded border border-border bg-surface px-4 py-3 font-mono text-sm uppercase focus:border-accent/40 focus:outline-none"
+            className="field font-mono"
           />
           <button
             type="submit"
-            className="rounded bg-accent px-5 py-3 text-sm font-semibold text-white hover:bg-accent-hover"
+            className="btn btn-primary"
           >
             Consultar
           </button>

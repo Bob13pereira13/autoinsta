@@ -50,13 +50,13 @@ const trust = [
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border">
+    <div className="min-h-screen text-foreground">
+      <header className="sticky top-0 z-30 border-b border-sidebar-border bg-sidebar backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
           <BrandMark />
           <Link
             href="/login"
-            className="rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="btn btn-primary"
           >
             Entrar
           </Link>
@@ -65,37 +65,37 @@ export default function HomePage() {
 
       <main>
         <section className="mx-auto max-w-5xl px-5 py-16 sm:py-24">
-          <p className="text-sm font-semibold uppercase tracking-wide text-accent">
+          <p className="inline-flex items-center gap-2 rounded-full border border-accent-soft-border bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-soft-fg">
             Automação para Instagram
           </p>
-          <h1 className="mt-4 max-w-3xl text-4xl font-bold leading-tight sm:text-5xl">
+          <h1 className="mt-5 max-w-3xl font-display text-4xl font-semibold leading-[1.1] tracking-[-0.03em] text-heading sm:text-6xl">
             {brand.tagline}
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted">{brand.description}</p>
           <div className="mt-10 flex flex-wrap gap-3">
             <Link
               href="/login"
-              className="rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="btn btn-primary"
             >
               Acessar minha conta
             </Link>
             <a
               href="#como-funciona"
-              className="rounded border border-border px-6 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface-hover"
+              className="btn btn-secondary"
             >
               Como funciona
             </a>
           </div>
         </section>
 
-        <section id="como-funciona" className="border-t border-border bg-surface">
+        <section id="como-funciona" className="border-t border-border-subtle">
           <div className="mx-auto max-w-5xl px-5 py-16">
-            <h2 className="text-2xl font-bold">Como funciona</h2>
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-heading sm:text-3xl">Como funciona</h2>
             <ol className="mt-8 grid gap-6 sm:grid-cols-3">
               {steps.map((step, index) => (
-                <li key={step.title} className="panel rounded p-6">
-                  <span className="text-sm font-semibold text-accent">Passo {index + 1}</span>
-                  <h3 className="mt-2 text-base font-semibold">{step.title}</h3>
+                <li key={step.title} className="card card-interactive p-6">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-accent text-sm font-bold text-on-accent shadow-glow" aria-label={`Passo ${index + 1}`}>{index + 1}</span>
+                  <h3 className="mt-4 font-display text-lg font-semibold text-heading">{step.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-muted">{step.body}</p>
                 </li>
               ))}
@@ -104,35 +104,35 @@ export default function HomePage() {
         </section>
 
         <section className="mx-auto max-w-5xl px-5 py-16">
-          <h2 className="text-2xl font-bold">O que você pode fazer</h2>
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-heading sm:text-3xl">O que você pode fazer</h2>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2">
             {features.map((feature) => (
               <li key={feature} className="flex gap-3 text-sm leading-6">
-                <span aria-hidden="true" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                <span aria-hidden="true" className="dot dot-accent mt-[7px]" />
                 <span>{feature}</span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="border-t border-border bg-surface">
+        <section className="border-t border-border-subtle">
           <div className="mx-auto max-w-5xl px-5 py-16">
-            <h2 className="text-2xl font-bold">Segurança e conformidade</h2>
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-heading sm:text-3xl">Segurança e conformidade</h2>
             <div className="mt-8 grid gap-6 sm:grid-cols-3">
               {trust.map((item) => (
                 <div key={item.title}>
-                  <h3 className="text-base font-semibold">{item.title}</h3>
+                  <h3 className="font-display text-lg font-semibold text-heading">{item.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-muted">{item.body}</p>
                 </div>
               ))}
             </div>
             <p className="mt-8 text-sm text-muted">
               Leia a nossa{" "}
-              <Link className="text-accent underline underline-offset-4" href="/privacidade">
+              <Link className="link" href="/privacidade">
                 Política de Privacidade
               </Link>{" "}
               e os{" "}
-              <Link className="text-accent underline underline-offset-4" href="/termos">
+              <Link className="link" href="/termos">
                 Termos de Uso
               </Link>
               .

@@ -379,8 +379,10 @@ export default function PrivacidadePage() {
       <section>
         <h2>10. Cookies</h2>
         <p>
-          Usamos apenas cookies estritamente necessários: o cookie de sessão, que mantém você conectado, e o
-          cookie de idioma da interface. Não usamos cookies de publicidade nem de análise de terceiros.
+          Usamos apenas cookies estritamente necessários: o cookie de sessão, que mantém você conectado, o
+          cookie de idioma da interface e o cookie de tema, que guarda a sua escolha entre o tema claro e o
+          escuro (sem ele, o painel segue o tema do seu aparelho). Não usamos cookies de publicidade nem de
+          análise de terceiros.
         </p>
       </section>
 

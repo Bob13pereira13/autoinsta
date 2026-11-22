@@ -40,8 +40,8 @@ export default async function EsqueciSenhaPage({
             <BrandMark size="lg" />
           </h1>
         </div>
-        <div className="panel rounded p-8">
-          <h2 className="text-lg font-semibold">{t("Reset password")}</h2>
+        <div className="card p-8">
+          <h2 className="title-section">{t("Reset password")}</h2>
           {sent ? (
             <p role="status" className="mt-3 text-sm text-muted">
               {t("If this e-mail has an account, we sent a link to set a new password. It is valid for 1 hour. Check your spam folder too.")}
@@ -61,18 +61,18 @@ export default async function EsqueciSenhaPage({
                 required
                 autoComplete="email"
                 placeholder="voce@empresa.com.br"
-                className="w-full px-4 py-3 rounded bg-surface border border-border text-sm focus:border-accent/40 focus:outline-none"
+                className="field"
               />
               <button
                 type="submit"
-                className="w-full rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                className="btn btn-primary w-full"
               >
                 {t("Send link")}
               </button>
             </form>
           )}
           <p className="mt-6 text-sm">
-            <Link href="/login" className="text-accent hover:underline">
+            <Link href="/login" className="link">
               {t("Back to sign in")}
             </Link>
           </p>

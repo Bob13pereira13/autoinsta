@@ -35,7 +35,7 @@ export default async function CadastroPage() {
               : t("Create your account. As soon as you confirm your e-mail, you can use the dashboard.")}
           </p>
         </div>
-        <div className="panel rounded p-6 sm:p-8">
+        <div className="card p-6 sm:p-8">
           {isSignupAvailable() ? (
             <SignupForm siteKey={siteKey} requireApproval={requireApproval} />
           ) : (
@@ -46,7 +46,7 @@ export default async function CadastroPage() {
         </div>
         <p className="mt-6 text-center text-sm text-muted">
           {t("Already have an account?")}{" "}
-          <Link href="/login" className="font-medium text-accent hover:underline">
+          <Link href="/login" className="font-semibold text-accent-fg hover:text-accent-fg-hover hover:underline">
             {t("Sign in")}
           </Link>
         </p>

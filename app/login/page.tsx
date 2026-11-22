@@ -93,8 +93,7 @@ export default async function LoginPage({
     successMessage = t("Password changed. Sign in again with the new password.");
   }
 
-  const inputClass =
-    "w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none transition-colors";
+  const inputClass = "field";
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 pb-10">
@@ -108,9 +107,9 @@ export default async function LoginPage({
           </p>
         </div>
 
-        <div className="panel rounded p-8 space-y-6">
+        <div className="card p-8 space-y-6">
           {errorMessage && (
-            <div role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
+            <div role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
               <p>{errorMessage}</p>
               {unconfirmed && (
                 <Link href="/confirmar-email" className="mt-2 inline-block font-semibold underline underline-offset-2">
@@ -120,14 +119,14 @@ export default async function LoginPage({
             </div>
           )}
           {successMessage && (
-            <p role="status" className="rounded border border-success/20 bg-success/10 p-3 text-sm text-success">
+            <p role="status" className="rounded-control border border-success-border bg-success-soft px-4 py-3 text-sm text-success">
               {successMessage}
             </p>
           )}
 
           <form action={loginWithPassword} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="email" className="block text-sm font-medium text-foreground">
+              <label htmlFor="email" className="label">
                 {t("E-mail")}
               </label>
               <input
@@ -142,10 +141,10 @@ export default async function LoginPage({
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label htmlFor="password" className="block text-sm font-medium text-foreground">
+                <label htmlFor="password" className="label">
                   {t("Password")}
                 </label>
-                <Link href="/esqueci-senha" className="text-xs text-accent hover:underline">
+                <Link href="/esqueci-senha" className="text-[13px] text-accent-fg hover:text-accent-fg-hover hover:underline">
                   {t("Forgot your password?")}
                 </Link>
               </div>
@@ -160,13 +159,13 @@ export default async function LoginPage({
             </div>
             <button
               type="submit"
-              className="w-full inline-flex items-center justify-center rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="btn btn-primary w-full"
             >
               {t("Sign in")}
             </button>
           </form>
 
-          <details className="border-t border-border pt-5 text-sm">
+          <details className="border-t border-border-subtle pt-5 text-sm">
             <summary className="cursor-pointer text-muted hover:text-foreground">
               {t("Prefer a sign-in link by e-mail?")}
             </summary>
@@ -185,7 +184,7 @@ export default async function LoginPage({
               />
               <button
                 type="submit"
-                className="w-full rounded border border-border px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-hover"
+                className="btn btn-secondary w-full"
               >
                 {t("Email me a magic link")}
               </button>
@@ -196,7 +195,7 @@ export default async function LoginPage({
         {isSignupAvailable() && (
           <p className="mt-6 text-center text-sm text-muted">
             {t("New here?")}{" "}
-            <Link href="/cadastro" className="font-medium text-accent hover:underline">
+            <Link href="/cadastro" className="font-semibold text-accent-fg hover:text-accent-fg-hover hover:underline">
               {t("Create account")}
             </Link>
           </p>

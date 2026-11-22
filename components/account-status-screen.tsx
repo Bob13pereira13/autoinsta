@@ -46,38 +46,38 @@ export default async function AccountStatusScreen({
         : t("This account was turned off. Your automations are paused and nothing was deleted. Talk to support to turn it back on.");
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <div className="flex justify-end px-5 pt-4">
         <LanguageSwitcher />
       </div>
       <main className="mx-auto flex max-w-md flex-col items-center px-6 pb-12 pt-10 text-center">
         <BrandMark size="lg" />
-        <div className="panel mt-8 w-full rounded p-8 text-left">
-          <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+        <div className="card mt-8 w-full p-8 text-left">
+          <h1 className="title-section !text-xl">{title}</h1>
           <p className="mt-3 text-sm text-muted">{body}</p>
           {status === "REJECTED" && rejectionReason && (
-            <p className="mt-4 rounded border border-border bg-surface p-3 text-sm text-foreground">
+            <p className="mt-4 rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
               <span className="font-semibold">{t("Reason:")}</span> {rejectionReason}
             </p>
           )}
           {status === "REJECTED" && deletesOn && (
-            <p className="mt-3 text-xs text-muted">
+            <p className="mt-3 text-xs text-faint">
               {t("Your sign-up data will be deleted on {date}. After that you can sign up again.", { date: deletesOn })}
             </p>
           )}
-          <div className="mt-6 space-y-1 border-t border-border pt-4 text-sm">
-            <p className="font-medium text-foreground">{t("Support")}</p>
-            <a href={`mailto:${brand.support.email}`} className="block text-accent hover:underline">
+          <div className="mt-6 space-y-1 border-t border-border-subtle pt-4 text-sm">
+            <p className="font-semibold text-heading">{t("Support")}</p>
+            <a href={`mailto:${brand.support.email}`} className="link block w-fit no-underline hover:underline">
               {brand.support.email}
             </a>
             {whatsapp && (
-              <a href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`} className="block text-accent hover:underline">
+              <a href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`} className="link block w-fit no-underline hover:underline">
                 {t("WhatsApp {number}", { number: whatsapp })}
               </a>
             )}
           </div>
           <form action={leave} className="mt-6">
-            <button type="submit" className="w-full rounded border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-surface-hover">
+            <button type="submit" className="btn btn-secondary w-full">
               {t("Sign out")}
             </button>
           </form>

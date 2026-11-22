@@ -32,7 +32,7 @@ export default function ResendConfirmationForm({ defaultEmail }: { defaultEmail:
 
   if (sent) {
     return (
-      <p role="status" className="rounded border border-success/20 bg-success/10 p-3 text-sm text-success">
+      <p role="status" className="rounded-control border border-success-border bg-success-soft px-4 py-3 text-sm text-success">
         {t("If this e-mail has a sign-up waiting for confirmation, a new link is on its way.")}
       </p>
     );
@@ -54,9 +54,9 @@ export default function ResendConfirmationForm({ defaultEmail }: { defaultEmail:
         autoComplete="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded border border-border bg-surface px-4 py-3 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+        className="field"
       />
-      <button type="submit" disabled={sending} className="w-full rounded border border-border px-6 py-3 text-sm font-semibold text-foreground hover:bg-surface-hover disabled:opacity-60">
+      <button type="submit" disabled={sending} className="btn btn-secondary w-full">
         {sending ? t("Sending…") : t("Resend the link")}
       </button>
     </form>

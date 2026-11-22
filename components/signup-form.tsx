@@ -72,24 +72,23 @@ export default function SignupForm({ siteKey, requireApproval }: { siteKey: stri
   if (doneFor) {
     return (
       <div role="status" className="space-y-3">
-        <h2 className="text-lg font-semibold">{t("Check your e-mail")}</h2>
+        <h2 className="title-section">{t("Check your e-mail")}</h2>
         <p className="text-sm text-muted">
           {requireApproval
             ? t("If {email} can be used, we sent a link to confirm it. Open it to finish signing up; after that our team reviews your access.", { email: doneFor })
             : t("If {email} can be used, we sent a link to confirm it. Open it to finish signing up; after that you can sign in and use the dashboard.", { email: doneFor })}
         </p>
-        <Link href={`/confirmar-email?email=${encodeURIComponent(doneFor)}`} className="text-sm font-medium text-accent hover:underline">
+        <Link href={`/confirmar-email?email=${encodeURIComponent(doneFor)}`} className="text-sm font-semibold text-accent-fg hover:text-accent-fg-hover hover:underline">
           {t("Did not get it? Resend the link")}
         </Link>
       </div>
     );
   }
 
-  const input =
-    "w-full rounded border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none";
+  const input = "field";
   const fieldError = (field: Field) =>
     errors[field] ? (
-      <p id={`${field}-error`} className="text-xs text-error">
+      <p id={`${field}-error`} className="text-[13px] text-error">
         {errors[field]}
       </p>
     ) : null;
@@ -98,38 +97,38 @@ export default function SignupForm({ siteKey, requireApproval }: { siteKey: stri
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
       {formError && (
-        <p role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
+        <p role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
           {formError}
         </p>
       )}
       <div className="space-y-1.5">
-        <label htmlFor="su-name" className="block text-sm font-medium">{t("Your name")}</label>
+        <label htmlFor="su-name" className="label">{t("Your name")}</label>
         <input id="su-name" autoComplete="name" value={values.name} onChange={set("name")} aria-invalid={Boolean(errors.name)} aria-describedby={describedBy("name")} className={input} maxLength={100} />
         {fieldError("name")}
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="su-email" className="block text-sm font-medium">{t("E-mail")}</label>
+        <label htmlFor="su-email" className="label">{t("E-mail")}</label>
         <input id="su-email" type="email" autoComplete="email" value={values.email} onChange={set("email")} aria-invalid={Boolean(errors.email)} aria-describedby={describedBy("email")} className={input} maxLength={200} />
         {fieldError("email")}
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="su-password" className="block text-sm font-medium">{t("Password")}</label>
+        <label htmlFor="su-password" className="label">{t("Password")}</label>
         <input id="su-password" type="password" autoComplete="new-password" value={values.password} onChange={set("password")} aria-invalid={Boolean(errors.password)} aria-describedby={describedBy("password") ?? "su-password-hint"} className={input} maxLength={200} />
-        <p id="su-password-hint" className="text-xs text-muted">{t("At least 8 characters.")}</p>
+        <p id="su-password-hint" className="hint">{t("At least 8 characters.")}</p>
         {fieldError("password")}
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="su-company" className="block text-sm font-medium">{t("Company name")}</label>
+        <label htmlFor="su-company" className="label">{t("Company name")}</label>
         <input id="su-company" autoComplete="organization" value={values.companyName} onChange={set("companyName")} aria-invalid={Boolean(errors.companyName)} aria-describedby={describedBy("companyName")} className={input} maxLength={120} />
         {fieldError("companyName")}
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="su-phone" className="block text-sm font-medium">{t("Phone (WhatsApp)")}</label>
+        <label htmlFor="su-phone" className="label">{t("Phone (WhatsApp)")}</label>
         <input id="su-phone" type="tel" autoComplete="tel" placeholder="(11) 99999-8888" value={values.phone} onChange={set("phone")} aria-invalid={Boolean(errors.phone)} aria-describedby={describedBy("phone")} className={input} maxLength={30} />
         {fieldError("phone")}
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="su-document" className="block text-sm font-medium">
+        <label htmlFor="su-document" className="label">
           {t("CPF or CNPJ")} <span className="font-normal text-muted">{t("(optional)")}</span>
         </label>
         <input id="su-document" inputMode="text" value={values.document} onChange={set("document")} aria-invalid={Boolean(errors.document)} aria-describedby={describedBy("document")} className={input} maxLength={30} />
@@ -146,13 +145,13 @@ export default function SignupForm({ siteKey, requireApproval }: { siteKey: stri
             }}
             aria-invalid={Boolean(errors.acceptTerms)}
             aria-describedby={describedBy("acceptTerms")}
-            className="mt-0.5 h-4 w-4"
+            className="mt-0.5 h-4 w-4 accent-accent"
           />
           <span>
             {t("I have read and accept the")}{" "}
-            <Link href="/termos" target="_blank" className="text-accent underline underline-offset-2">{t("Terms of Use")}</Link>{" "}
+            <Link href="/termos" target="_blank" className="link">{t("Terms of Use")}</Link>{" "}
             {t("and the")}{" "}
-            <Link href="/privacidade" target="_blank" className="text-accent underline underline-offset-2">{t("Privacy Policy")}</Link>.
+            <Link href="/privacidade" target="_blank" className="link">{t("Privacy Policy")}</Link>.
           </span>
         </label>
         {fieldError("acceptTerms")}
@@ -166,7 +165,7 @@ export default function SignupForm({ siteKey, requireApproval }: { siteKey: stri
       <button
         type="submit"
         disabled={sending}
-        className="w-full rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+        className="btn btn-primary w-full"
       >
         {sending ? t("Creating account…") : t("Create account")}
       </button>

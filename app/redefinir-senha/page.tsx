@@ -42,8 +42,8 @@ export default async function RedefinirSenhaPage({
             <BrandMark size="lg" />
           </h1>
         </div>
-        <div className="panel rounded p-8">
-          <h2 className="text-lg font-semibold">
+        <div className="card p-8">
+          <h2 className="title-section">
             {welcome ? t("Welcome! Choose your password") : t("Choose a new password")}
           </h2>
           {record ? (
@@ -60,7 +60,7 @@ export default async function RedefinirSenhaPage({
               <p role="alert" className="text-error">
                 {t("This link is invalid, expired or was already used.")}
               </p>
-              <Link href="/esqueci-senha" className="text-accent hover:underline">
+              <Link href="/esqueci-senha" className="link">
                 {t("Request a new link")}
               </Link>
             </div>

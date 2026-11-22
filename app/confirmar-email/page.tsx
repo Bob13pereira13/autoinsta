@@ -38,39 +38,39 @@ export default async function ConfirmarEmailPage({
             <BrandMark size="lg" />
           </h1>
         </div>
-        <div className="panel space-y-4 rounded p-8">
+        <div className="card space-y-4 rounded p-8">
           {params.status === "active" ? (
             <>
-              <h2 className="text-lg font-semibold">{t("E-mail confirmed")}</h2>
+              <h2 className="title-section">{t("E-mail confirmed")}</h2>
               <p className="text-sm text-muted">
                 {t("Your account is active. Sign in to connect your Instagram account and create your first automation.")}
               </p>
-              <Link href="/login?callbackUrl=%2Fdashboard" className="inline-flex w-full justify-center rounded bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-hover">
+              <Link href="/login?callbackUrl=%2Fdashboard" className="btn btn-primary inline-flex w-full justify-center">
                 {t("Sign in to the dashboard")}
               </Link>
             </>
           ) : params.status === "ok" ? (
             <>
-              <h2 className="text-lg font-semibold">{t("E-mail confirmed")}</h2>
+              <h2 className="title-section">{t("E-mail confirmed")}</h2>
               <p className="text-sm text-muted">
                 {t("Your account is now under review. You will get an e-mail as soon as it is approved, and you can already sign in to follow it.")}
               </p>
-              <Link href="/login" className="inline-flex w-full justify-center rounded bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-hover">
+              <Link href="/login" className="btn btn-primary inline-flex w-full justify-center">
                 {t("Sign in")}
               </Link>
             </>
           ) : token ? (
             <form action={confirm} className="space-y-4">
               <input type="hidden" name="token" value={token} />
-              <h2 className="text-lg font-semibold">{t("Confirm your e-mail")}</h2>
+              <h2 className="title-section">{t("Confirm your e-mail")}</h2>
               <p className="text-sm text-muted">{t("Press the button to confirm this address and finish signing up.")}</p>
-              <button type="submit" className="w-full rounded bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-hover">
+              <button type="submit" className="btn btn-primary w-full">
                 {t("Confirm my e-mail")}
               </button>
             </form>
           ) : (
             <>
-              <h2 className="text-lg font-semibold">
+              <h2 className="title-section">
                 {params.status === "invalid" ? t("This link is invalid, expired or was already used.") : t("Resend the confirmation link")}
               </h2>
               <p className="text-sm text-muted">{t("Enter the e-mail you signed up with and we will send a new link.")}</p>
