@@ -1663,7 +1663,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
 
 /**
  * An echo of a message the account sent. If the automations did not send it,
- * a person did (Instagram app, Business Suite, our Inbox): no-keyword
+ * a person did (Instagram app, Business Suite): no-keyword
  * Stories/Direct automations then stay quiet with that person for 24 hours.
  */
 async function processEcho(job: Job<ProcessEchoJob>): Promise<void> {

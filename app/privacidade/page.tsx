@@ -124,8 +124,8 @@ export default function PrivacidadePage() {
               <td>
                 Enviar a resposta privada (DM) para quem comentou a palavra-chave; responder por DM quem
                 respondeu a um story da conta, marcou a conta no próprio story ou mandou uma mensagem direta,
-                conforme as automações que você configurou; enviar as imagens e vídeos dessas mensagens; e
-                exibir as conversas na caixa de entrada do painel.
+                conforme as automações que você configurou; e enviar as imagens e vídeos dessas mensagens.
+                Não lemos nem exibimos as suas conversas do Instagram.
               </td>
             </tr>
             <tr>
@@ -141,8 +141,8 @@ export default function PrivacidadePage() {
         <p>
           Armazenamos: ID da conta profissional, identificadores técnicos do login, nome de usuário, nome,
           o token de acesso (criptografado com AES-256-GCM) e sua data de expiração, quando houver, e o número
-          diário de seguidores. Posts, reels e conversas são consultados na Meta no momento em que você abre o
-          painel e não são copiados para o nosso banco de dados, exceto a referência ao post escolhido em cada
+          diário de seguidores. Posts e reels são consultados na Meta no momento em que você abre o painel e não
+          são copiados para o nosso banco de dados, exceto a referência às publicações escolhidas em cada
           automação.
         </p>
 

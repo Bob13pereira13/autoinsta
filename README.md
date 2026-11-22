@@ -17,6 +17,10 @@ gestão `/admin` (só para os e-mails de `ADMIN_EMAILS`), onde também se ativa/
 define o limite de contas do Instagram, acompanha a receita estimada e vê a auditoria. Também é
 possível criar clientes por lá (ou com `npm run user`).
 
+O painel não tem caixa de entrada: as conversas continuam no app do Instagram (ou no Business Suite).
+Quando alguém da conta responde uma pessoa por lá, as automações sem palavra-chave ficam 24 horas sem
+responder essa pessoa, para não atropelar o atendimento.
+
 As contas do Instagram ficam na aba **Contas**: conectar, reconectar, **desativar** (pausa todas as
 automações da conta sem apagar nada) ou remover (apaga a conta e tudo dela). Funciona **exclusivamente pela API
 oficial da Meta**.

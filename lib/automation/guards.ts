@@ -7,7 +7,7 @@ import { getRedisConnection } from "@/lib/queue/client";
  * - cooldown: at most one automatic reply per person per automation every
  *   `replyCooldownHours` (default 24);
  * - human pause: no automatic reply when someone from the account (Instagram
- *   app, Business Suite or our Inbox) messaged that person in the last 24h.
+ *   app or Business Suite) messaged that person in the last 24h.
  */
 export const HUMAN_PAUSE_HOURS = 24;
 const HOUR_MS = 60 * 60 * 1000;

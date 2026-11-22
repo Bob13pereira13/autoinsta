@@ -5,7 +5,6 @@ import { recordBotMessage } from "@/lib/automation/guards";
  * The provider's send functions, plus bookkeeping of the message id each send
  * returns. Only the automations (the worker) send through here: an echo whose
  * id is recorded is the bot's own, any other echo was written by a person.
- * The dashboard Inbox sends through the provider directly — it is a person.
  */
 
 function messageIdOf(result: unknown): string | null {

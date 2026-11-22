@@ -162,10 +162,10 @@ como referência para você.
 > configurable interval (24 hours by default) and stay silent for 24 hours after a human from the business
 > replies to that person (detected from message echoes), so automation never talks over a person. We
 > deduplicate retries and count every API call (text, each image, each video) against an hourly rate
-> limit per account. The business can also read its Instagram conversations and reply manually from our
-> inbox. The screencast shows each case: the DM after a comment (with an image after the button), a reply
-> to a story, a story mention, a direct message with a keyword, the delivery log, and a manual reply from
-> the inbox.
+> limit per account. We do not read or display the business's Instagram conversations: the permission is
+> used only to send these automatic replies. The screencast shows each case: the DM after a comment (with
+> an image after the button), a reply to a story, a story mention, a direct message with a keyword, and the
+> delivery log.
 
 **PT**
 
@@ -183,10 +183,10 @@ como referência para você.
 > a mesma pessoa no máximo uma vez por intervalo configurável (24 horas por padrão) e ficam em silêncio por
 > 24 horas depois que alguém da empresa responde essa pessoa (detectado pelos echoes de mensagem), para a
 > automação nunca atropelar um atendente. Eliminamos duplicidades e contamos cada chamada à API (texto,
-> cada imagem, cada vídeo) no limite por hora de cada conta. A empresa também pode ler as conversas e
-> responder manualmente pela caixa de entrada. O vídeo mostra cada caso: a DM depois do comentário (com uma
-> imagem depois do botão), a resposta a um story, a menção em story, uma DM com palavra-chave, o registro de
-> envios e uma resposta manual pela caixa de entrada.
+> cada imagem, cada vídeo) no limite por hora de cada conta. Não lemos nem exibimos as conversas do
+> Instagram da empresa: a permissão é usada só para enviar essas respostas automáticas. O vídeo mostra cada
+> caso: a DM depois do comentário (com uma imagem depois do botão), a resposta a um story, a menção em story,
+> uma DM com palavra-chave e o registro de envios.
 
 ### `business_management` (obrigatória no Unified login)
 
@@ -241,7 +241,7 @@ não use o cadastro público para o revisor, porque ele ficaria aguardando a sua
 >   A second Stories automation answers mentions: mention @SUA_CONTA_DEMO in a story from a public
 >   account and you receive a thank-you DM (once per person every 24 hours).
 > - Direct: keyword HOURS. Send HOURS by DM to @SUA_CONTA_DEMO: you receive the opening hours.
-> Every send is listed under DM Logs. Inbox shows the account's conversations and allows replying.
+> Every send is listed under DM Logs.
 > The interface language can be switched to English in Settings → Interface language.
 
 Antes de enviar, deixe criadas e ativas na conta de demonstração as três automações citadas acima
@@ -278,8 +278,7 @@ instagram.com) pronto.
 | 10 | 3:50 | Na segunda conta (pública): publicar um story **marcando @SUA_CONTA_DEMO** → a DM de agradecimento chega | "When someone mentions the business in their story, they receive a thank-you DM." | instagram_manage_messages |
 | 11 | 4:15 | Aba **Direct** → mostrar a automação `HOURS`. Na segunda conta: mandar **HOURS** por DM → a resposta chega | "Direct automations answer direct messages that contain a keyword." | instagram_manage_messages |
 | 12 | 4:35 | **DM Logs**: as linhas **Sent** de cada caso (canal, pessoa, mensagem, data) | "Every send is logged with its channel and status." | instagram_manage_messages |
-| 13 | 4:50 | **Inbox**: abrir a conversa com a segunda conta e enviar uma resposta manual; mostrar que chegou | "The owner can read Instagram conversations and reply manually from the inbox. While a person from the business is talking to someone, keyword-free automations stay silent for 24 hours." | instagram_manage_messages |
-| 14 | 5:15 | **Accounts**: mostrar a chave **Active/Off** (desligar e religar), depois a **lixeira** na conta (ler a confirmação e confirmar) e abrir `/exclusao-dados` | "The owner can pause every automation of an account without deleting anything, or remove the account: its data, including uploaded images and videos, is deleted. Data deletion requests from Meta are handled automatically." | — |
+| 13 | 4:50 | **Accounts**: mostrar a chave **Active/Off** (desligar e religar), depois a **lixeira** na conta (ler a confirmação e confirmar) e abrir `/exclusao-dados` | "The owner can pause every automation of an account without deleting anything, or remove the account: its data, including uploaded images and videos, is deleted. Data deletion requests from Meta are handled automatically." | — |
 
 Dicas que evitam reprovação:
 

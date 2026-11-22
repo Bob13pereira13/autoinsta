@@ -5,7 +5,6 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 const PROTECTED_PREFIXES = [
   "/dashboard",
   "/overview",
-  "/inbox",
   "/campaigns",
   "/automations",
   "/accounts",
@@ -87,8 +86,6 @@ export const config = {
     "/dashboard/:path*",
     "/overview",
     "/overview/:path*",
-    "/inbox",
-    "/inbox/:path*",
     "/campaigns",
     "/campaigns/:path*",
     "/automations",
