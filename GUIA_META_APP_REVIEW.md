@@ -111,16 +111,21 @@ como referência para você.
 > We use instagram_basic to identify the Instagram professional account the business connected through
 > our login configuration (account ID, username, name and profile picture) and to list that account's own
 > posts and reels in our dashboard, so the business owner can choose which post or reel an automation
-> applies to. We only read the connecting account's own profile and media; we never read other users'
-> profiles or media. The screencast shows the account appearing in the Accounts tab after login and the
+> applies to. With this permission we only read the connecting account's own profile and media. The only
+> data we read about another person is the username of someone who comments on or messages the
+> connected account, used solely to personalize the automated reply ({username}) and kept in that
+> account's DM log; we never read other users' media. The screencast shows the account appearing in the Accounts tab after login and the
 > post grid listing the account's posts and reels when an automation is created.
 
 **PT**
 
 > Usamos instagram_basic para identificar a conta profissional do Instagram que a empresa conectou pelo
 > nosso login (ID, nome de usuário, nome e foto de perfil) e para listar os posts e reels da própria
-> conta no painel, para o dono escolher em qual post ou reel a automação vai funcionar. Lemos apenas o
-> perfil e as mídias da própria conta conectada, nunca de outros usuários. O vídeo mostra a conta
+> conta no painel, para o dono escolher em qual post ou reel a automação vai funcionar. Com esta permissão
+> lemos apenas o perfil e as mídias da própria conta conectada. O único dado que lemos de outra pessoa é
+> o nome de usuário de quem comenta ou envia mensagem para a conta conectada, usado só para personalizar
+> a resposta automática ({username}) e guardado no registro de DMs dessa conta; nunca lemos mídias de
+> outros usuários. O vídeo mostra a conta
 > aparecendo na aba Contas após o login e a grade de publicações e reels ao criar uma automação.
 
 ### `instagram_manage_comments`

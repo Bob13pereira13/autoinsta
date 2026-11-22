@@ -42,8 +42,9 @@ O nome, o logotipo, as cores e os dados legais da marca ficam em **[`config/bran
 
 - **Marca centralizada** em `config/brand.ts` e interface em **Português (Brasil)** por padrão (inglês
   disponível para o vídeo do App Review).
-- **Login por e-mail e senha** (além do link mágico), com **cadastro fechado**: você cria as contas dos
-  clientes por script e eles definem a senha pelo e-mail.
+- **Login por e-mail e senha** (além do link mágico), com **cadastro público em /cadastro** (confirmação
+  de e-mail obrigatória; a aprovação manual é opcional na área de gestão). Você também pode criar clientes
+  pela área de gestão ou por script, e eles definem a senha pelo e-mail.
 - **Somente API oficial da Meta**: sem Zernio; **Login unificado** (Facebook Login for Business, token de
   usuário do sistema) ou Login do Instagram para apps antigos.
 - **Conformidade com a Meta e a LGPD**: `/privacidade`, `/termos`, `/exclusao-dados`, callback de
