@@ -37,7 +37,7 @@ export default async function AdminClientsPage({
         <select id="status" name="status" defaultValue={params.status ?? ""} className="rounded border border-border bg-surface px-3 py-2 text-sm">
           <option value="">{t("All statuses")}</option>
           <option value="PENDING_APPROVAL">{t("Awaiting approval")}</option>
-          <option value="ACTIVE">{t("Active")}</option>
+          <option value="ACTIVE">{t("Enabled")}</option>
           <option value="DISABLED">{t("Disabled")}</option>
           <option value="REJECTED">{t("Rejected")}</option>
         </select>

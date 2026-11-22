@@ -40,7 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <header className="border-b border-border">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
             <Link href="/admin" className="flex items-center gap-2">
-              <BrandMark />
+              <BrandMark href={null} />
               <span className="rounded bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{t("Admin area")}</span>
             </Link>
             <nav className="flex flex-wrap gap-4 text-sm" aria-label={t("Admin area")}>

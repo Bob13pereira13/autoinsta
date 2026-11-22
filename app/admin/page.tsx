@@ -11,7 +11,7 @@ export default async function AdminOverviewPage() {
   const data = await adminOverview();
   const cards = [
     { label: t("Awaiting approval"), value: data.clientsByStatus.PENDING_APPROVAL, href: "/admin/clients?status=PENDING_APPROVAL" },
-    { label: t("Active"), value: data.clientsByStatus.ACTIVE, href: "/admin/clients?status=ACTIVE" },
+    { label: t("Enabled"), value: data.clientsByStatus.ACTIVE, href: "/admin/clients?status=ACTIVE" },
     { label: t("Disabled"), value: data.clientsByStatus.DISABLED, href: "/admin/clients?status=DISABLED" },
     { label: t("Rejected"), value: data.clientsByStatus.REJECTED, href: "/admin/clients?status=REJECTED" },
   ];
