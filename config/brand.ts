@@ -33,13 +33,18 @@ export const brand = {
    * Logotipo (símbolo + nome), em duas versões: `light` para o tema claro (cor
    * escura) e `dark` para o tema escuro (cor clara). Coloque os arquivos em
    * /public/brand/ e ajuste os caminhos; `width` e `height` dão a proporção.
-   * Use SVG (ou PNG) com fundo transparente. Os ícones do app ficam em
-   * /app/favicon.ico, /public/icon-192.png, /public/icon-512.png,
-   * /public/icon-maskable-512.png (Android, sem cantos: a arte fica no centro)
-   * e /public/apple-touch-icon.png (iOS, sem cantos) — substitua esses
-   * arquivos mantendo os nomes. Para o Meta App Review você também precisa de
-   * um ícone de 1024x1024 px, enviado direto no painel da Meta: veja
-   * docs/design/app-icon-1024.png.
+   * Use SVG (ou PNG) com fundo transparente.
+   *
+   * Ícones do app: o símbolo do logotipo, branco e centralizado, sobre um
+   * quadrado cheio da cor `primary`, sem transparência e com margem para os
+   * cortes redondos do celular. Ficam em /app/favicon.ico (16, 32 e 48 px),
+   * /public/icon-192.png, /public/icon-512.png, /public/apple-touch-icon.png
+   * (iOS arredonda os cantos sozinho) e /public/icon-maskable-512.png
+   * (Android: o símbolo fica dentro da zona segura, um círculo de 40% do
+   * lado). Substitua esses arquivos mantendo os nomes; o teste
+   * __tests__/app-icons.test.ts confere tamanho, fundo e margens. Para o Meta
+   * App Review use docs/design/app-icon-1024.png (1024x1024, sem
+   * transparência), enviado direto no painel da Meta.
    */
   logo: {
     light: "/brand/logo-light.svg",
