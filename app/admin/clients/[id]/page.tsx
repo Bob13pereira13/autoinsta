@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AdminAccountControls, ClientStatusActions, LimitEditor, NotesEditor } from "@/components/admin/client-actions";
 import { ClientStatusBadge } from "@/components/admin/status-badge";
 import { formatDate, formatMoney } from "@/components/admin/format";
+import { SYSTEM_ACTOR } from "@/lib/admin/audit";
 import { getClientDetail } from "@/lib/admin/clients";
 import { getI18n } from "@/lib/i18n/server";
 import { formatDocument } from "@/lib/validation/document";
@@ -26,6 +27,7 @@ export default async function AdminClientPage({ params }: { params: Promise<{ id
   const owner = ws.members.find((m) => m.role === "OWNER")?.user ?? ws.members[0]?.user;
   const actionLabel: Record<string, string> = {
     "client.approve": t("Approved"),
+    "client.autoActivate": t("Activated on e-mail confirmation (sign-up approval off)"),
     "client.reject": t("Rejected"),
     "client.activate": t("Activated"),
     "client.deactivate": t("Deactivated"),
@@ -161,7 +163,7 @@ export default async function AdminClientPage({ params }: { params: Promise<{ id
                 {ws.adminAuditLogs.map((log) => (
                   <tr key={log.id} className="align-top">
                     <td className="whitespace-nowrap py-2 pr-4 text-muted">{formatDate(log.createdAt, locale, true)}</td>
-                    <td className="py-2 pr-4 text-muted">{log.actorEmail}</td>
+                    <td className="py-2 pr-4 text-muted">{log.actorEmail === SYSTEM_ACTOR ? t("Automatic") : log.actorEmail}</td>
                     <td className="py-2 pr-4">
                       {actionLabel[log.action] ?? log.action}
                       {log.reason && <span className="block text-xs text-muted">{t("Reason: {reason}", { reason: log.reason })}</span>}

@@ -12,10 +12,13 @@ vídeos**. Cada comentário ou mensagem dispara no máximo uma automação. Em C
 para todas as publicações ou só para as marcadas na grade (até 100).
 
 **Clientes**: qualquer pessoa pode se cadastrar em `/cadastro` (com confirmação de e-mail e
-Cloudflare Turnstile); o acesso fica **aguardando aprovação** até um operador aprovar na área de
-gestão `/admin` (só para os e-mails de `ADMIN_EMAILS`), onde também se ativa/desativa clientes,
-define o limite de contas do Instagram, acompanha a receita estimada e vê a auditoria. Também é
-possível criar clientes por lá (ou com `npm run user`).
+Cloudflare Turnstile). Por padrão, o cliente fica **ativo assim que confirma o e-mail** e entra direto
+no painel; os operadores recebem um aviso por e-mail com o link do cliente. Na área de gestão `/admin`
+(só para os e-mails de `ADMIN_EMAILS`) → **Configurações**, a opção **"Exigir aprovação de novos
+cadastros"** faz os cadastros confirmados ficarem **aguardando aprovação** até um operador aprovar ou
+recusar. Lá também se ativa/desativa clientes, define o limite de contas do Instagram, acompanha a
+receita estimada e vê a auditoria (inclusive de cada mudança nas configurações). Também é possível
+criar clientes por lá (ou com `npm run user`).
 
 O painel não tem caixa de entrada: as conversas continuam no app do Instagram (ou no Business Suite).
 Quando alguém da conta responde uma pessoa por lá, as automações sem palavra-chave ficam 24 horas sem
@@ -103,10 +106,14 @@ dados) aparecem na Política de Privacidade e nos Termos — **preencha antes de
 
 Há três jeitos de criar um cliente:
 
-- **Cadastro público** em `/cadastro`: e-mail confirmado + Turnstile; o cliente fica "Aguardando
-  aprovação" (vê só uma tela de análise) até você aprovar em `/admin`. Os e-mails de `ADMIN_EMAILS`
-  recebem um aviso a cada cadastro confirmado. Para fechar o cadastro público, deixe as chaves do
-  Turnstile vazias em produção ou defina `ALLOWED_EMAILS`.
+- **Cadastro público** em `/cadastro`: e-mail confirmado + Turnstile. Com **"Exigir aprovação de
+  novos cadastros"** desligada (padrão, em `/admin` → Configurações), o cliente fica Ativo ao confirmar
+  o e-mail, recebe o e-mail de boas-vindas e entra direto no painel. Ligada, ele fica "Aguardando
+  aprovação" (vê só uma tela de análise) até você aprovar ou recusar. Só entra direto quem se cadastrou
+  **e** confirmou o e-mail com a opção desligada; mudar a opção não altera a situação de ninguém. Os
+  e-mails de `ADMIN_EMAILS` recebem um aviso a cada cadastro confirmado, com o link do cliente, nos dois
+  casos. Para fechar o cadastro público, deixe as chaves do Turnstile vazias em produção ou defina
+  `ALLOWED_EMAILS`.
 - **Área de gestão** `/admin` → Novo cliente: já entra Ativo e recebe o convite para definir a senha.
 - **Linha de comando** (como antes), também Ativo:
 

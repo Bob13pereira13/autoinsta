@@ -7,8 +7,12 @@ export function hashEmail(email: string): string {
   return createHash("sha256").update(normalizeEmail(email)).digest("hex");
 }
 
+/** actorEmail of what the platform does on its own (e.g. activation on e-mail confirmation). */
+export const SYSTEM_ACTOR = "system";
+
 export type AdminAction =
   | "client.approve"
+  | "client.autoActivate"
   | "client.reject"
   | "client.activate"
   | "client.deactivate"
@@ -18,7 +22,8 @@ export type AdminAction =
   | "account.toggle"
   | "account.remove"
   | "settings.price"
-  | "settings.defaultLimit";
+  | "settings.defaultLimit"
+  | "settings.signupApproval";
 
 /** Record an admin action in the same transaction as the change itself. */
 export async function recordAdminAction(

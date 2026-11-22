@@ -149,6 +149,9 @@ model Workspace {
   /// itself be null = no limit).
   instagramAccountLimit Int?
   signupSource          WorkspaceSignupSource @default(LEGACY)
+  /// Public sign-up made while approval was not required: the workspace turns
+  /// ACTIVE when the e-mail is confirmed, if approval is still off by then.
+  signupAutoActivate    Boolean               @default(false)
   companyName           String?
   /// E.164, e.g. +5511999998888 (WhatsApp).
   contactPhone          String?
@@ -188,6 +191,9 @@ model PlatformSettings {
   pricePerAccountCents         Int      @default(19900)
   /// Instagram account limit for clients that follow the default; null = no limit.
   defaultInstagramAccountLimit Int?
+  /// Public sign-ups wait for an admin's approval (true) or become ACTIVE as
+  /// soon as the e-mail is confirmed (false, the default).
+  requireSignupApproval        Boolean  @default(false)
   currency                     String   @default("BRL")
   updatedAt                    DateTime @updatedAt
   updatedBy                    String?

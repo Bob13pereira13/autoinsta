@@ -202,8 +202,9 @@ export default function PrivacidadePage() {
             conforme as instruções do cliente e sob a base legal escolhida por ele como controlador.
           </li>
           <li>
-            <strong>Analisar e aprovar o cadastro e falar com você</strong> — nome, empresa, telefone e,
-            quando informado, CPF/CNPJ servem para identificar o cliente, decidir sobre a aprovação, prestar
+            <strong>Analisar o cadastro e falar com você</strong> — nome, empresa, telefone e, quando
+            informado, CPF/CNPJ servem para identificar o cliente, decidir sobre a aprovação (quando ela é
+            exigida), prestar
             suporte e, no futuro, emitir a cobrança e a nota fiscal (procedimentos preliminares e execução de
             contrato, art. 7º, V).
           </li>

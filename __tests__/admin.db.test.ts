@@ -283,7 +283,7 @@ describe.skipIf(!databaseUrl)("admin area", () => {
   });
 
   it("estimated revenue, ACTIVE clients only: with a limit = limit × price; without = connected accounts × price", async () => {
-    expect((await (await settingsGet()).json()).data).toEqual({ pricePerAccountCents: 19900, defaultInstagramAccountLimit: null });
+    expect((await (await settingsGet()).json()).data).toEqual({ pricePerAccountCents: 19900, defaultInstagramAccountLimit: null, requireSignupApproval: false });
     await settingsPut(req("/api/admin/settings", "PUT", { pricePerAccountCents: 25000 }));
     expect(await m.db.adminAuditLog.count({ where: { action: "settings.price" } })).toBe(1);
 

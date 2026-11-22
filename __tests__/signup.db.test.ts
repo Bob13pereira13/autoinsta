@@ -1,6 +1,8 @@
 /**
  * Public sign-up, e-mail confirmation, sign-in and the "only ACTIVE clients
- * reach the dashboard" rule, on a real Postgres and the local Redis.
+ * reach the dashboard" rule, on a real Postgres and the local Redis — with
+ * "Require approval of new sign-ups" ON (the flow without approval is in
+ * signup-approval.db.test.ts).
  */
 import { randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
@@ -78,6 +80,7 @@ describe.skipIf(!databaseUrl)("public sign-up", () => {
       await sql.query(readFileSync(path.join(root, dir.name, "migration.sql"), "utf8"));
     }
     m.db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }, { schema }) });
+    await m.db.platformSettings.upsert({ where: { id: "default" }, create: { id: "default", requireSignupApproval: true }, update: { requireSignupApproval: true } });
   }, 60_000);
 
   afterAll(async () => {
@@ -107,7 +110,7 @@ describe.skipIf(!databaseUrl)("public sign-up", () => {
     expect(Date.now() - user.termsAcceptedAt!.getTime()).toBeLessThan(60_000);
     const ws = user.workspaceMembers[0].workspace;
     expect(ws).toMatchObject({
-      status: "PENDING_APPROVAL", signupSource: "SELF_SIGNUP", companyName: "Loja da Maria",
+      status: "PENDING_APPROVAL", signupSource: "SELF_SIGNUP", signupAutoActivate: false, companyName: "Loja da Maria",
       contactPhone: "+5511999998888", documentType: "CPF", documentNumber: "52998224725",
       // Follows the platform default limit.
       instagramAccountLimit: null,
@@ -132,12 +135,14 @@ describe.skipIf(!databaseUrl)("public sign-up", () => {
     expect((await setPasswordWithToken(token, "outra-senha-2026")).ok).toBe(false);
 
     m.sendEmail.mockClear();
-    expect(await confirmSignupEmail(token)).toBe(true);
+    expect(await confirmSignupEmail(token)).toEqual({ ok: true, active: false });
     const notified = m.sendEmail.mock.calls.map((c) => c[0].to).sort();
     expect(notified).toEqual(["dono@plataforma.test", "socio@plataforma.test"]);
     const ws = await m.db.workspace.findFirstOrThrow({ where: { owner: { email } } });
+    expect(ws.status).toBe("PENDING_APPROVAL");
+    expect(m.sendEmail.mock.calls[0][0].subject).toBe("Novo cadastro aguardando aprovação: Loja da Maria");
     expect(m.sendEmail.mock.calls[0][0].text).toContain(`https://app.test/admin/clients/${ws.id}`);
-    expect(await confirmSignupEmail(token)).toBe(false);
+    expect(await confirmSignupEmail(token)).toEqual({ ok: false });
     expect(m.sendEmail).toHaveBeenCalledTimes(2);
 
     expect(await authorizeWithPassword({ email, password: "senha-forte-2026" })).toMatchObject({ email });

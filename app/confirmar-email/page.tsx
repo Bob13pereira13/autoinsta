@@ -26,8 +26,8 @@ export default async function ConfirmarEmailPage({
 
   async function confirm(formData: FormData) {
     "use server";
-    const ok = await confirmSignupEmail(String(formData.get("token") ?? ""));
-    redirect(ok ? "/confirmar-email?status=ok" : "/confirmar-email?status=invalid");
+    const result = await confirmSignupEmail(String(formData.get("token") ?? ""));
+    redirect(!result.ok ? "/confirmar-email?status=invalid" : result.active ? "/confirmar-email?status=active" : "/confirmar-email?status=ok");
   }
 
   return (
@@ -39,7 +39,17 @@ export default async function ConfirmarEmailPage({
           </h1>
         </div>
         <div className="panel space-y-4 rounded p-8">
-          {params.status === "ok" ? (
+          {params.status === "active" ? (
+            <>
+              <h2 className="text-lg font-semibold">{t("E-mail confirmed")}</h2>
+              <p className="text-sm text-muted">
+                {t("Your account is active. Sign in to connect your Instagram account and create your first automation.")}
+              </p>
+              <Link href="/login?callbackUrl=%2Fdashboard" className="inline-flex w-full justify-center rounded bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-hover">
+                {t("Sign in to the dashboard")}
+              </Link>
+            </>
+          ) : params.status === "ok" ? (
             <>
               <h2 className="text-lg font-semibold">{t("E-mail confirmed")}</h2>
               <p className="text-sm text-muted">

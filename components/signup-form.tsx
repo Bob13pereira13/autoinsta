@@ -9,7 +9,7 @@ import TurnstileWidget, { type TurnstileHandle } from "@/components/turnstile-wi
 
 type Field = "name" | "email" | "password" | "companyName" | "phone" | "document" | "acceptTerms" | "turnstile";
 
-export default function SignupForm({ siteKey }: { siteKey: string | null }) {
+export default function SignupForm({ siteKey, requireApproval }: { siteKey: string | null; requireApproval: boolean }) {
   const { t, message, locale } = useI18n();
   const [values, setValues] = useState({ name: "", email: "", password: "", companyName: "", phone: "", document: "" });
   const [acceptTerms, setAcceptTerms] = useState(false);
@@ -74,7 +74,9 @@ export default function SignupForm({ siteKey }: { siteKey: string | null }) {
       <div role="status" className="space-y-3">
         <h2 className="text-lg font-semibold">{t("Check your e-mail")}</h2>
         <p className="text-sm text-muted">
-          {t("If {email} can be used, we sent a link to confirm it. Open it to finish signing up; after that our team reviews your access.", { email: doneFor })}
+          {requireApproval
+            ? t("If {email} can be used, we sent a link to confirm it. Open it to finish signing up; after that our team reviews your access.", { email: doneFor })
+            : t("If {email} can be used, we sent a link to confirm it. Open it to finish signing up; after that you can sign in and use the dashboard.", { email: doneFor })}
         </p>
         <Link href={`/confirmar-email?email=${encodeURIComponent(doneFor)}`} className="text-sm font-medium text-accent hover:underline">
           {t("Did not get it? Resend the link")}

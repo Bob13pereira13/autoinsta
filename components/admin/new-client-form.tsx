@@ -59,7 +59,7 @@ export default function NewClientForm() {
           {t("Instagram account limit")} <span className="font-normal text-muted">{t("(optional)")}</span>
         </span>
         <input type="number" min={1} max={100} value={values.instagramAccountLimit} onChange={set("instagramAccountLimit")} className={`${input} w-28`} />
-        <span className="block text-xs text-muted">{t("Empty = follow the default limit (set in Price and limits).")}</span>
+        <span className="block text-xs text-muted">{t("Empty = follow the default limit (set in Settings).")}</span>
       </label>
       <p className="text-xs text-muted">{t("The client starts Active and gets an e-mail to set the password (link valid for 7 days).")}</p>
       <button type="submit" disabled={saving} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">

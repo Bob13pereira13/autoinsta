@@ -59,14 +59,20 @@ function supportLine(locale: Locale): string {
     : t("Support: {email}", { email: brand.support.email });
 }
 
-export function verifyEmailMessage(url: string, name: string | null, rawLocale?: string | null) {
+/**
+ * `needsReview`: whether an admin still has to approve the sign-up after the
+ * confirmation (false when sign-up approval is off).
+ */
+export function verifyEmailMessage(url: string, name: string | null, rawLocale?: string | null, needsReview = true) {
   const locale = resolveLocale(rawLocale);
   const { t } = createI18n(locale);
   return {
     subject: t("Confirm your e-mail to finish signing up"),
     ...render(locale, {
       heading: name ? t("Hello, {name}!", { name }) : t("Confirm your e-mail"),
-      intro: t("Confirm this address to finish creating your account. The link is valid for 48 hours and can be used once. After that, our team reviews your sign-up."),
+      intro: needsReview
+        ? t("Confirm this address to finish creating your account. The link is valid for 48 hours and can be used once. After that, our team reviews your sign-up.")
+        : t("Confirm this address to finish creating your account. The link is valid for 48 hours and can be used once. After that, you can sign in and use the dashboard right away."),
       buttonLabel: t("Confirm my e-mail"),
       url,
       footer: t("If you did not create an account, ignore this e-mail and nothing happens."),
@@ -104,6 +110,22 @@ export function approvedMessage(loginUrl: string, name: string | null, rawLocale
   };
 }
 
+/** Sent when the e-mail is confirmed and the account became ACTIVE without approval. */
+export function accountReadyMessage(loginUrl: string, name: string | null, rawLocale?: string | null) {
+  const locale = resolveLocale(rawLocale);
+  const { t } = createI18n(locale);
+  return {
+    subject: t("Your account is ready"),
+    ...render(locale, {
+      heading: name ? t("Welcome, {name}!", { name }) : t("Welcome!"),
+      intro: t("Your e-mail is confirmed and your account is active. Sign in to connect your Instagram account and create your first automation."),
+      buttonLabel: t("Sign in"),
+      url: loginUrl,
+      footer: supportLine(locale),
+    }),
+  };
+}
+
 export function rejectedMessage(reason: string, name: string | null, rawLocale?: string | null) {
   const locale = resolveLocale(rawLocale);
   const { t } = createI18n(locale);
@@ -118,16 +140,22 @@ export function rejectedMessage(reason: string, name: string | null, rawLocale?:
   };
 }
 
+/** `active`: the client is already ACTIVE (sign-up approval off) rather than awaiting approval. */
 export function adminNewSignupMessage(
   client: { name: string | null; email: string; companyName: string | null; phone: string | null; document: string | null },
-  url: string
+  url: string,
+  active = false
 ) {
   const locale: Locale = "pt-BR";
   return {
-    subject: `Novo cadastro aguardando aprovação: ${client.companyName ?? client.email}`,
+    subject: active
+      ? `Novo cliente cadastrado (já ativo): ${client.companyName ?? client.email}`
+      : `Novo cadastro aguardando aprovação: ${client.companyName ?? client.email}`,
     ...render(locale, {
-      heading: "Novo cadastro aguardando aprovação",
-      intro: "Um cliente confirmou o e-mail e está aguardando a sua aprovação.",
+      heading: active ? "Novo cliente cadastrado" : "Novo cadastro aguardando aprovação",
+      intro: active
+        ? "Um cliente confirmou o e-mail e já está ativo, porque a aprovação de novos cadastros está desligada. Se precisar, você pode desativá-lo na área de gestão."
+        : "Um cliente confirmou o e-mail e está aguardando a sua aprovação.",
       lines: [
         `Nome: ${client.name ?? "—"}`,
         `E-mail: ${client.email}`,

@@ -3,12 +3,13 @@ import { ClientStatusActions } from "@/components/admin/client-actions";
 import { formatDate, formatMoney } from "@/components/admin/format";
 import { adminOverview } from "@/lib/admin/clients";
 import { getI18n } from "@/lib/i18n/server";
+import { getRequireSignupApproval } from "@/lib/signup-approval";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
   const { t, locale } = await getI18n();
-  const data = await adminOverview();
+  const [data, requireApproval] = await Promise.all([adminOverview(), getRequireSignupApproval()]);
   const cards = [
     { label: t("Awaiting approval"), value: data.clientsByStatus.PENDING_APPROVAL, href: "/admin/clients?status=PENDING_APPROVAL" },
     { label: t("Enabled"), value: data.clientsByStatus.ACTIVE, href: "/admin/clients?status=ACTIVE" },
@@ -66,6 +67,12 @@ export default async function AdminOverviewPage() {
 
       <section aria-labelledby="pending-heading" className="space-y-3">
         <h2 id="pending-heading" className="text-base font-semibold">{t("Awaiting approval")}</h2>
+        <p className="text-sm text-muted">
+          {requireApproval
+            ? t("Approval of new sign-ups is on: each confirmed sign-up waits here.")
+            : t("Approval of new sign-ups is off: confirmed sign-ups become active right away. Only clients that were already waiting are listed here.")}{" "}
+          <Link href="/admin/settings" className="text-accent hover:underline">{t("Change in Settings")}</Link>
+        </p>
         {data.pending.length === 0 ? (
           <p className="panel rounded p-6 text-sm text-muted">{t("No sign-up waiting for approval.")}</p>
         ) : (

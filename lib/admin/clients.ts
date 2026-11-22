@@ -7,6 +7,7 @@ import { recordAdminAction } from "@/lib/admin/audit";
 import { sendEmail } from "@/lib/email/send";
 import { approvedMessage, rejectedMessage } from "@/lib/email/account-emails";
 import { removeInstagramAccounts } from "@/lib/instagram/remove-account";
+import { getRequireSignupApproval } from "@/lib/signup-approval";
 import { parseDocument } from "@/lib/validation/document";
 import { normalizePhone } from "@/lib/validation/phone";
 import { statusChange } from "@/lib/workspace-status";
@@ -477,5 +478,40 @@ export async function setDefaultAccountLimit(actorEmail: string, value: unknown)
       });
     }
     return settings;
+  });
+}
+
+/**
+ * "Require approval of new sign-ups" (off by default). Changing it never
+ * touches a workspace's status: clients awaiting approval keep waiting.
+ * Audited when the value actually changes.
+ */
+export async function setRequireSignupApproval(actorEmail: string, value: unknown) {
+  if (typeof value !== "boolean") throw new AdminError("Invalid input");
+  const before = await getRequireSignupApproval();
+  return prisma.$transaction(async (tx) => {
+    const settings = await tx.platformSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default", requireSignupApproval: value, updatedBy: actorEmail },
+      update: { requireSignupApproval: value, updatedBy: actorEmail },
+    });
+    if (before !== value) {
+      await recordAdminAction(tx, {
+        actorEmail,
+        action: "settings.signupApproval",
+        before: { requireSignupApproval: before },
+        after: { requireSignupApproval: value },
+      });
+    }
+    return settings;
+  });
+}
+
+/** The latest platform setting changes (price, default limit, sign-up approval), newest first. */
+export function listSettingsAudit(take = 20) {
+  return prisma.adminAuditLog.findMany({
+    where: { workspaceId: null, action: { startsWith: "settings." } },
+    orderBy: { createdAt: "desc" },
+    take,
   });
 }
