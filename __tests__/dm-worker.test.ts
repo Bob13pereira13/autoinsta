@@ -632,6 +632,37 @@ describe("DM Worker — Full Pipeline", () => {
     );
   });
 
+  it("a link without a saved button label goes out as “Abrir link”, never the internal label", async () => {
+    // E.g. an automation imported from a CSV: no linkButtonLabel, and the
+    // first link's own label is the internal "Primary campaign link".
+    mockPrisma.automation.findMany.mockResolvedValue([
+      {
+        ...mockAutomation,
+        dmMessage: "Aqui está: {link}",
+        linkButtonLabel: null,
+        trackedLinks: [
+          { slug: "abc123", label: "Primary campaign link", destinationUrl: "https://example.com" },
+          { slug: "def456", label: "", destinationUrl: "https://example.com/book" },
+        ],
+      },
+    ]);
+
+    const processor = getProcessor();
+    await processor(createMockJob());
+
+    const token = hashRecipientId(mockJobData.commenterId);
+    expect(mockSendPrivateReplyWithLinkButton).toHaveBeenCalledWith(
+      META_AUTH,
+      "ig_456",
+      "comment_555",
+      "Aqui está:",
+      [
+        { title: "Abrir link", url: `http://localhost:3000/r/abc123?r=${token}` },
+        { title: "Abrir link", url: `http://localhost:3000/r/def456?r=${token}` },
+      ]
+    );
+  });
+
   it("should send a follow-gate prompt when a non-follower comments", async () => {
     mockGetUserFollowStatus.mockResolvedValue(false); // not following yet
     mockPrisma.automation.findMany.mockResolvedValue([

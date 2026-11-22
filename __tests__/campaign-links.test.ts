@@ -245,7 +245,7 @@ describe("syncCampaignLinks", () => {
 
     await save({ secondaryUrl: SECOND, secondaryLabel: "   " });
 
-    expect(buttons()[1]).toEqual({ position: 1, label: "Open link", destinationUrl: SECOND });
+    expect(buttons()[1]).toEqual({ position: 1, label: "Abrir link", destinationUrl: SECOND });
   });
 
   it("leaves other campaigns' links alone", async () => {
@@ -282,7 +282,7 @@ describe("buildInitialCampaignLinks", () => {
         secondaryUrl: SECOND,
         secondaryLabel: null,
       })
-    ).toMatchObject([{ position: 0, label: "Open link", destinationUrl: SECOND }]);
+    ).toMatchObject([{ position: 0, label: "Abrir link", destinationUrl: SECOND }]);
   });
 
   it("creates nothing without URLs", () => {

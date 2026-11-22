@@ -829,5 +829,7 @@
   "“{word}” is repeated (case and accents don't count). Remove one.": "“{word}” está repetida (maiúsculas e acentos não contam). Remova uma.",
   "“{word}” is too long: up to 50 characters per keyword.": "“{word}” é longa demais: até 50 caracteres por palavra-chave.",
   "“{word}” is very common: almost every comment has it. Use something more specific, like LINK.": "“{word}” é muito comum: quase todo comentário tem essa palavra. Use algo mais específico, como LINK.",
-  "“{word}” is very short and shows up in many comments by accident. Prefer something more specific.": "“{word}” é muito curta e aparece em muitos comentários sem querer. Prefira algo mais específico."
+  "“{word}” is very short and shows up in many comments by accident. Prefer something more specific.": "“{word}” é muito curta e aparece em muitos comentários sem querer. Prefira algo mais específico.",
+  "Review": "Revisar",
+  "This automation keeps sending, but needs a fix to be saved again.": "Esta automação continua enviando, mas precisa de ajuste para ser salva de novo."
 }

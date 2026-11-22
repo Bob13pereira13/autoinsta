@@ -23,6 +23,8 @@ import { SegmentedControl } from "@/components/ui/segmented";
 import { StatusDot, type StatusTone } from "@/components/ui/status";
 import { accountNeedsReconnect } from "@/lib/automation/account-status";
 import { findConflicts, type ConflictCandidate } from "@/lib/automation/conflicts";
+import { needsReview } from "@/lib/automation/text-rules";
+import { ReviewTag } from "@/components/review-tag";
 import { Switch } from "@/components/ui/switch";
 
 type AutomationType = "COMMENTS" | "STORIES" | "DIRECT";
@@ -53,6 +55,9 @@ interface Campaign {
   requireFollow: boolean;
   followPromptMessage: string | null;
   followPromptButtonLabel: string | null;
+  linkButtonLabel?: string | null;
+  followUpEnabled?: boolean;
+  followUpMessage?: string | null;
   isActive: boolean;
   wholeWordMatch: boolean;
   instagramAccountId: string;
@@ -544,6 +549,7 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                     ))}
                     {auto.keywords.length > 4 && <span className="text-xs text-faint">+{auto.keywords.length - 4}</span>}
                     {facts.length > 0 && <span className="ml-0.5">{facts.join(" · ")}</span>}
+                    {needsReview({ ...auto, type: typeOf(auto) }) && <ReviewTag />}
                     {rowConflicts.length > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-warning-border bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning" data-note="conflict">
                         <Icon name="alert" size={13} strokeWidth={2} />

@@ -8,6 +8,7 @@
  * Edit and Stop/Resume sit next to the title.
  */
 
+import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
 import { useI18n } from "@/lib/i18n/provider";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -360,11 +361,11 @@ export default function CampaignDetailPage() {
         <Summary title={t("And then, they will get a DM")}>
           <FieldBox>{campaign.dmMessage}</FieldBox>
           {hasLink && (
-            <FieldBox>{campaign.linkButtonLabel || "Open link"}</FieldBox>
+            <FieldBox>{campaign.linkButtonLabel || DEFAULT_LINK_BUTTON_LABEL}</FieldBox>
           )}
           {hasSecondLink && (
             <FieldBox>
-              {campaign.trackedLinks?.[1]?.label || "Open link"}
+              {campaign.trackedLinks?.[1]?.label || DEFAULT_LINK_BUTTON_LABEL}
             </FieldBox>
           )}
           <MediaThumbs items={mediaBySlot.MAIN} />
@@ -447,14 +448,14 @@ export default function CampaignDetailPage() {
             openingDmButtonLabel={campaign.openingDmButtonLabel ?? ""}
             revealMessage={campaign.dmMessage}
             hasLink={hasLink}
-            linkButtonLabel={campaign.linkButtonLabel ?? "Open link"}
+            linkButtonLabel={campaign.linkButtonLabel ?? DEFAULT_LINK_BUTTON_LABEL}
             linkUrl={
               campaign.trackedLinks?.[0]?.trackedUrl ??
               campaign.trackedLinks?.[0]?.destinationUrl
             }
             hasSecondLink={hasSecondLink}
             secondLinkButtonLabel={
-              campaign.trackedLinks?.[1]?.label ?? "Open link"
+              campaign.trackedLinks?.[1]?.label ?? DEFAULT_LINK_BUTTON_LABEL
             }
             requireFollow={campaign.requireFollow}
             followPromptMessage={campaign.followPromptMessage ?? ""}

@@ -12,6 +12,7 @@
 import { useI18n } from "@/lib/i18n/provider";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { cx } from "@/components/ui/cx";
+import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
 
 export type PreviewTab = "post" | "comments" | "dm" | "conversation";
 
@@ -124,7 +125,7 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
   const showCard = props.hasLink;
   const bodyText = showCard ? resolved.replace(/\s*\{link\}\s*/g, " ").trim() : resolved;
   const linkButtons = showCard
-    ? [props.linkButtonLabel || "Open link", ...(props.hasSecondLink ? [props.secondLinkButtonLabel || "Open link"] : [])]
+    ? [props.linkButtonLabel || DEFAULT_LINK_BUTTON_LABEL, ...(props.hasSecondLink ? [props.secondLinkButtonLabel || DEFAULT_LINK_BUTTON_LABEL] : [])]
     : [];
   return (
     <div className="flex flex-col gap-2.5">

@@ -64,6 +64,7 @@ import { TRACKED_LINK_ORDER } from "@/lib/tracking/link-order";
 import { hashRecipientId } from "@/lib/tracking/server";
 
 import { ZernioApiError } from "@/lib/zernio/client";
+import { DEFAULT_LINK_BUTTON_LABEL } from "@/lib/campaigns/link-label";
 
 const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
 
@@ -161,10 +162,12 @@ function buildLinkButtons(
   primaryLabel: string | null,
   recipientToken: string
 ): { title: string; url: string }[] {
+  // The first link's own label is an internal placeholder ("Primary campaign
+  // link"), never a button text: without the campaign's label it falls back
+  // to the default.
   return trackedLinks.slice(0, 3).map((link, index) => ({
     url: buildTrackedUrl(link.slug, undefined, recipientToken),
-    title:
-      (index === 0 ? primaryLabel : link.label) || link.label || "Open link",
+    title: (index === 0 ? primaryLabel : link.label)?.trim() || DEFAULT_LINK_BUTTON_LABEL,
   }));
 }
 

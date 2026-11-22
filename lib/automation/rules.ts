@@ -1,5 +1,5 @@
 import { MAX_IMAGES_PER_MESSAGE, MAX_VIDEOS_PER_MESSAGE } from "@/lib/media/storage";
-import { buttonTitleTooLong, limitState, messageLimit } from "@/lib/automation/message-limits";
+import { TEXT_RULE_MESSAGES, textRuleIssues, type TextRuleInput } from "@/lib/automation/text-rules";
 
 /**
  * Rules for which options combine, per automation type. Shared by the editor
@@ -15,7 +15,7 @@ export type AutomationTypeName = (typeof AUTOMATION_TYPES)[number];
 export const MEDIA_SLOTS = ["FOLLOW_PROMPT", "MAIN", "FOLLOW_UP"] as const;
 export type MediaSlotName = (typeof MEDIA_SLOTS)[number];
 
-export interface RuleInput {
+export interface RuleInput extends TextRuleInput {
   type: AutomationTypeName;
   matchAnyPost?: boolean;
   pendingNextReel?: boolean;
@@ -30,17 +30,6 @@ export interface RuleInput {
   triggerStoryReplies?: boolean;
   triggerStoryMentions?: boolean;
   media?: Array<{ slot: string; kind: "IMAGE" | "VIDEO" }>;
-  /** The texts sent, checked against Instagram's limits when given. */
-  dmMessage?: string | null;
-  /** A link is set (it goes as a button). Undefined = unknown, not checked. */
-  hasLink?: boolean;
-  linkButtonLabel?: string | null;
-  secondaryButtonLabel?: string | null;
-  requireFollow?: boolean;
-  followPromptMessage?: string | null;
-  followPromptButtonLabel?: string | null;
-  followUpEnabled?: boolean;
-  followUpMessage?: string | null;
 }
 
 export interface RuleIssue {
@@ -58,14 +47,8 @@ export const RULE_MESSAGES = {
     "In Comments, images and videos are only sent after the person taps the opening DM button. Turn on the opening DM or remove the media.",
   tooManyImages: "Up to 5 images per message",
   tooManyVideos: "Up to 1 video per message",
-  linkTokenWithoutLink: "Your message has {link} but no link is set: the person would see “{link}”. Add the link or remove {link}.",
-  linkTokenInOpeningDm: "{link} does not work in the opening DM: the person would see “{link}”. The link goes in the main message.",
-  buttonTextTooLong: "With a button, Instagram takes up to 640 characters of text. Shorten the text.",
-  textTooLong: "Instagram takes up to 1000 bytes of text, and accents and emojis take more space. Shorten the message.",
-  buttonLabelTooLong: "Button labels can have up to 20 characters",
+  ...TEXT_RULE_MESSAGES,
 } as const;
-
-const LINK_TOKEN = /\{link\}/i;
 
 export function automationRuleIssues(input: RuleInput): RuleIssue[] {
   const issues: RuleIssue[] = [];
@@ -93,42 +76,7 @@ export function automationRuleIssues(input: RuleInput): RuleIssue[] {
   }
 
   // Texts: what would not go out whole (or would show "{link}") is refused.
-  const isComments = input.type === "COMMENTS";
-  const openingOn = isComments && Boolean(input.openingDmEnabled);
-  if (input.dmMessage) {
-    if (input.hasLink === false && LINK_TOKEN.test(input.dmMessage)) {
-      issues.push({ path: "dmMessage", message: RULE_MESSAGES.linkTokenWithoutLink });
-    }
-    if (input.hasLink !== undefined) {
-      const limit = messageLimit(input.dmMessage, input.hasLink ? "button" : "text");
-      if (limitState(limit) === "over") {
-        issues.push({ path: "dmMessage", message: input.hasLink ? RULE_MESSAGES.buttonTextTooLong : RULE_MESSAGES.textTooLong });
-      }
-    }
-  }
-  if (openingOn && input.openingDmMessage) {
-    if (LINK_TOKEN.test(input.openingDmMessage)) {
-      issues.push({ path: "openingDmMessage", message: RULE_MESSAGES.linkTokenInOpeningDm });
-    }
-    if (limitState(messageLimit(input.openingDmMessage, "button")) === "over") {
-      issues.push({ path: "openingDmMessage", message: RULE_MESSAGES.buttonTextTooLong });
-    }
-  }
-  if (input.requireFollow && input.followPromptMessage && limitState(messageLimit(input.followPromptMessage, "button")) === "over") {
-    issues.push({ path: "followPromptMessage", message: RULE_MESSAGES.buttonTextTooLong });
-  }
-  if (input.followUpEnabled && input.followUpMessage && limitState(messageLimit(input.followUpMessage, "text")) === "over") {
-    issues.push({ path: "followUpMessage", message: RULE_MESSAGES.textTooLong });
-  }
-  const labels: Array<[string, string | null | undefined, boolean]> = [
-    ["openingDmButtonLabel", input.openingDmButtonLabel, openingOn],
-    ["followPromptButtonLabel", input.followPromptButtonLabel, Boolean(input.requireFollow)],
-    ["linkButtonLabel", input.linkButtonLabel, Boolean(input.hasLink)],
-    ["secondaryButtonLabel", input.secondaryButtonLabel, Boolean(input.hasLink)],
-  ];
-  for (const [path, label, used] of labels) {
-    if (used && buttonTitleTooLong(label)) issues.push({ path, message: RULE_MESSAGES.buttonLabelTooLong });
-  }
+  issues.push(...textRuleIssues(input));
 
   const media = input.media ?? [];
   if (input.type === "COMMENTS" && media.length > 0 && !input.openingDmEnabled) {
