@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Nova automação de Comentários — Tech com brilho</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#08080E}
+a{color:#C4B5FD}a:hover{color:#DDD6FE}
+button,input,textarea{font-family:inherit}
+input::placeholder,textarea::placeholder{color:#8B8BA3}
+.e-nav{transition:background .15s ease,color .15s ease}
+.e-nav:hover{background:rgba(255,255,255,.05);color:#F4F4FA}
+.e-post{transition:transform .15s ease,box-shadow .2s ease}
+.e-post:hover{transform:scale(1.02)}
+.e-btn{transition:box-shadow .2s ease,transform .1s ease}
+.e-btn:hover{box-shadow:0 0 28px rgba(168,85,247,.65)}
+.e-btn:active{transform:translateY(1px)}
+.e-ghost{transition:background .15s ease}
+.e-ghost:hover{background:rgba(255,255,255,.06)}
+.e-sw{transition:background .25s ease,box-shadow .25s ease}
+.e-knob{transition:margin-left .22s ease}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1420px; background: radial-gradient(900px 420px at 70% -120px, rgba(124,58,237,.28), rgba(8,8,14,0) 70%), #08080E; font-family: Inter, system-ui, sans-serif; color: #E9E9F2; font-size: 14px">
+  <aside style="flex: 1 1 232px; max-width: 272px; box-sizing: border-box; border-right: 1px solid rgba(255,255,255,.06); padding: 22px 12px; display: flex; flex-direction: column; gap: 28px; background: rgba(12,12,20,.6)">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 10px">
+      <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, {{accent}}, #C026D3); box-shadow: 0 0 22px rgba(168,85,247,.55); display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"></path></svg>
+      </div>
+      <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 700; font-size: 16px; letter-spacing: -0.01em">ChatIntegrAI</span>
+    </div>
+    <nav aria-label="Menu principal" style="display: flex; flex-direction: column; gap: 2px">
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="7">
+        <a href="#" class="e-nav" style="display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: {{n.color}}; background: {{n.bg}}; font-weight: 500; box-shadow: {{n.shadow}}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{n.d}}"></path></svg>
+          <span>{{n.label}}</span>
+        </a>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div>
+        <div style="color: #9C9CB4; font-size: 13px; margin-bottom: 8px"><a href="Tech.dc.html" style="text-decoration: none">Automações</a> / Comentários</div>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -0.03em; color: #F7F7FB">Nova automação de Comentários</h1>
+      </div>
+      <div style="display: flex; gap: 10px">
+        <a href="Tech.dc.html" class="e-ghost" style="height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); color: #E9E9F2; text-decoration: none; display: flex; align-items: center; font-weight: 500">Cancelar</a>
+        <button type="button" class="e-btn" style="height: 44px; padding: 0 18px; border: 0; border-radius: 12px; background: linear-gradient(135deg, {{accent}}, #C026D3); color: #FFFFFF; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: 0 0 18px rgba(168,85,247,.4)">Salvar e ativar</button>
+      </div>
+    </div>
+
+    <section aria-label="Resumo" style="display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: 16px; border: 1px solid rgba(167,139,250,.3); background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(192,38,211,.08))">
+      <div style="width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; background: rgba(167,139,250,.2); color: #DDD6FE; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <span style="color: #C4B5FD; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase">Como vai funcionar</span>
+        <span style="color: #F7F7FB; font-size: 16px; line-height: 1.5">{{summary}}</span>
+      </div>
+    </section>
+
+    <sc-if value="{{showRisk}}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(248,113,113,.45); background: rgba(239,68,68,.12); color: #FECACA">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+        Todo mundo que comentar em qualquer publicação vai receber DM, inclusive em posts antigos. Você pode salvar mesmo assim.
+      </div>
+    </sc-if>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start">
+      <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+        <section style="border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span style="width: 28px; height: 28px; border-radius: 999px; background: linear-gradient(135deg, {{accent}}, #C026D3); color: #FFFFFF; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">1</span>
+            <h2 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; font-weight: 600; color: #F7F7FB">Quando alguém comentar em</h2>
+            <span style="margin-left: auto; color: #9C9CB4; font-size: 13px">Conta: <strong style="color: #E9E9F2; font-weight: 600">@lojaoutlet</strong></span>
+          </div>
+          <div role="radiogroup" aria-label="Publicações" style="display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); align-self: flex-start">
+            <sc-for list="{{scopes}}" as="s" hint-placeholder-count="3">
+              <button type="button" role="radio" aria-checked="{{s.aria}}" onClick="{{s.pick}}" style="height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: {{s.bg}}; color: {{s.color}}; font-weight: 500; font-size: 14px; cursor: pointer; box-shadow: {{s.shadow}}">{{s.label}}</button>
+            </sc-for>
+          </div>
+          <sc-if value="{{showGrid}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 12px">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+                <span style="color: #C4B5FD; font-weight: 600">{{selectedLabel}}</span>
+                <div style="display: flex; gap: 8px">
+                  <button type="button" onClick="{{clearSel}}" class="e-ghost" style="height: 36px; padding: 0 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: transparent; color: #E9E9F2; font-size: 13px; cursor: pointer">Limpar seleção</button>
+                  <button type="button" class="e-ghost" style="height: 36px; padding: 0 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: transparent; color: #E9E9F2; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px">
+                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"></path></svg>
+                    Atualizar
+                  </button>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px">
+                <sc-for list="{{posts}}" as="p" hint-placeholder-count="8">
+                  <button type="button" class="e-post" aria-pressed="{{p.aria}}" aria-label="{{p.label}}" onClick="{{p.pick}}" style="position: relative; aspect-ratio: 4 / 5; border: 2px solid {{p.border}}; border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer; background: {{p.bg}}; box-shadow: {{p.glow}}">
+                    <span style="position: absolute; inset: 0; background: {{p.shade}}"></span>
+                    <span style="position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 7px; border: 2px solid #FFFFFF; background: {{p.check}}; display: flex; align-items: center; justify-content: center; color: #FFFFFF">
+                      <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" opacity="{{p.tick}}"><path d="M20 6L9 17l-5-5"></path></svg>
+                    </span>
+                    <span style="position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 5px; color: #FFFFFF; font-size: 11px; font-weight: 600">
+                      <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{p.kindIcon}}"></path></svg>{{p.comments}}
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </section>
+
+        <section style="border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span style="width: 28px; height: 28px; border-radius: 999px; background: linear-gradient(135deg, {{accent}}, #C026D3); color: #FFFFFF; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">2</span>
+            <h2 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; font-weight: 600; color: #F7F7FB">E o comentário tiver</h2>
+          </div>
+          <div role="radiogroup" aria-label="Palavra-chave" style="display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); align-self: flex-start">
+            <sc-for list="{{kwModes}}" as="k" hint-placeholder-count="2">
+              <button type="button" role="radio" aria-checked="{{k.aria}}" onClick="{{k.pick}}" style="height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: {{k.bg}}; color: {{k.color}}; font-weight: 500; font-size: 14px; cursor: pointer; box-shadow: {{k.shadow}}">{{k.label}}</button>
+            </sc-for>
+          </div>
+          <sc-if value="{{showKeywords}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); background: rgba(0,0,0,.2)">
+              <span style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: rgba(167,139,250,.16); color: #DDD6FE; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px">LINK
+                <button type="button" aria-label="Remover LINK" style="width: 20px; height: 20px; border: 0; padding: 0; background: transparent; color: #C4B5FD; cursor: pointer">×</button>
+              </span>
+              <span style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: rgba(167,139,250,.16); color: #DDD6FE; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px">CATALOGO
+                <button type="button" aria-label="Remover CATALOGO" style="width: 20px; height: 20px; border: 0; padding: 0; background: transparent; color: #C4B5FD; cursor: pointer">×</button>
+              </span>
+              <label style="flex: 1 1 160px; display: flex">
+                <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Nova palavra-chave</span>
+                <input type="text" placeholder="Digite e aperte Enter" style="flex: 1; min-width: 0; height: 32px; border: 0; outline: none; background: transparent; color: #E9E9F2; font-size: 14px">
+              </label>
+            </div>
+          </sc-if>
+        </section>
+
+        <section style="border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); padding: 20px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span style="width: 28px; height: 28px; border-radius: 999px; background: linear-gradient(135deg, {{accent}}, #C026D3); color: #FFFFFF; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">3</span>
+            <h2 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; font-weight: 600; color: #F7F7FB">A pessoa recebe</h2>
+          </div>
+          <sc-for list="{{steps}}" as="st" hint-placeholder-count="3">
+            <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06)">
+              <div style="display: flex; align-items: center; gap: 12px">
+                <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                  <span style="font-weight: 600; color: #F7F7FB">{{st.title}}</span>
+                  <span style="color: #9C9CB4; font-size: 13px">{{st.help}}</span>
+                </div>
+                <button type="button" aria-pressed="{{st.pressed}}" aria-label="Ligar ou desligar: {{st.title}}" onClick="{{st.toggle}}" style="margin-left: auto; width: 48px; height: 44px; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0">
+                  <span class="e-sw" style="width: 42px; height: 24px; border-radius: 999px; background: {{st.track}}; box-shadow: {{st.glow}}; display: flex; align-items: center; padding: 3px; box-sizing: border-box">
+                    <span class="e-knob" style="width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; margin-left: {{st.knob}}"></span>
+                  </span>
+                </button>
+              </div>
+              <sc-if value="{{st.on}}" hint-placeholder-val="{{ true }}">
+                <div style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.06); color: #E9E9F2; line-height: 1.5; white-space: pre-line">{{st.text}}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06)">
+            <span style="font-weight: 600; color: #F7F7FB">Mensagem principal</span>
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="color: #9C9CB4; font-size: 13px">Texto da DM ({link} vira o link rastreado, {username} o @ da pessoa)</span>
+              <textarea rows="3" style="resize: vertical; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: rgba(0,0,0,.25); color: #E9E9F2; font-size: 14px; line-height: 1.5; outline: none">Oi {username}! Aqui está o catálogo completo: {link}</textarea>
+            </label>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch">
+              <div style="width: 96px; height: 96px; border-radius: 12px; background: linear-gradient(135deg, #7C3AED, #F97316); position: relative">
+                <button type="button" aria-label="Remover imagem" style="position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 8px; border: 0; background: rgba(0,0,0,.55); color: #FFFFFF; cursor: pointer">×</button>
+                <span style="position: absolute; left: 6px; bottom: 6px; padding: 2px 6px; border-radius: 6px; background: rgba(0,0,0,.55); color: #FFFFFF; font-size: 11px">Imagem</span>
+              </div>
+              <button type="button" class="e-ghost" style="width: 96px; height: 96px; border-radius: 12px; border: 1.5px dashed rgba(167,139,250,.45); background: transparent; color: #C4B5FD; font-size: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+                Imagem ou vídeo
+              </button>
+            </div>
+            <span style="color: {{mediaNoteColor}}; font-size: 13px">{{mediaNote}}</span>
+          </div>
+        </section>
+
+        <section style="border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); padding: 20px; display: flex; align-items: center; gap: 12px">
+          <span style="width: 28px; height: 28px; border-radius: 999px; background: linear-gradient(135deg, {{accent}}, #C026D3); color: #FFFFFF; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <h2 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; font-weight: 600; color: #F7F7FB">Responder também no comentário</h2>
+            <span style="color: #9C9CB4; font-size: 13px">Ex.: "Te chamei no direct!", com variações para não repetir sempre igual.</span>
+          </div>
+          <button type="button" aria-pressed="{{reply.pressed}}" aria-label="Ligar ou desligar a resposta pública" onClick="{{reply.toggle}}" style="margin-left: auto; width: 48px; height: 44px; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0">
+            <span class="e-sw" style="width: 42px; height: 24px; border-radius: 999px; background: {{reply.track}}; box-shadow: {{reply.glow}}; display: flex; align-items: center; padding: 3px; box-sizing: border-box">
+              <span class="e-knob" style="width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; margin-left: {{reply.knob}}"></span>
+            </span>
+          </button>
+        </section>
+      </div>
+
+      <aside aria-label="Prévia da conversa" style="flex: 1 1 300px; max-width: 360px; min-width: 0; border-radius: 28px; border: 1px solid rgba(255,255,255,.1); background: #0E0E16; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 30px 80px -30px rgba(124,58,237,.55)">
+        <div style="display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,.06)">
+          <div style="width: 32px; height: 32px; border-radius: 999px; background: linear-gradient(135deg, #7C3AED, #F97316)"></div>
+          <div>
+            <div style="font-weight: 600; font-size: 13px; color: #F7F7FB">lojaoutlet</div>
+            <div style="color: #9C9CB4; font-size: 12px">Prévia do Direct</div>
+          </div>
+        </div>
+        <sc-if value="{{openingOn}}" hint-placeholder-val="{{ true }}">
+          <div style="align-self: flex-start; max-width: 88%; display: flex; flex-direction: column; gap: 6px">
+            <div style="padding: 10px 12px; border-radius: 16px 16px 16px 4px; background: rgba(255,255,255,.08); color: #E9E9F2; line-height: 1.45">Oi! Vi seu comentário. Toque no botão abaixo para receber o catálogo.</div>
+            <span style="align-self: flex-start; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(167,139,250,.5); color: #DDD6FE; font-weight: 600; font-size: 13px">Quero o catálogo</span>
+          </div>
+          <div style="align-self: flex-end; padding: 8px 12px; border-radius: 16px 16px 4px 16px; background: linear-gradient(135deg, {{accent}}, #C026D3); color: #FFFFFF; font-size: 13px">Quero o catálogo</div>
+        </sc-if>
+        <sc-if value="{{mediaVisible}}" hint-placeholder-val="{{ true }}">
+          <div style="align-self: flex-start; width: 70%; aspect-ratio: 4 / 5; border-radius: 16px; background: linear-gradient(135deg, #7C3AED, #F97316)"></div>
+        </sc-if>
+        <div style="align-self: flex-start; max-width: 88%; padding: 10px 12px; border-radius: 16px 16px 16px 4px; background: rgba(255,255,255,.08); color: #E9E9F2; line-height: 1.45">Oi @maria! Aqui está o catálogo completo: <span style="color: #C4B5FD; text-decoration: underline">chatintegrai.com/r/x7k2</span></div>
+        <sc-if value="{{thanksOn}}" hint-placeholder-val="{{ false }}">
+          <div style="align-self: flex-start; max-width: 88%; padding: 10px 12px; border-radius: 16px 16px 16px 4px; background: rgba(255,255,255,.08); color: #E9E9F2; line-height: 1.45">Obrigado pelo interesse! Qualquer dúvida, é só chamar aqui.</div>
+        </sc-if>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7C3AED","options":["#7C3AED","#2563EB","#059669","#EA580C"]},"$preview":{"width":1280,"height":1420}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { scope: 'pick', kw: 'kw', sel: { p1: true, p3: true, p6: true }, opening: true, follow: false, thanks: false, reply: true };
+  }
+  sw(on) {
+    var accent = this.props.accent ?? '#7C3AED';
+    return {
+      track: on ? 'linear-gradient(135deg, ' + accent + ', #C026D3)' : 'rgba(255,255,255,.12)',
+      glow: on ? '0 0 14px rgba(168,85,247,.5)' : 'none',
+      knob: on ? '18px' : '0px',
+      pressed: on ? 'true' : 'false'
+    };
+  }
+  seg(active) {
+    var accent = this.props.accent ?? '#7C3AED';
+    return {
+      aria: active ? 'true' : 'false',
+      bg: active ? 'linear-gradient(135deg, ' + accent + ', #C026D3)' : 'transparent',
+      color: active ? '#FFFFFF' : '#A9A9C0',
+      shadow: active ? '0 0 16px rgba(168,85,247,.4)' : 'none'
+    };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var accent = this.props.accent ?? '#7C3AED';
+    var REEL = 'M4 4h16v16H4zM4 9h16M9 4l3 5M15 4l3 5M10.5 13v4l3.5-2z';
+    var CAROUSEL = 'M7 7h12v12H7zM3 3h12v2M3 3v12h2';
+    var PHOTO = 'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4';
+    var GRADS = [
+      'linear-gradient(135deg, #7C3AED, #F97316)', 'linear-gradient(160deg, #0EA5E9, #7C3AED)',
+      'linear-gradient(135deg, #DB2777, #F59E0B)', 'linear-gradient(135deg, #10B981, #0EA5E9)',
+      'linear-gradient(160deg, #F97316, #DB2777)', 'linear-gradient(135deg, #6366F1, #EC4899)',
+      'linear-gradient(135deg, #14B8A6, #6366F1)', 'linear-gradient(160deg, #A855F7, #0EA5E9)'
+    ];
+    var KINDS = [['reel', REEL, 'reel'], ['carrossel', CAROUSEL, 'carrossel'], ['foto', PHOTO, 'foto']];
+    var posts = [];
+    for (var i = 1; i <= 8; i++) {
+      (function (i) {
+        var id = 'p' + i;
+        var on = !!s.sel[id];
+        var k = KINDS[i % 3];
+        posts.push({
+          aria: on ? 'true' : 'false',
+          label: 'Publicação ' + i + ', ' + k[2] + (on ? ', selecionada' : ''),
+          bg: GRADS[i - 1],
+          border: on ? '#C4B5FD' : 'transparent',
+          glow: on ? '0 0 22px rgba(168,85,247,.55)' : 'none',
+          shade: on ? 'rgba(124,58,237,.18)' : 'rgba(0,0,0,.18)',
+          check: on ? 'linear-gradient(135deg, ' + accent + ', #C026D3)' : 'rgba(0,0,0,.25)',
+          tick: on ? '1' : '0',
+          kindIcon: k[1],
+          comments: String(12 + i * 7),
+          pick: function () {
+            var next = Object.assign({}, self.state.sel);
+            if (next[id]) { delete next[id]; } else { next[id] = true; }
+            self.setState({ sel: next });
+          }
+        });
+      })(i);
+    }
+    var n = Object.keys(s.sel).length;
+    var scopes = [['all', 'Todas as publicações'], ['pick', 'Escolher publicações'], ['next', 'Próximo reel']].map(function (o) {
+      return Object.assign({ label: o[1], pick: function () { self.setState({ scope: o[0] }); } }, self.seg(s.scope === o[0]));
+    });
+    var kwModes = [['kw', 'Uma ou mais palavras'], ['any', 'Qualquer comentário']].map(function (o) {
+      return Object.assign({ label: o[1], pick: function () { self.setState({ kw: o[0] }); } }, self.seg(s.kw === o[0]));
+    });
+    var STEPS = [
+      ['opening', 'DM de abertura com botão', 'A primeira mensagem, com um botão. Imagens e vídeos só vão depois do toque.', 'Oi! Vi seu comentário. Toque no botão abaixo para receber o catálogo.\nBotão: Quero o catálogo'],
+      ['follow', 'Exigir que siga a conta', 'O conteúdo só é liberado para quem segue @lojaoutlet.', 'Para liberar, siga @lojaoutlet e toque em "Já sigo".'],
+      ['thanks', 'Mensagem de agradecimento', 'Enviada alguns minutos depois da mensagem principal.', 'Obrigado pelo interesse! Qualquer dúvida, é só chamar aqui.']
+    ];
+    var steps = STEPS.map(function (st) {
+      var on = !!s[st[0]];
+      return Object.assign({
+        title: st[1], help: st[2], text: st[3], on: on,
+        toggle: function () { var u = {}; u[st[0]] = !on; self.setState(u); }
+      }, self.sw(on));
+    });
+    var who = s.kw === 'kw' ? 'comentar LINK ou CATALOGO' : 'fizer qualquer comentário';
+    var where = s.scope === 'all' ? 'em qualquer publicação' : (s.scope === 'next' ? 'no próximo reel que você publicar' : (n === 0 ? 'nas publicações que você escolher' : (n === 1 ? 'em 1 publicação escolhida' : 'em ' + n + ' publicações escolhidas')));
+    var gets = s.opening ? 'recebe uma DM com um botão e, ao tocar, a imagem e o link' : 'recebe uma DM com o link';
+    var summary = 'Quando alguém ' + who + ' ' + where + ', a pessoa ' + gets + (s.follow ? ' (só se seguir a conta)' : '') + (s.reply ? ', e o comentário é respondido publicamente.' : '.');
+    var reply = Object.assign({ toggle: function () { self.setState({ reply: !s.reply }); } }, this.sw(s.reply));
+    var NAV = [
+      ['Dashboard', 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z'],
+      ['Automações', 'M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
+      ['Contas', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0'],
+      ['Logs de DMs', 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'],
+      ['Configurações', 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'],
+      ['API e MCP', 'M16 18l6-6-6-6M8 6l-6 6 6 6'],
+      ['Diagnóstico', 'M22 12h-4l-3 9L9 3l-3 9H2']
+    ];
+    var nav = NAV.map(function (x) {
+      var active = x[0] === 'Automações';
+      return { label: x[0], d: x[1], color: active ? '#F7F7FB' : '#A9A9C0', bg: active ? 'rgba(124,58,237,.18)' : 'transparent', shadow: active ? 'inset 0 0 0 1px rgba(167,139,250,.28)' : 'none' };
+    });
+    return {
+      accent: accent, nav: nav, posts: posts, scopes: scopes, kwModes: kwModes, steps: steps, reply: reply,
+      showGrid: s.scope === 'pick',
+      showKeywords: s.kw === 'kw',
+      showRisk: s.kw === 'any' && s.scope === 'all',
+      selectedLabel: n === 0 ? 'Nenhuma marcada: vale para todas' : (n === 1 ? '1 selecionada' : n + ' selecionadas'),
+      clearSel: function () { self.setState({ sel: {} }); },
+      summary: summary,
+      openingOn: s.opening,
+      mediaVisible: s.opening,
+      thanksOn: s.thanks,
+      mediaNote: s.opening ? 'A imagem vai depois que a pessoa tocar no botão da DM de abertura.' : 'Ligue a DM de abertura para enviar imagens e vídeos. A Meta só aceita texto na primeira resposta a um comentário.',
+      mediaNoteColor: s.opening ? '#9C9CB4' : '#FCA5A5'
+    };
+  }
+}
+</script>
+</body>
+</html>
