@@ -44,7 +44,7 @@ Unlike Vercel/Railway, Dokploy's Nixpacks builder reads `package.json` scripts a
 **Web app:**
 ```
 NIXPACKS_BUILD_CMD=npx prisma generate && next build
-NIXPACKS_START_CMD=npx prisma migrate deploy && npm start
+NIXPACKS_START_CMD=npm start
 ```
 
 **Worker app:**
@@ -61,7 +61,7 @@ This is the one most likely to trip people up: **`prisma migrate deploy` cannot 
 Error: P1001: Can't reach database server at `<db-service-name>:5432`
 ```
 
-if you try to run migrations as part of the build (e.g. via the `vercel-build` script, which bundles `prisma generate && prisma migrate deploy && next build` together). The fix is the build/start command split shown above — `prisma generate` and `next build` happen at build time (no DB needed), while `prisma migrate deploy` runs in the start command, once the container is actually live and on the network.
+if you try to run migrations as part of the build (e.g. via the `vercel-build` script, which bundles `prisma generate && prisma migrate deploy && next build` together). The fix is the build/start command split shown above — `prisma generate` and `next build` happen at build time (no DB needed), while `prisma migrate deploy` runs at start, once the container is actually live and on the network. Both `npm start` and `npm run worker` already begin with `prisma migrate deploy`, so nothing has to be added to the start commands; Prisma's database lock makes each migration apply once when both start together.
 
 ## Gotcha #4 — Nothing runs the cron jobs
 

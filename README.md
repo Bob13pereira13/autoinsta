@@ -69,7 +69,7 @@ npm install
 cp .env.example .env        # preencha os valores (o arquivo explica cada um)
 docker-compose up -d        # Postgres e Redis locais
 npm run db:generate
-npm run db:migrate
+npm run db:migrate          # o `npm run dev` não migra; o `start` e o `worker` migram sozinhos
 npm run dev                 # app web em http://localhost:3000
 npm run worker              # em outro terminal: é ele que envia as DMs
 ```
@@ -78,9 +78,24 @@ São sempre **três processos** em produção:
 
 | Processo | Comando | Função |
 |---|---|---|
-| Web | `npm run start` (após `npm run build`) | painel, OAuth e webhooks |
-| Worker | `npm run worker` | envia DMs e respostas, respeitando os limites da Meta |
-| Rotinas diárias | Vercel Cron (`vercel.json`) ou `sh scripts/cron.sh` | renova tokens do Login do Instagram, aplica a retenção de dados, reprocessa exclusões, apaga mídias abandonadas |
+| Web | `npm run start` (após `npm run build`) | aplica as migrações pendentes e sobe o painel, OAuth e webhooks |
+| Worker | `npm run worker` | aplica as migrações pendentes e envia DMs e respostas, respeitando os limites da Meta |
+| Rotinas diárias | Vercel Cron (`vercel.json`) ou `sh scripts/cron.sh` | renova tokens do Login do Instagram, aplica a retenção de dados, reprocessa exclusões, apaga mídias abandonadas (só chama o web; não migra) |
+
+### Atualizando (deploy)
+
+Depois do push na `main`, **reimplante o web e o worker** (no Coolify, Redeploy em cada um). Não precisa
+de terminal nem de rodar migração à mão:
+
+- Cada um roda `prisma migrate deploy` antes de iniciar. A trava do Prisma no banco faz cada migração ser
+  aplicada uma vez só, mesmo com os dois subindo juntos: um aplica, o outro espera e segue.
+- Se uma migração falhar, o processo sai com erro e a versão nova não sobe. Deixe o **health check** do
+  web ligado no Coolify para a versão antiga continuar no ar nesse caso.
+- Exceção que pede terminal: a migração que falhou fica marcada no banco e todo start seguinte para (erro
+  P3009), mesmo depois de corrigida, até alguém rodar uma vez, no terminal do contêiner do web,
+  `npx prisma migrate resolve --rolled-back <nome_da_migração>`. Depois é só reimplantar.
+- Durante o deploy a versão antiga e a nova rodam juntas por alguns segundos. Por isso toda migração
+  precisa funcionar com o código anterior: regras no [`AGENTS.md`](AGENTS.md).
 
 ### Imagens e vídeos (armazenamento)
 

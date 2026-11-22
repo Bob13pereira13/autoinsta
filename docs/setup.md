@@ -3,6 +3,11 @@
 > **o provedor Zernio foi removido** (ignore as seções sobre ele), as páginas legais ficam em
 > `/privacidade`, `/termos` e `/exclusao-dados`, o cadastro é fechado (`npm run user -- create`) e o passo a
 > passo atualizado da Meta está em [`GUIA_META_APP_REVIEW.md`](../GUIA_META_APP_REVIEW.md).
+>
+> **Deploy e migrações.** O web (`npm run start`) e o worker (`npm run worker`) aplicam as migrações
+> pendentes ao subir (`prisma migrate deploy`). Depois do push, o deploy é só reimplantar o web e o worker,
+> sem terminal. Detalhes, a exceção (migração que falhou) e as regras para escrever migrações: README,
+> "Atualizando (deploy)", e `AGENTS.md`.
 
 # Setup
 
@@ -61,7 +66,7 @@ Do Railway first, because Vercel needs the database URLs from it.
    Build Command:  npm run db:generate
    Start Command:  npm run worker
    ```
-   The worker only needs the generated Prisma client, not `next build`. Do not leave the build as the default `npm run build`: it runs `next build` needlessly, and any build step that reaches the database (like `prisma migrate deploy`) fails here, because the worker cannot connect to Postgres at build time. Migrations are applied by the web app's `vercel-build` (Step 3) and by the manual `db:migrate` below, never by the worker.
+   The worker only needs the generated Prisma client, not `next build`. Do not leave the build as the default `npm run build`: it runs `next build` needlessly, and any build step that reaches the database (like `prisma migrate deploy`) fails here, because the worker cannot connect to Postgres at build time. Migrations run at start instead: `npm run worker` is `prisma migrate deploy && exec tsx worker/dm-worker.ts`, so the worker applies pending migrations every time it starts, before taking jobs. On Vercel the web app's `vercel-build` applies them too; Prisma's database lock makes each migration apply once, and the other process just finds nothing pending.
 6. Open the worker service's Variables and add the shared environment variables and any variables required by your chosen provider from the [table below](#environment-variables). For the worker, use Railway's internal database and Redis hostnames (they look like `postgres.railway.internal` and `redis.railway.internal`); inside Railway's network they are faster and free of egress. `NEXTAUTH_URL` is your Vercel domain. `ENCRYPTION_KEY` must be the exact same value you will use on Vercel.
 
 Getting the connection URLs. Open the Postgres service, then its Variables or Connect tab. You will see two URLs:
@@ -77,11 +82,13 @@ Vercel runs outside Railway's private network, so if you give Vercel an internal
 
 ### Step 2: Migrate the production database
 
-Run once from your machine, using the public Postgres URL:
+Nothing to run: the worker applies pending migrations when it starts (and so does `npm run start` on any host that runs the web app with it). Each later deploy is just redeploying the web app and the worker. If you want to apply them from your machine anyway, use the public Postgres URL:
 
 ```bash
 DATABASE_URL="postgresql://...proxy.rlwy.net.../railway" npm run db:migrate
 ```
+
+If a migration fails, the process exits with an error and the new version does not start. Prisma records the failure, and every later start stops with error P3009, even after the migration is fixed, until you run once `npx prisma migrate resolve --rolled-back <migration_name>` against that database. Write migrations that work with the code already running (add first, remove in a later deploy); the rules are in `AGENTS.md`.
 
 ### Step 3: Vercel (web app, and your domain)
 

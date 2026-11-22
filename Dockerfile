@@ -1,6 +1,8 @@
 # OpenReply — self-hosted Docker image
 #
-# Two runtime processes ship from this image:
+# Two runtime processes ship from this image. Both apply pending database
+# migrations first (`prisma migrate deploy`, see package.json): a deploy is just
+# redeploying them, and if a migration fails the process exits with an error.
 #   - web:    `npm run start`  → next start (needs .next + node_modules)
 #   - worker: `npm run worker` → tsx worker/dm-worker.ts (runs RAW TypeScript,
 #             not a bundled output — needs the generated Prisma client, the
@@ -20,6 +22,16 @@
 
 FROM node:20-slim AS build
 WORKDIR /app
+
+# `npm ci` downloads Prisma's migration engine for the OpenSSL it finds here.
+# node:20-slim ships none, so Prisma would guess 1.1.x, while the final image
+# has OpenSSL 3 (pulled in by ca-certificates). Web and worker run
+# `prisma migrate deploy` on every start, and with the wrong engine it would
+# download the right one from binaries.prisma.sh on each start, and fail to
+# start without internet. Installing OpenSSL here puts the right one in the image.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 RUN npm ci
