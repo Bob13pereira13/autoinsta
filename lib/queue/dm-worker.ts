@@ -381,19 +381,26 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       // A comment left on an ad carries the ad's own media id, while the
       // campaign is bound to the post the ad was created from, so both ids
       // have to be considered or the comment is dropped without a trace.
+      //
+      // An automation can be limited to several posts (AutomationPost); the
+      // legacy single postId is still matched for rows written by older code.
       OR: [
+        { posts: { some: { postId: { in: originalMediaId ? [mediaId, originalMediaId] : [mediaId] } } } },
         { postId: mediaId },
         ...(originalMediaId ? [{ postId: originalMediaId }] : []),
         { matchAnyPost: true },
       ],
       isActive: true,
+      // A deactivated account (Accounts tab) answers nothing.
       instagramAccount: {
         instagramId: instagramAccountId,
+        automationsEnabled: true,
       },
     },
     include: {
       instagramAccount: true,
       workspace: true,
+      posts: { select: { postId: true } },
       trackedLinks: {
         select: {
           slug: true,
@@ -417,9 +424,11 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     mediaId,
     ...(originalMediaId ? { originalMediaId } : {}),
   };
-  const selection = selectAutomation(candidates, commentEvent, {
-    stickyAutomationId: await findStickyAutomationId(commentId, candidates.map((a) => a.id)),
-  });
+  const selection = selectAutomation(
+    candidates.map((a) => Object.assign(a, { postIds: (a.posts ?? []).map((p) => p.postId) })),
+    commentEvent,
+    { stickyAutomationId: await findStickyAutomationId(commentId, candidates.map((a) => a.id)) }
+  );
   const automations = selection ? [selection.automation] : [];
 
   for (const automation of automations) {
@@ -991,7 +1000,9 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   const fromOpeningDm = marker === "open";
 
   const automation = await prisma.automation.findFirst({
-    where: { id: automationId, isActive: true, ...connectionScope(job.data) },
+    // Paused automation or deactivated account: button taps and scheduled
+    // thank-you messages are dropped too.
+    where: { id: automationId, isActive: true, instagramAccount: { automationsEnabled: true }, ...connectionScope(job.data) },
     include: {
       instagramAccount: true,
       workspace: true,
@@ -1330,7 +1341,9 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
   const { instagramAccountId, userId, automationId, commenterName } = job.data;
 
   const automation = await prisma.automation.findFirst({
-    where: { id: automationId, isActive: true, ...connectionScope(job.data) },
+    // Paused automation or deactivated account: button taps and scheduled
+    // thank-you messages are dropped too.
+    where: { id: automationId, isActive: true, instagramAccount: { automationsEnabled: true }, ...connectionScope(job.data) },
     include: { instagramAccount: true, media: MEDIA_INCLUDE },
   });
 
@@ -1399,7 +1412,8 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
       ...connectionScope(job.data),
       type: channel === "DIRECT" ? "DIRECT" : "STORIES",
       isActive: true,
-      instagramAccount: { instagramId: instagramAccountId },
+      // A deactivated account (Accounts tab) answers nothing.
+      instagramAccount: { instagramId: instagramAccountId, automationsEnabled: true },
     },
     include: {
       instagramAccount: true,

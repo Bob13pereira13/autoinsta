@@ -327,6 +327,8 @@ describe("DM Worker — comments left on an ad", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           OR: [
+            // Marked posts (AutomationPost) — the ad's and the original's id.
+            { posts: { some: { postId: { in: ["ad_media_999", "media_101"] } } } },
             { postId: "ad_media_999" },
             { postId: "media_101" },
             { matchAnyPost: true },
@@ -348,13 +350,19 @@ describe("DM Worker — Full Pipeline", () => {
       where: {
         // Comments only fire Comments automations.
         type: "COMMENTS",
-        OR: [{ postId: "media_101" }, { matchAnyPost: true }],
+        OR: [
+          { posts: { some: { postId: { in: ["media_101"] } } } },
+          { postId: "media_101" },
+          { matchAnyPost: true },
+        ],
         isActive: true,
-        instagramAccount: { instagramId: "ig_456" },
+        // A deactivated account answers nothing.
+        instagramAccount: { instagramId: "ig_456", automationsEnabled: true },
       },
       include: {
         instagramAccount: true,
         workspace: true,
+        posts: { select: { postId: true } },
         trackedLinks: {
           select: {
             slug: true,

@@ -113,6 +113,50 @@ describe("priority: one reply per event", () => {
   });
 });
 
+describe("automations limited to several marked posts", () => {
+  it("fire on any of their marked posts and nowhere else", () => {
+    const marked = auto({ id: "marked", keywords: ["LINK"], postIds: ["p1", "p2", "p3"] });
+    expect(selectAutomation([marked], comment("LINK", "p2"))?.automation.id).toBe("marked");
+    expect(selectAutomation([marked], comment("LINK", "p3"))?.automation.id).toBe("marked");
+    expect(selectAutomation([marked], comment("LINK", "p9"))).toBeNull();
+  });
+
+  it("beat an all-posts automation on a marked post, even when it is newer", () => {
+    const all = auto({ id: "all", keywords: ["LINK"], matchAnyPost: true });
+    const marked = auto({ id: "marked", keywords: ["LINK"], postIds: ["p1", "p2"] });
+    expect(selectAutomation([all, marked], comment("LINK", "p2"))?.automation.id).toBe("marked");
+    // On a post it did not mark, the all-posts automation answers.
+    expect(selectAutomation([all, marked], comment("LINK", "p7"))?.automation.id).toBe("all");
+  });
+
+  it("two automations marked on the same post: keyword first, then the oldest", () => {
+    const olderAny = auto({ id: "older-any", matchAnyWord: true, postIds: ["p1"] });
+    const olderKw = auto({ id: "older-kw", keywords: ["LINK"], postIds: ["p1", "p2"] });
+    const newerKw = auto({ id: "newer-kw", keywords: ["LINK"], postIds: ["p5", "p1"] });
+    expect(selectAutomation([newerKw, olderAny, olderKw], comment("LINK", "p1"))?.automation.id).toBe("older-kw");
+    // Without the keyword only the any-word one matches.
+    expect(selectAutomation([newerKw, olderAny, olderKw], comment("hello", "p1"))?.automation.id).toBe("older-any");
+  });
+
+  it("keyword on all posts still beats no keyword on a marked post", () => {
+    const allKw = auto({ id: "all-kw", keywords: ["LINK"], matchAnyPost: true });
+    const markedAny = auto({ id: "marked-any", matchAnyWord: true, postIds: ["p1"] });
+    expect(selectAutomation([markedAny, allKw], comment("LINK", "p1"))?.automation.id).toBe("all-kw");
+  });
+
+  it("matches an ad comment through any of the marked original posts", () => {
+    const marked = auto({ id: "marked", keywords: ["LINK"], postIds: ["p1", "p2"] });
+    const event: TriggerEvent = { kind: "COMMENT", text: "LINK", mediaId: "ad_9", originalMediaId: "p2" };
+    expect(selectAutomation([marked], event)?.automation.id).toBe("marked");
+  });
+
+  it("still honours the legacy single postId written by older code", () => {
+    const legacy = auto({ id: "legacy", keywords: ["LINK"], postId: "p1" });
+    const all = auto({ id: "all", keywords: ["LINK"], matchAnyPost: true });
+    expect(selectAutomation([all, legacy], comment("LINK", "p1"))?.automation.id).toBe("legacy");
+  });
+});
+
 describe("guarded automations", () => {
   it("are the Stories/Direct automations without keywords", () => {
     expect(isGuardedAutomation({ type: "DIRECT", matchAnyWord: true })).toBe(true);

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client";
+import { setAutomationPosts } from "@/lib/automation/posts";
 import {
   createInstagramContext,
   hasInstagramCredentials,
@@ -76,13 +77,17 @@ export async function attachPendingNextReels(): Promise<AttachNextReelResult> {
       );
       if (!nextReel) continue;
 
-      await prisma.automation.update({
-        where: { id: automation.id },
-        data: {
-          postId: nextReel.id,
-          postUrl: nextReel.permalink ?? null,
-          pendingNextReel: false,
-        },
+      // The reel becomes the automation's single marked post (AutomationPost),
+      // with postId/postUrl mirroring it. Binding only records the reel and
+      // sends nothing, so it also runs for deactivated accounts.
+      await prisma.$transaction(async (tx) => {
+        await tx.automation.update({
+          where: { id: automation.id },
+          data: { pendingNextReel: false, matchAnyPost: false },
+        });
+        await setAutomationPosts(tx, automation.id, [
+          { id: nextReel.id, url: nextReel.permalink ?? null, publishedAt: nextReel.timestamp ?? null },
+        ]);
       });
       bound += 1;
     }

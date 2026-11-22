@@ -47,8 +47,37 @@ const LOOKBACK_HOURS = Number(process.env.COMMENT_POLL_LOOKBACK_HOURS ?? 72);
 // Hard cap on how many new comments a single campaign can enqueue per sweep, so
 // a viral post drains gradually instead of bursting into the comment API.
 const MAX_NEW_PER_SWEEP = Number(process.env.COMMENT_POLL_MAX_PER_SWEEP ?? 30);
-// For "any post" campaigns, how many recent posts to scan.
+// For "any post" campaigns, how many recent posts to scan; campaigns limited to
+// marked posts scan at most this many of them too, most recently published
+// first, so a 100-post selection costs no more than "any post".
 const RECENT_MEDIA_LIMIT = 10;
+// "Reply to people who commented in the last 72h": how far before activation.
+export const RECENT_COMMENTS_BACKFILL_HOURS = 72;
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * The oldest comment a campaign may answer. Comments made before the campaign
+ * became active (created or resumed) or before its account was reactivated
+ * are ignored, so pausing never queues up a backlog that floods people when
+ * it is switched back on. With replyToRecentComments, the campaign also takes
+ * comments made up to 72 hours before it was activated (the account's pause
+ * is still respected).
+ */
+export function commentCutoffMs(
+  automation: {
+    activeSince?: Date | null;
+    replyToRecentComments?: boolean | null;
+    instagramAccount: { automationsResumedAt?: Date | null };
+  },
+  lookbackSinceMs: number
+): number {
+  const activeSince = automation.activeSince?.getTime() ?? 0;
+  const fromActivation = automation.replyToRecentComments
+    ? activeSince - RECENT_COMMENTS_BACKFILL_HOURS * HOUR_MS
+    : activeSince;
+  const accountResumed = automation.instagramAccount.automationsResumedAt?.getTime() ?? 0;
+  return Math.max(lookbackSinceMs, fromActivation, accountResumed);
+}
 
 interface SweepStat {
   campaign: string;
@@ -69,13 +98,21 @@ function errMessage(error: unknown): string {
 /** One reconciliation pass across every active campaign. */
 export async function reconcileComments(): Promise<void> {
   const automations = await prisma.automation.findMany({
-    // Only Comments automations watch posts; Stories/Direct have no media.
-    where: { isActive: true, type: "COMMENTS" },
+    // Only Comments automations watch posts; Stories/Direct have no media. A
+    // deactivated account (Accounts tab) is not swept at all.
+    where: { isActive: true, type: "COMMENTS", instagramAccount: { automationsEnabled: true } },
     select: {
       id: true,
       name: true,
       postId: true,
+      posts: {
+        orderBy: [{ publishedAt: { sort: "desc", nulls: "last" } }, { position: "asc" }],
+        take: RECENT_MEDIA_LIMIT,
+        select: { postId: true },
+      },
       matchAnyPost: true,
+      activeSince: true,
+      replyToRecentComments: true,
       matchAnyWord: true,
       keywords: true,
       wholeWordMatch: true,
@@ -91,6 +128,7 @@ export async function reconcileComments(): Promise<void> {
           metaLogin: true,
           workspaceId: true,
           zernioAccountId: true,
+          automationsResumedAt: true,
         },
       },
     },
@@ -102,7 +140,7 @@ export async function reconcileComments(): Promise<void> {
   for (const automation of automations) {
     const stat = await sweepCampaign({
       automation: automation,
-      sinceMs: sinceMs,
+      sinceMs: commentCutoffMs(automation, sinceMs),
       tokenCache: tokenCache,
     }).catch(
       (error): SweepStat => ({
@@ -127,6 +165,7 @@ async function sweepCampaign({
     id: string;
     name: string;
     postId: string | null;
+    posts?: Array<{ postId: string }>;
     matchAnyPost: boolean;
     matchAnyWord: boolean;
     keywords: string[];
@@ -173,28 +212,33 @@ async function sweepCampaign({
     return stat;
   }
 
-  // Which media this campaign covers: its own post, or the recent feed if it
-  // matches any post.
-  const mediaIds: string[] = [];
-  if (automation.postId) {
-    mediaIds.push(automation.postId);
-    mediaIds.push(...(await adMediaFor(automation.postId)));
+  // Which media this campaign covers: its marked posts (and their ad copies),
+  // or the recent feed if it matches any post. `post` is set for an ad copy:
+  // the campaign is bound to the post the ad was made from.
+  const targets: Array<{ mediaId: string; post?: string }> = [];
+  const marked = (automation.posts ?? []).map((p) => p.postId);
+  if (automation.postId && !marked.includes(automation.postId)) marked.push(automation.postId);
+  if (marked.length) {
+    for (const post of marked.slice(0, RECENT_MEDIA_LIMIT)) {
+      targets.push({ mediaId: post });
+      for (const ad of await adMediaFor(post)) targets.push({ mediaId: ad, post });
+    }
   } else if (automation.matchAnyPost) {
     try {
       const media = await getUserMedia({
         context: accessToken,
         limit: RECENT_MEDIA_LIMIT,
       });
-      mediaIds.push(...media.map((m) => m.id));
+      targets.push(...media.map((m) => ({ mediaId: m.id })));
     } catch (error) {
       stat.errors.push(`Media list: ${errMessage(error)}`);
     }
   }
-  if (mediaIds.length === 0) return stat;
+  if (targets.length === 0) return stat;
 
   const queue = getDMQueue();
 
-  for (const mediaId of mediaIds) {
+  for (const { mediaId, post } of targets) {
     let comments: InstagramComment[];
     try {
       comments = await getRecentMediaComments({
@@ -212,6 +256,8 @@ async function sweepCampaign({
     const needsAction = comments.filter((c) => {
       const authorId = c.from?.id;
       if (!authorId || authorId === account.instagramId) return false;
+      // Made before the campaign (or its account) became active: ignored.
+      if (c.timestamp && Date.parse(c.timestamp) < sinceMs) return false;
 
       const matched = automation.matchAnyWord
         ? true
@@ -284,10 +330,7 @@ async function sweepCampaign({
         // the ad was made from: without this the worker matches nothing and
         // drops the comment, so the sweep would enqueue it again every five
         // minutes and never deliver it.
-        originalMediaId:
-          automation.postId && mediaId !== automation.postId
-            ? automation.postId
-            : undefined,
+        originalMediaId: post,
         source: "POLLING",
       });
       stat.enqueued += 1;

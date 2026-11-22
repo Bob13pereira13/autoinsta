@@ -11,8 +11,10 @@ import { matchKeywords } from "@/lib/utils/keyword-matcher";
  * 2. Must match: keyword automations need a keyword hit; automations without
  *    keywords ("any word") match anything. A story mention has no text, so
  *    only automations without keywords fire on it.
- * 3. Priority: with keyword beats without keyword; for comments, a specific
- *    post beats "any post"; then the oldest automation; then the id.
+ * 3. Priority: with keyword beats without keyword; for comments, an
+ *    automation limited to marked posts that include this one beats "all
+ *    posts"; then the oldest automation; then the id. Two automations marked
+ *    on the same post follow the same order.
  * 4. Sticky: if this event already has a log for one of the matching
  *    automations (a retry, or a job queued before a deploy), that one wins.
  */
@@ -28,7 +30,10 @@ export interface SelectableAutomation {
   keywords: string[];
   matchAnyWord: boolean;
   wholeWordMatch: boolean;
-  postId: string | null;
+  /** Marked posts (AutomationPost rows). */
+  postIds?: string[];
+  /** Legacy single post; still honoured so rows written by older code match. */
+  postId?: string | null;
   matchAnyPost: boolean;
   triggerStoryReplies: boolean;
   triggerStoryMentions: boolean;
@@ -44,15 +49,21 @@ export function automationTypeFor(event: TriggerEvent): AutomationType {
   return event.channel === "DIRECT" ? "DIRECT" : "STORIES";
 }
 
+function boundPosts(automation: SelectableAutomation): string[] {
+  const ids = [...(automation.postIds ?? [])];
+  if (automation.postId && !ids.includes(automation.postId)) ids.push(automation.postId);
+  return ids;
+}
+
+/** The comment's post (or, for an ad, the post the ad was made from) is marked. */
+function marksPost(automation: SelectableAutomation, event: Extract<TriggerEvent, { kind: "COMMENT" }>): boolean {
+  const ids = boundPosts(automation);
+  return ids.includes(event.mediaId) || (event.originalMediaId !== undefined && ids.includes(event.originalMediaId));
+}
+
 function listensTo(automation: SelectableAutomation, event: TriggerEvent): boolean {
   if (automation.type !== automationTypeFor(event)) return false;
-  if (event.kind === "COMMENT") {
-    return (
-      automation.matchAnyPost ||
-      (automation.postId !== null &&
-        (automation.postId === event.mediaId || automation.postId === event.originalMediaId))
-    );
-  }
+  if (event.kind === "COMMENT") return automation.matchAnyPost || marksPost(automation, event);
   if (event.channel === "STORY_REPLY") return automation.triggerStoryReplies;
   if (event.channel === "STORY_MENTION") {
     return automation.triggerStoryMentions && automation.matchAnyWord;
@@ -61,7 +72,7 @@ function listensTo(automation: SelectableAutomation, event: TriggerEvent): boole
 }
 
 function isSpecificPost(automation: SelectableAutomation, event: TriggerEvent): boolean {
-  return event.kind === "COMMENT" && !automation.matchAnyPost && automation.postId !== null;
+  return event.kind === "COMMENT" && !automation.matchAnyPost && marksPost(automation, event);
 }
 
 export function selectAutomation<T extends SelectableAutomation>(
