@@ -1,114 +1,143 @@
 "use client";
 
 /**
- * Sidebar Navigation
- *
- * Text-only nav with active state and workspace section.
+ * Side menu: brand, the screens (stroke icons, the active one tinted), and at
+ * the bottom the workspace, language, theme and sign out. On phones it is a
+ * drawer: it slides in over the page, Esc or a tap outside closes it, and
+ * Tab stays inside it while it is open.
  */
 
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import LanguageSwitcher from "@/components/language-switcher";
+import BrandMark from "@/components/brand-mark";
 import { signOutAction } from "@/lib/auth-actions";
 import { useI18n } from "@/lib/i18n/provider";
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { brand } from "@/config/brand";
+import { NavItem } from "@/components/ui/nav-item";
+import ThemeToggle from "@/components/ui/theme-toggle";
+import { Icon, type IconName } from "@/components/ui/icons";
+import { buttonClass } from "@/components/ui/button";
+import { cx } from "@/components/ui/cx";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard" },
+const navItems: { label: "Dashboard" | "Automations" | "Accounts" | "DM Logs" | "Settings" | "API & MCP" | "Diagnostics"; href: string; icon: IconName; also?: string }[] = [
+  { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   // Editing an automation still lives under /campaigns/..., so that menu item
   // stays highlighted there too.
-  { label: "Automations", href: "/automations", also: "/campaigns" },
-  { label: "Accounts", href: "/accounts" },
-  { label: "DM Logs", href: "/logs" },
-  { label: "Settings", href: "/settings" },
-  { label: "API & MCP", href: "/integrations" },
-  { label: "Diagnostics", href: "/diagnostics" },
-] as const;
+  { label: "Automations", href: "/automations", icon: "automations", also: "/campaigns" },
+  { label: "Accounts", href: "/accounts", icon: "accounts" },
+  { label: "DM Logs", href: "/logs", icon: "logs" },
+  { label: "Settings", href: "/settings", icon: "settings" },
+  { label: "API & MCP", href: "/integrations", icon: "api" },
+  { label: "Diagnostics", href: "/diagnostics", icon: "diagnostics" },
+];
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   workspaceName: string;
+  instagramUsername: string | null;
+  instagramAccountCount: number;
 }
 
-export default function Sidebar({
-  isOpen,
-  onClose,
-  workspaceName,
-}: SidebarProps) {
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase() || "•";
+}
+
+export default function Sidebar({ isOpen, onClose, workspaceName, instagramUsername, instagramAccountCount }: SidebarProps) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const aside = useRef<HTMLElement>(null);
+
+  // Drawer (phones): focus the first link when it opens, Esc closes it and
+  // Tab cycles inside it.
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = aside.current;
+    panel?.querySelector<HTMLElement>("a, button")?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      if (event.key !== "Tab" || !panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>("a, button, select")).filter((el) => !el.hasAttribute("disabled"));
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
+  const accountsLine =
+    instagramAccountCount === 0
+      ? null
+      : instagramAccountCount === 1 && instagramUsername
+        ? `@${instagramUsername}`
+        : t("{count} accounts connected", { count: instagramAccountCount });
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      {isOpen && <div aria-hidden="true" className="fixed inset-0 z-40 bg-overlay lg:hidden" onClick={onClose} />}
 
       <aside
-        className={`
-          fixed top-0 left-0 z-50 h-dvh w-64 max-w-[85vw] shrink-0 bg-surface border-r border-border flex flex-col
-          transition-transform duration-200 ease-out
-          lg:h-full lg:translate-x-0 lg:static lg:z-auto
-          ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
+        ref={aside}
+        aria-label={t("Menu")}
+        className={cx(
+          "fixed left-0 top-0 z-50 flex h-dvh w-[260px] max-w-[85vw] shrink-0 flex-col gap-7 border-r border-sidebar-border bg-dialog px-3 pb-4",
+          // Solid as a drawer on phones; the translucent sidebar tone from lg up.
+          "transition-transform duration-200 ease-out lg:static lg:z-auto lg:h-full lg:translate-x-0 lg:bg-sidebar",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+        // The drawer is full height, so the brand would otherwise land under
+        // the status bar when installed to the home screen.
+        style={{ paddingTop: "calc(1.375rem + env(safe-area-inset-top))" }}
       >
-        {/* Same reason as the top bar: the drawer is full height, so the
-            wordmark would otherwise land under the status bar. */}
-        <div
-          className="px-6 py-5 border-b border-border"
-          style={{ paddingTop: "calc(1.25rem + env(safe-area-inset-top))" }}
-        >
-          <Link href="/dashboard" className="flex items-center gap-2 text-base font-semibold">
-            <Image
-              src={brand.logo.src}
-              alt=""
-              width={brand.logo.width}
-              height={brand.logo.height}
-              className="h-7 w-7"
-            />
-            <span>{brand.name}</span>
-          </Link>
+        <div className="flex items-center justify-between gap-2 px-2.5">
+          <BrandMark href="/dashboard" size="sm" />
+          <button type="button" onClick={onClose} className={buttonClass("ghost", "icon", "lg:hidden")} aria-label={t("Close")}>
+            <Icon name="close" size={18} />
+          </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav aria-label={t("Menu")} className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
           {navItems.map((item) => {
-            const prefixes: string[] = "also" in item ? [item.href, item.also] : [item.href];
-            const isActive = prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                aria-current={isActive ? "page" : undefined}
-                className={`
-                  block px-3 py-2.5 rounded text-sm
-                  ${
-                    isActive
-                      ? "bg-surface-hover text-foreground font-medium"
-                      : "text-muted hover:text-foreground hover:bg-surface-hover"
-                  }
-                `}
-              >
-                {t(item.label)}
-              </Link>
-            );
+            const prefixes = item.also ? [item.href, item.also] : [item.href];
+            const active = prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
+            return <NavItem key={item.href} href={item.href} icon={item.icon} label={t(item.label)} active={active} onClick={onClose} />;
           })}
         </nav>
 
-        <div className="px-5 py-4 border-t border-border">
-          <div className="mb-4"><LanguageSwitcher /></div>
-          <p className="text-sm text-foreground truncate">{workspaceName}</p>
-          <form action={signOutAction} className="mt-3">
+        <div className="flex flex-col gap-2.5 border-t border-sidebar-border px-1 pt-3.5">
+          <div className="flex items-center gap-2.5 px-1.5">
+            <span aria-hidden="true" className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent-soft-fg">
+              {initials(workspaceName)}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-medium text-foreground">{workspaceName}</p>
+              {accountsLine ? (
+                <p className="truncate text-xs text-faint">{accountsLine}</p>
+              ) : (
+                <a href="/api/instagram/connect" className="text-xs font-medium text-accent-fg hover:text-accent-fg-hover">
+                  {t("Connect Instagram")}
+                </a>
+              )}
+            </div>
+          </div>
+          <div className="px-1.5 py-1">
+            <LanguageSwitcher />
+          </div>
+          <ThemeToggle />
+          <form action={signOutAction}>
             <button
               type="submit"
-              className="w-full rounded px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover hover:text-foreground"
+              className="flex min-h-[42px] w-full items-center gap-2.5 rounded-item px-3 text-left text-muted transition-colors duration-150 hover:bg-nav-hover hover:text-heading"
             >
+              <Icon name="logout" size={18} />
               {t("Sign out")}
             </button>
           </form>

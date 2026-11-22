@@ -630,6 +630,9 @@ select:focus-visible {
   }
 
   /* Theme button: the label that applies to the current theme shows. */
+  .show-in-light {
+    display: contents;
+  }
   .show-in-dark {
     display: none;
   }

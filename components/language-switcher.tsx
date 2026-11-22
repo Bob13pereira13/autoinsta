@@ -28,7 +28,7 @@ export default function LanguageSwitcher() {
               }
             });
           }}
-          className="min-h-9 rounded border border-border bg-surface px-2 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+          className="field !min-h-9 !w-auto !py-1 !pl-2.5 !pr-2 text-sm"
         >
           <option value="pt-BR" lang="pt-BR">
             Português (Brasil)
