@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
       // do not cache it for good in case it ever comes back.
       { source: "/inbox", destination: "/automations", permanent: false },
       { source: "/inbox/:path*", destination: "/automations", permanent: false },
+      // Same for the Overview tab: its old links (and installed home-screen
+      // shortcuts, whose start_url used to be /overview) land on the Dashboard.
+      { source: "/overview", destination: "/dashboard", permanent: false },
+      { source: "/overview/:path*", destination: "/dashboard", permanent: false },
     ];
   },
 };

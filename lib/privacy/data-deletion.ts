@@ -9,7 +9,7 @@ import { deleteMediaFiles, mediaKeysForAccounts } from "@/lib/media/storage";
  *
  * What is deleted for every matching connected Instagram account:
  * - the InstagramAccount row and, by cascade, its campaigns, send logs,
- *   tracked links, link clicks and follower snapshots;
+ *   tracked links, link clicks, uploaded media and conversation activity;
  * - stored webhook payloads that mention the account;
  * - operational log entries tied to the account.
  *
@@ -63,8 +63,8 @@ async function deleteInstagramAccountData(account: { id: string; instagramId: st
       where: { instagramAccountId: { in: [account.instagramId, account.id] } },
     });
     await tx.botMessage.deleteMany({ where: { instagramId: account.instagramId } });
-    // Cascades to Automation, DmLog, TrackedLink, LinkClick, FollowerSnapshot,
-    // AutomationMedia and ConversationActivity.
+    // Cascades to Automation, DmLog, TrackedLink, LinkClick, AutomationMedia
+    // and ConversationActivity.
     await tx.instagramAccount.deleteMany({ where: { id: account.id } });
   });
   // Uploaded images/videos of the account's automations.

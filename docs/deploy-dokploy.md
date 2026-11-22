@@ -65,7 +65,7 @@ if you try to run migrations as part of the build (e.g. via the `vercel-build` s
 
 ## Gotcha #4 — Nothing runs the cron jobs
 
-The three jobs under `/api/cron` are scheduled by the `crons` block in
+The jobs under `/api/cron` are scheduled by the `crons` block in
 `vercel.json`. Nothing outside Vercel reads that file, so on a self-hosted
 instance they simply never run — and none of them fails loudly:
 
@@ -74,8 +74,8 @@ instance they simply never run — and none of them fails loudly:
   nothing answers them.
 - **`attach-next-reel`** binds a campaign created ahead of time to the reel
   published after it. Without it, a "next reel" campaign stays inert forever.
-- **`snapshot-followers`** keeps the follower history, which Instagram only
-  retains for ~30 days.
+- **`purge-data`** applies the data-retention rules and retries pending data
+  deletion requests.
 
 **Fix:** run `scripts/cron.sh` as a fourth service, from the same image as the
 web app — the same pattern as the worker, so the jobs live and die with the app

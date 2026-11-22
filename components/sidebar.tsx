@@ -15,7 +15,6 @@ import { brand } from "@/config/brand";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Overview", href: "/overview" },
   // Editing an automation still lives under /campaigns/..., so that menu item
   // stays highlighted there too.
   { label: "Automations", href: "/automations", also: "/campaigns" },

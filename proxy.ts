@@ -4,7 +4,6 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
-  "/overview",
   "/campaigns",
   "/automations",
   "/accounts",
@@ -84,8 +83,6 @@ export const config = {
   matcher: [
     "/dashboard",
     "/dashboard/:path*",
-    "/overview",
-    "/overview/:path*",
     "/campaigns",
     "/campaigns/:path*",
     "/automations",

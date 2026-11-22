@@ -7,8 +7,6 @@ export {
 export type {
   InstagramComment,
   InstagramMedia,
-  InstagramMediaInsights,
-  FollowerCountPoint,
   LinkButton,
 } from "@/lib/meta/client";
 export * from "./context";

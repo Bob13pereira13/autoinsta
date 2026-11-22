@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: brand.shortName,
     description: brand.description,
     lang: "pt-BR",
-    start_url: "/overview",
+    start_url: "/dashboard",
     display: "standalone",
     orientation: "portrait",
     background_color: brand.colors.theme,

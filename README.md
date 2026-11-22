@@ -21,6 +21,11 @@ O painel não tem caixa de entrada: as conversas continuam no app do Instagram (
 Quando alguém da conta responde uma pessoa por lá, as automações sem palavra-chave ficam 24 horas sem
 responder essa pessoa, para não atropelar o atendimento.
 
+O painel também não mostra métricas da conta (seguidores, alcance, visualizações) e não pede a
+permissão de insights da Meta. O **Dashboard** (página inicial do painel) e o relatório de cada
+automação mostram só o que a própria plataforma registra: DMs enviadas, ignoradas e com falha, cliques e
+CTR.
+
 As contas do Instagram ficam na aba **Contas**: conectar, reconectar, **desativar** (pausa todas as
 automações da conta sem apagar nada) ou remover (apaga a conta e tudo dela). Funciona **exclusivamente pela API
 oficial da Meta**.

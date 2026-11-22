@@ -100,7 +100,7 @@ export default function PrivacidadePage() {
                 (ou instagram_business_basic)
               </td>
               <td>
-                Identificar a conta conectada (ID, nome de usuário, nome e número de seguidores) e listar os
+                Identificar a conta conectada (ID, nome de usuário, nome e foto de perfil) e listar os
                 seus posts e reels para você escolher onde a automação vai funcionar.
               </td>
             </tr>
@@ -140,10 +140,10 @@ export default function PrivacidadePage() {
         </table>
         <p>
           Armazenamos: ID da conta profissional, identificadores técnicos do login, nome de usuário, nome,
-          o token de acesso (criptografado com AES-256-GCM) e sua data de expiração, quando houver, e o número
-          diário de seguidores. Posts e reels são consultados na Meta no momento em que você abre o painel e não
-          são copiados para o nosso banco de dados, exceto a referência às publicações escolhidas em cada
-          automação.
+          o token de acesso (criptografado com AES-256-GCM) e sua data de expiração, quando houver. Não
+          coletamos métricas da conta (seguidores, alcance, visualizações ou outras estatísticas). Posts e
+          reels são consultados na Meta no momento em que você abre o painel e não são copiados para o nosso
+          banco de dados, exceto a referência às publicações escolhidas em cada automação.
         </p>
 
         <h3>3.2.1 Imagens e vídeos enviados por você</h3>

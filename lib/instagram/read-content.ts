@@ -151,7 +151,6 @@ export async function getUserInfo({
       username: string;
       displayName?: string;
       profilePicture?: string;
-      followersCount?: number | null;
     }[];
   }>({ apiKey: context.apiKey, path: "/accounts?platform=instagram" });
   const account = result.accounts.find((a) => a._id === context.accountId);
@@ -163,8 +162,5 @@ export async function getUserInfo({
     username: account.username,
     name: account.displayName,
     profile_picture_url: account.profilePicture,
-    ...(typeof account.followersCount === "number"
-      ? { followers_count: account.followersCount }
-      : {}),
   };
 }

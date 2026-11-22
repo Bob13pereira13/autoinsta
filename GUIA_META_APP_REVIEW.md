@@ -79,8 +79,10 @@ função no app.
    login → Configure your app → Create new configuration**.
 2. Tipo de token: **System-user access token**; expiração: **Never**; ativo obrigatório: **Instagram account**.
 3. Permissões: mantenha apenas **`instagram_basic`**, **`instagram_manage_comments`** e
-   **`instagram_manage_messages`**. Não inclua permissões de anúncios nem de publicação: o app não as usa,
-   e cada permissão a mais precisa de justificativa e de vídeo.
+   **`instagram_manage_messages`**. Não inclua permissões de anúncios, de publicação nem
+   **`instagram_manage_insights`**: o app não as usa (não lê métricas nem número de seguidores), e cada
+   permissão a mais precisa de justificativa e de vídeo. Se uma configuração antiga tiver
+   `instagram_manage_insights`, remova-a antes de enviar o App Review.
 4. **Inclua `business_management`.** O editor do Unified login não oferece essa permissão. Adicione o
    produto **Facebook Login for Business**, abra **Configurations**, clique em **Edit** na mesma
    configuração (mantendo o mesmo ID) e inclua `business_management`. Sem ela o login conclui, mas o token
@@ -107,7 +109,7 @@ como referência para você.
 **EN**
 
 > We use instagram_basic to identify the Instagram professional account the business connected through
-> our login configuration (account ID, username, name and follower count) and to list that account's own
+> our login configuration (account ID, username, name and profile picture) and to list that account's own
 > posts and reels in our dashboard, so the business owner can choose which post or reel an automation
 > applies to. We only read the connecting account's own profile and media; we never read other users'
 > profiles or media. The screencast shows the account appearing in the Accounts tab after login and the
@@ -116,7 +118,7 @@ como referência para você.
 **PT**
 
 > Usamos instagram_basic para identificar a conta profissional do Instagram que a empresa conectou pelo
-> nosso login (ID, nome de usuário, nome e número de seguidores) e para listar os posts e reels da própria
+> nosso login (ID, nome de usuário, nome e foto de perfil) e para listar os posts e reels da própria
 > conta no painel, para o dono escolher em qual post ou reel a automação vai funcionar. Lemos apenas o
 > perfil e as mídias da própria conta conectada, nunca de outros usuários. O vídeo mostra a conta
 > aparecendo na aba Contas após o login e a grade de publicações e reels ao criar uma automação.

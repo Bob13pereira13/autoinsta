@@ -65,7 +65,6 @@ while true; do
   if [ "$hour" = "05" ] && [ "$last_daily" != "$today" ]; then
     last_daily="$today"
     call refresh-tokens
-    call snapshot-followers
     call purge-data
   fi
 
