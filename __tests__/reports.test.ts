@@ -101,6 +101,8 @@ describe("campaign reports", () => {
       campaign: {
         name: "Product Link Drop",
         instagramUsername: "acme",
+        // A row without post rows (older data) still links its single post.
+        postUrls: ["https://instagram.com/p/example"],
       },
       metrics: {
         sent: 20,

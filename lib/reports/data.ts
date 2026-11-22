@@ -172,11 +172,11 @@ export async function getCampaignReportBySlug(shareSlug: string, locale: Locale 
       // Marked posts with a link (the first one is also postUrl); "all" or
       // "next" when the automation is not limited to marked posts.
       postScope: automation.matchAnyPost ? ("all" as const) : automation.pendingNextReel ? ("next" as const) : ("marked" as const),
-      postUrls: (automation.posts.length
+      postUrls: (automation.posts?.length
         ? automation.posts.map((p) => p.postUrl)
         : [automation.postUrl]
       ).filter((url): url is string => Boolean(url)),
-      postCount: Math.max(automation.posts.length, automation.postId ? 1 : 0),
+      postCount: Math.max(automation.posts?.length ?? 0, automation.postId ? 1 : 0),
       isActive: automation.isActive,
       createdAt: automation.createdAt,
       updatedAt: automation.updatedAt,
