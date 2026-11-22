@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -11,7 +13,29 @@ const PROTECTED_PREFIXES = [
   "/settings",
   "/integrations",
   "/diagnostics",
+  "/admin",
 ];
+
+// The admin area (operators in ADMIN_EMAILS only). The customer-facing
+// Diagnostics page uses /api/admin/diagnostics, so that one stays open.
+function isAdminPath(pathname: string): boolean {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
+  return pathname.startsWith("/api/admin/") && pathname !== "/api/admin/diagnostics";
+}
+
+async function adminEmailFromSession(request: NextRequest): Promise<string | null> {
+  try {
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: request.cookies.has("__Secure-authjs.session-token"),
+    });
+    const email = typeof token?.email === "string" ? token.email : null;
+    return isPlatformAdmin(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
 
 function hasSessionCookie(request: NextRequest): boolean {
   return (
@@ -25,8 +49,23 @@ function hasSessionCookie(request: NextRequest): boolean {
 // login page itself, after validating the session — redirecting here on the
 // mere presence of a cookie would loop forever on a revoked session (e.g.
 // after a password change in another browser).
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  // Admin area: a signed-in non-admin gets 403 here, before the page or API
+  // runs. Every admin page and API checks again on the server (lib/admin/auth.ts),
+  // against the database-validated session.
+  if (isAdminPath(pathname) && hasSessionCookie(request) && !(await adminEmailFromSession(request))) {
+    return pathname.startsWith("/api/")
+      ? NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
+      : new NextResponse("403 — Acesso restrito / Restricted access", {
+          status: 403,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+  }
+  if (pathname.startsWith("/api/admin/") && pathname !== "/api/admin/diagnostics" && !hasSessionCookie(request)) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
@@ -64,5 +103,8 @@ export const config = {
     "/integrations/:path*",
     "/diagnostics",
     "/diagnostics/:path*",
+    "/admin",
+    "/admin/:path*",
+    "/api/admin/:path*",
   ],
 };

@@ -1,0 +1,66 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useI18n } from "@/lib/i18n/provider";
+
+export default function NewClientForm() {
+  const { t, message } = useI18n();
+  const router = useRouter();
+  const [values, setValues] = useState({ name: "", email: "", companyName: "", phone: "", document: "", instagramAccountLimit: "1" });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const set = (field: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [field]: e.target.value }));
+  const input = "w-full rounded border border-border bg-surface px-3 py-2 text-sm";
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...values, instagramAccountLimit: Number(values.instagramAccountLimit) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.success) {
+        setError(message(data.error, "Could not save. Try again."));
+        return;
+      }
+      router.push(`/admin/clients/${data.data.workspaceId}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="panel max-w-lg space-y-4 rounded p-5">
+      {error && <p role="alert" className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">{error}</p>}
+      {(
+        [
+          ["name", t("Your name"), "text", true],
+          ["email", t("E-mail"), "email", true],
+          ["companyName", t("Company name"), "text", true],
+          ["phone", t("Phone (WhatsApp)"), "tel", false],
+          ["document", t("CPF or CNPJ"), "text", false],
+        ] as const
+      ).map(([field, label, type, required]) => (
+        <label key={field} className="block space-y-1 text-sm">
+          <span className="font-medium">
+            {label} {!required && <span className="font-normal text-muted">{t("(optional)")}</span>}
+          </span>
+          <input type={type} required={required} value={values[field]} onChange={set(field)} className={input} />
+        </label>
+      ))}
+      <label className="block space-y-1 text-sm">
+        <span className="font-medium">{t("Instagram account limit")}</span>
+        <input type="number" min={1} max={100} required value={values.instagramAccountLimit} onChange={set("instagramAccountLimit")} className={`${input} w-28`} />
+      </label>
+      <p className="text-xs text-muted">{t("The client starts Active and gets an e-mail to set the password (link valid for 7 days).")}</p>
+      <button type="submit" disabled={saving} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+        {saving ? t("Saving…") : t("Create client and send invitation")}
+      </button>
+    </form>
+  );
+}
