@@ -10,6 +10,7 @@ import {
   sendPrivateReplyWithButton,
   sendDirectMessageWithLinkButton,
   getRecentMediaComments,
+  getCommentState,
   getUserFollowStatus,
   getUserMedia,
   sendPrivateReply,
@@ -147,6 +148,39 @@ describe("Instagram provider boundary", () => {
     unifiedLogin: false,
   } as const;
   const unifiedLogin = { ...instagramLogin, unifiedLogin: true } as const;
+
+  describe("a comment's state before a delayed reply", () => {
+    const check = () => getCommentState({ context: instagramLogin, commentId: "c1", accountInstagramId: "store" });
+
+    it("one call: hidden flag and the account's own replies", async () => {
+      respond({ id: "c1", hidden: false, replies: { data: [{ id: "r1", from: { id: "someone" } }, { id: "r2", from: { id: "store" } }] } });
+      expect(await check()).toEqual({ state: "visible", ownerReplied: true });
+      const url = new URL(fetchMock.mock.calls[0][0]);
+      expect(url.pathname).toMatch(/\/c1$/);
+      expect(url.searchParams.get("fields")).toBe("id,hidden,replies.limit(100){from}");
+      respond({ id: "c1", hidden: true });
+      expect(await check()).toEqual({ state: "hidden", ownerReplied: false });
+      respond({ id: "c1", replies: { data: [{ id: "r1", from: { id: "someone" } }] } });
+      expect(await check()).toEqual({ state: "visible", ownerReplied: false });
+    });
+
+    it("deleted: Meta's “does not exist” (code 100, subcode 33)", async () => {
+      respond({ error: { message: "Unsupported get request. Object with ID 'c1' does not exist", type: "IGApiException", code: 100, error_subcode: 33 } }, 400);
+      expect(await check()).toEqual({ state: "deleted", ownerReplied: false });
+    });
+
+    it("any other error is not taken as deleted", async () => {
+      respond({ error: { message: "Too many calls", code: 4 } }, 400);
+      await expect(check()).rejects.toBeInstanceOf(RateLimitError);
+      respond({ error: { message: "Invalid parameter", code: 100 } }, 400);
+      await expect(check()).rejects.toThrow("Invalid parameter");
+    });
+
+    it("Zernio cannot tell: no answer, so the reply goes as before", async () => {
+      expect(await getCommentState({ context, commentId: "c1", accountInstagramId: "store" })).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
 
   it("preserves direct Meta requests", async () => {
     respond({ data: [{ id: "media" }] });

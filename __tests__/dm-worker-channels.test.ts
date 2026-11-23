@@ -19,6 +19,7 @@ const m = vi.hoisted(() => ({
     sendDirectMessageWithLinkButton: vi.fn(),
     sendDirectAttachment: vi.fn(),
     sendCommentReply: vi.fn(),
+    getCommentState: vi.fn(),
     getUserFollowStatus: vi.fn(),
     getUserUsername: vi.fn(),
   },
@@ -102,6 +103,7 @@ beforeEach(() => {
   m.prisma.operationalEvent.create.mockResolvedValue({});
   for (const fn of Object.values(m.meta)) fn.mockResolvedValue({ recipient_id: "person_1", message_id: "bot_mid" });
   m.meta.getUserFollowStatus.mockResolvedValue(true);
+  m.meta.getCommentState.mockResolvedValue({ state: "visible", ownerReplied: false });
   m.meta.getUserUsername.mockResolvedValue("ana");
   m.rate.reserveDMSlot.mockResolvedValue({ allowed: true, reserved: true });
   m.rate.reserveSendSlots.mockResolvedValue(true);
@@ -294,7 +296,7 @@ describe("default texts are in Portuguese", () => {
   });
 });
 
-describe("wait before the DM (dmDelaySeconds)", () => {
+describe("wait before answering (dmDelaySeconds)", () => {
   const comment = (data: Record<string, unknown> = {}): Job => ({
     data: { instagramAccountId: "ig_1", commentId: "c9", commentText: "quero o LINK", commenterId: "person_1", commenterName: "ana", mediaId: "post1", ...data },
     id: "job_c9",
@@ -303,10 +305,13 @@ describe("wait before the DM (dmDelaySeconds)", () => {
   const commentAutomation = (over: Record<string, unknown> = {}) =>
     automation({ type: "COMMENTS", matchAnyPost: true, keywords: ["LINK"], publicReplyEnabled: true, publicReplyMessages: ["Te mandei na DM!"], dmMessage: "Aqui está", ...over });
 
-  it("Comments: the public reply goes at once; the DM is a BullMQ job delayed by the chosen time", async () => {
+  const delayed = (seconds: number) => comment({ dmDelayed: true, dmScheduledAt: new Date(Date.now() - seconds * 1000).toISOString() });
+  const logUpdates = () => m.prisma.dmLog.update.mock.calls.map((c) => c[0].data);
+
+  it("Comments: nothing goes before the wait — the public reply and the DM are one BullMQ job delayed by the chosen time", async () => {
     m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
     await processor()(comment());
-    expect(m.meta.sendCommentReply).toHaveBeenCalledTimes(1);
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
     expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
     expect(m.queueAdd).toHaveBeenCalledTimes(1);
     const [name, data, opts] = m.queueAdd.mock.calls[0];
@@ -314,36 +319,112 @@ describe("wait before the DM (dmDelaySeconds)", () => {
     expect(data).toMatchObject({ commentId: "c9", dmDelayed: true });
     expect(Date.parse(data.dmScheduledAt)).not.toBeNaN();
     expect(opts).toEqual({ delay: 30_000, jobId: "dmdelay_ig_1_c9_0" });
-    // Nothing counted against the limits yet: they are checked when it is sent.
+    // Nothing checked or counted yet: all of it happens when the job runs.
+    expect(m.meta.getCommentState).not.toHaveBeenCalled();
+    expect(m.guards.humanRepliedSince).not.toHaveBeenCalled();
     expect(m.rate.reserveDMSlot).not.toHaveBeenCalled();
+    expect(lastLog().create.status).toBe("PENDING");
   });
 
-  it("Comments: the delayed pass sends the DM (limits checked then), without a second public reply", async () => {
+  it("Comments: after the wait, the comment is checked, then the public reply goes, then the DM", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: null });
+    await processor()(delayed(30));
+    expect(m.guards.humanRepliedSince).toHaveBeenCalledWith(expect.objectContaining({ recipientId: "person_1" }));
+    expect(m.meta.getCommentState).toHaveBeenCalledWith(expect.anything(), "c9", "ig_1");
+    expect(m.meta.sendCommentReply).toHaveBeenCalledTimes(1);
+    expect(m.meta.sendCommentReply.mock.calls[0][2]).toBe("Te mandei na DM!");
+    expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
+    const order = (fn: { mock: { invocationCallOrder: number[] } }) => fn.mock.invocationCallOrder[0];
+    expect(order(m.meta.getCommentState)).toBeLessThan(order(m.meta.sendCommentReply));
+    expect(order(m.meta.sendCommentReply)).toBeLessThan(order(m.meta.sendPrivateReply));
+    expect(m.rate.reserveDMSlot).toHaveBeenCalled();
+    expect(m.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("Comments: a reply the store's account already made is not duplicated; the DM still goes", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: null });
+    m.meta.getCommentState.mockResolvedValue({ state: "visible", ownerReplied: true });
+    await processor()(delayed(60));
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
+    expect(logUpdates()).toContainEqual({ publicReplySkipReason: "account_replied" });
+    expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("Comments: an earlier version's job (public reply already out) only sends the DM", async () => {
     m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
     m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: new Date() });
-    await processor()(comment({ dmDelayed: true, dmScheduledAt: new Date(Date.now() - 30_000).toISOString() }));
-    expect(m.guards.humanRepliedSince).toHaveBeenCalledWith(expect.objectContaining({ recipientId: "person_1" }));
+    m.meta.getCommentState.mockResolvedValue({ state: "visible", ownerReplied: true });
+    await processor()(delayed(30));
     expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
-    expect(m.rate.reserveDMSlot).toHaveBeenCalled();
     expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(logUpdates().some((d) => "publicReplySkipReason" in d)).toBe(false);
+  });
+
+  it("Comments: someone from the team answered in the Direct during the wait — neither the public reply nor the DM, and it is final", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: null });
+    m.guards.humanRepliedSince.mockResolvedValue(true);
+    await processor()(delayed(60));
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
+    expect(m.rate.reserveDMSlot).not.toHaveBeenCalled();
+    // Decided before spending a call on the comment.
+    expect(m.meta.getCommentState).not.toHaveBeenCalled();
+    expect(logUpdates()).toContainEqual(
+      expect.objectContaining({ status: "SKIPPED_HUMAN_ACTIVE", publicReplySkipReason: "team_answered" })
+    );
+    // A later pass (a repeated webhook, the comment sweep) leaves it alone.
+    vi.clearAllMocks();
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "SKIPPED_HUMAN_ACTIVE", attempts: 0, publicReplySentAt: null, publicReplySkipReason: "team_answered" });
+    await processor()(comment());
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
     expect(m.queueAdd).not.toHaveBeenCalled();
   });
 
-  it("Comments: someone from the team answered during the wait — nothing is sent, and it is final", async () => {
-    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
-    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: new Date() });
-    m.guards.humanRepliedSince.mockResolvedValue(true);
-    await processor()(comment({ dmDelayed: true, dmScheduledAt: new Date(Date.now() - 60_000).toISOString() }));
-    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
-    expect(m.rate.reserveDMSlot).not.toHaveBeenCalled();
-    expect(m.prisma.dmLog.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "SKIPPED_HUMAN_ACTIVE" }) }));
-    // A later pass (e.g. the comment sweep) leaves it alone.
-    vi.clearAllMocks();
-    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 60 })]);
-    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "SKIPPED_HUMAN_ACTIVE", attempts: 0, publicReplySentAt: new Date() });
-    await processor()(comment());
+  it.each([
+    ["deleted", "comment_deleted", "Not sent: the comment was deleted during the wait"],
+    ["hidden", "comment_hidden", "Not sent: the comment was hidden during the wait"],
+  ])("Comments: a comment %s during the wait is ignored — no failure, no retry", async (state, reason, errorMessage) => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: null });
+    m.meta.getCommentState.mockResolvedValue({ state, ownerReplied: false });
+    // Resolves: BullMQ does not retry the job.
+    await expect(processor()(delayed(30))).resolves.toBeUndefined();
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
     expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
     expect(m.queueAdd).not.toHaveBeenCalled();
+    expect(logUpdates()).toEqual([{ status: "SKIPPED_COMMENT_DELETED", errorMessage, publicReplySkipReason: reason }]);
+    expect(logUpdates().some((d) => d.status === "FAILED" || "attempts" in d)).toBe(false);
+    // Final: a later pass sends nothing.
+    vi.clearAllMocks();
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "SKIPPED_COMMENT_DELETED", attempts: 0, publicReplySentAt: null, publicReplySkipReason: reason });
+    await processor()(comment());
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
+    expect(m.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("Comments: a pass that only retries the public reply keeps the DM's SENT when the comment is gone", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "SENT", attempts: 1, publicReplySentAt: null, publicReplyError: "rate limited" });
+    m.meta.getCommentState.mockResolvedValue({ state: "hidden", ownerReplied: false });
+    await processor()(delayed(30));
+    expect(m.meta.sendCommentReply).not.toHaveBeenCalled();
+    expect(m.meta.sendPrivateReply).not.toHaveBeenCalled();
+    expect(logUpdates()).toEqual([{ publicReplySkipReason: "comment_hidden" }]);
+  });
+
+  it("Comments: if Instagram cannot tell the comment's state, both go as without the check", async () => {
+    m.prisma.automation.findMany.mockResolvedValue([commentAutomation({ dmDelaySeconds: 30 })]);
+    m.prisma.dmLog.findUnique.mockResolvedValue({ status: "PENDING", attempts: 0, publicReplySentAt: null });
+    m.meta.getCommentState.mockRejectedValue(new Error("Meta is down"));
+    await processor()(delayed(30));
+    expect(m.meta.sendCommentReply).toHaveBeenCalledTimes(1);
+    expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
   });
 
   it("Comments: an account turned off during the wait answers nothing (no candidate when it runs)", async () => {
@@ -398,6 +479,9 @@ describe("wait before the DM (dmDelaySeconds)", () => {
     expect(m.meta.sendCommentReply).toHaveBeenCalledTimes(1);
     expect(m.meta.sendPrivateReply).toHaveBeenCalledTimes(1);
     expect(m.queueAdd).not.toHaveBeenCalled();
+    // No extra Instagram call and no team check without a wait.
+    expect(m.meta.getCommentState).not.toHaveBeenCalled();
+    expect(m.guards.humanRepliedSince).not.toHaveBeenCalled();
   });
 });
 

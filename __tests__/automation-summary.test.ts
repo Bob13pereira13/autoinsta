@@ -63,4 +63,12 @@ describe("automationSummary", () => {
   it("never shows public replies outside Comments", () => {
     expect(automationSummary(en, { ...base, type: "DIRECT", publicReply: true })).not.toContain("publicly");
   });
+
+  it("the wait holds the public reply too in Comments, and the DM in Direct", () => {
+    expect(automationSummary(pt, { ...base, publicReply: true, dmDelaySeconds: 30 })).toMatch(
+      /recebe seu link por DM e o comentário é respondido em público \(30 segundos depois\)\.$/
+    );
+    expect(automationSummary(en, { ...base, type: "DIRECT", dmDelaySeconds: 60 })).toMatch(/by DM \(1 minute later\)/);
+    expect(automationSummary(en, { ...base, publicReply: true, dmDelaySeconds: 0 })).not.toContain("later");
+  });
 });

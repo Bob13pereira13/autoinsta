@@ -57,6 +57,7 @@ const labels: Record<string, StaticMessageKey> = {
   SKIPPED_DEDUP: "Dedup",
   SKIPPED_COOLDOWN: "Already answered",
   SKIPPED_HUMAN_ACTIVE: "Team talking",
+  SKIPPED_COMMENT_DELETED: "Comment deleted",
   OWNER: "Owner",
   ADMIN: "Admin",
   MEMBER: "Member",

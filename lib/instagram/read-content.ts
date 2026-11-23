@@ -62,6 +62,24 @@ export async function getRecentMediaComments({
     .slice(0, max);
 }
 
+/**
+ * Before a delayed reply: was the comment deleted or hidden during the wait,
+ * and has the account already replied to it? Null when the provider cannot
+ * tell (Zernio), so the reply goes as before.
+ */
+export async function getCommentState({
+  context,
+  commentId,
+  accountInstagramId,
+}: {
+  context: InstagramContext;
+  commentId: string;
+  accountInstagramId: string;
+}): Promise<{ state: "deleted" | "hidden" | "visible"; ownerReplied: boolean } | null> {
+  if (context.provider !== "META") return null;
+  return meta.getCommentState(context, commentId, accountInstagramId);
+}
+
 export async function getUserMedia({
   context,
   limit = 25,

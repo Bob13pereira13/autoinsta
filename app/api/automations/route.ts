@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { findConflicts, type Conflict } from "@/lib/automation/conflicts";
-import { DM_DELAY_OPTIONS } from "@/lib/automation/delivery";
+import { DEFAULT_DM_DELAY_SECONDS, DM_DELAY_OPTIONS } from "@/lib/automation/delivery";
 import { deleteMediaFiles, mediaKeysForAutomations } from "@/lib/media/storage";
 import {
   enabledMediaSlots,
@@ -50,7 +50,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const TOO_MANY_POSTS = `Up to ${MAX_POSTS_PER_AUTOMATION} posts per automation`;
-// Wait before the first DM: only the options the editor offers.
+// Wait before answering: only the options the editor offers.
 const dmDelaySchema = z
   .number()
   .int()
@@ -75,7 +75,8 @@ const createAutomationSchema = z
     triggerStoryReplies: z.boolean().optional().default(true),
     triggerStoryMentions: z.boolean().optional().default(false),
     replyCooldownHours: z.number().int().min(1).max(168).optional().default(24),
-    dmDelaySeconds: dmDelaySchema.optional().default(0),
+    // New automations wait 30 s unless they say otherwise; saved ones keep theirs.
+    dmDelaySeconds: dmDelaySchema.optional().default(DEFAULT_DM_DELAY_SECONDS),
     media: mediaInputSchema.optional().default([]),
     instagramAccountId: z.string().min(1).optional().nullable(),
     postId: z.string().min(1).optional().nullable(),

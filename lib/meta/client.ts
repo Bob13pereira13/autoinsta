@@ -545,6 +545,34 @@ export async function sendCommentReply(
   return handleResponse(response);
 }
 
+/**
+ * A comment just before a delayed reply: deleted (Meta answers code 100,
+ * subcode 33, "does not exist"), hidden by the account, or there, and whether
+ * the account itself has already replied to it. One call.
+ */
+export async function getCommentState(
+  auth: MetaAuth,
+  commentId: string,
+  accountInstagramId: string
+): Promise<{ state: "deleted" | "hidden" | "visible"; ownerReplied: boolean }> {
+  const url = new URL(`${instagramGraphBase(auth)}/${commentId}`);
+  url.searchParams.set("fields", "id,hidden,replies.limit(100){from}");
+  url.searchParams.set("access_token", tokenOf(auth));
+  let data: { hidden?: boolean; replies?: { data?: { from?: { id?: string } }[] } };
+  try {
+    data = await handleResponse(await fetch(url.toString()));
+  } catch (error) {
+    if (error instanceof MetaApiError && error.code === 100 && error.subcode === 33) {
+      return { state: "deleted", ownerReplied: false };
+    }
+    throw error;
+  }
+  return {
+    state: data.hidden ? "hidden" : "visible",
+    ownerReplied: (data.replies?.data ?? []).some((r) => r.from?.id === accountInstagramId),
+  };
+}
+
 export async function getMediaComments(
   auth: MetaAuth,
   mediaId: string

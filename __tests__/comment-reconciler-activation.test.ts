@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockPrisma, queueAdd, readComments } = vi.hoisted(() => ({
+const { mockPrisma, queueAdd, readComments, jobs } = vi.hoisted(() => ({
   mockPrisma: {
     $queryRaw: vi.fn(),
     automation: { findMany: vi.fn() },
@@ -15,8 +15,15 @@ const { mockPrisma, queueAdd, readComments } = vi.hoisted(() => ({
   },
   queueAdd: vi.fn(),
   readComments: vi.fn(),
+  // BullMQ jobs by id, with their state.
+  jobs: new Map<string, string>(),
 }));
-vi.mock("@/lib/queue/client", () => ({ getDMQueue: () => ({ add: queueAdd }) }));
+vi.mock("@/lib/queue/client", () => ({
+  getDMQueue: () => ({
+    add: queueAdd,
+    getJob: async (id: string) => (jobs.has(id) ? { getState: async () => jobs.get(id) } : undefined),
+  }),
+}));
 vi.mock("@/lib/instagram/provider", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/instagram/provider")>()),
   createInstagramContext: async () => ({ provider: "META", accessToken: "local-test" }),
@@ -60,6 +67,7 @@ const enqueuedIds = () => queueAdd.mock.calls.map((call) => call[1].commentId);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  jobs.clear();
   mockPrisma.$queryRaw.mockResolvedValue([]);
   mockPrisma.dmLog.findMany.mockResolvedValue([]);
   mockPrisma.operationalEvent.create.mockResolvedValue({});
@@ -137,16 +145,52 @@ describe("reconcileComments respects activation", () => {
     expect(enqueuedIds()).toEqual(["after_on"]);
   });
 
-  it("a DM cancelled because the team answered during the wait (dmDelaySeconds) is not swept again", async () => {
-    mockPrisma.automation.findMany.mockResolvedValue([campaign({ activeSince: ago(2) })]);
-    readComments.mockResolvedValue([comment("team_answered", 0.5), comment("waiting", 0.4), comment("new", 0.3)]);
-    mockPrisma.dmLog.findMany.mockResolvedValue([
-      { commentId: "team_answered", status: "SKIPPED_HUMAN_ACTIVE", attempts: 0, errorMessage: null, dmDeliveryUnconfirmed: false, publicReplySentAt: null, publicReplyDeliveryUnconfirmed: false },
-      // Still waiting: picked up again (the worker collapses it onto the same delayed job).
-      { commentId: "waiting", status: "PENDING", attempts: 0, errorMessage: null, dmDeliveryUnconfirmed: false, publicReplySentAt: null, publicReplyDeliveryUnconfirmed: false },
-    ]);
-    await reconcileComments();
-    expect(enqueuedIds()).toEqual(["waiting", "new"]);
+  describe("the wait before answering (dmDelaySeconds)", () => {
+    const log = (commentId: string, over: Record<string, unknown> = {}) => ({
+      commentId, status: "PENDING", attempts: 0, errorMessage: null, dmDeliveryUnconfirmed: false,
+      publicReplySentAt: null, publicReplySkipReason: null, publicReplyDeliveryUnconfirmed: false, ...over,
+    });
+
+    it("a comment in its wait is left to its delayed job: the sweep adds nothing (no second public reply or DM)", async () => {
+      mockPrisma.automation.findMany.mockResolvedValue([campaign({ activeSince: ago(2), publicReplyEnabled: true })]);
+      readComments.mockResolvedValue([comment("waiting", 0.5), comment("running", 0.45), comment("ran_and_failed", 0.4), comment("new", 0.3)]);
+      mockPrisma.dmLog.findMany.mockResolvedValue([
+        log("waiting"),
+        log("running"),
+        // Its delayed job is done and the DM failed once: retried as before.
+        log("ran_and_failed", { status: "FAILED", attempts: 1 }),
+      ]);
+      jobs.set("dmdelay_owner_waiting_0", "delayed");
+      jobs.set("dmdelay_owner_running_0", "active");
+      jobs.set("dmdelay_owner_ran_and_failed_0", "completed");
+      await reconcileComments();
+      expect(enqueuedIds()).toEqual(["ran_and_failed", "new"]);
+      expect(mockPrisma.operationalEvent.create.mock.calls[0][0].data.payload).toMatchObject({ waiting: 2, enqueued: 2 });
+    });
+
+    it("nothing more goes after the team answered or the comment was deleted, even with the public reply never posted", async () => {
+      mockPrisma.automation.findMany.mockResolvedValue([campaign({ activeSince: ago(2), publicReplyEnabled: true })]);
+      readComments.mockResolvedValue([comment("team_answered", 0.5), comment("deleted_hidden", 0.45), comment("plan_limit", 0.4), comment("new", 0.3)]);
+      mockPrisma.dmLog.findMany.mockResolvedValue([
+        log("team_answered", { status: "SKIPPED_HUMAN_ACTIVE", publicReplySkipReason: "team_answered" }),
+        log("deleted_hidden", { status: "SKIPPED_COMMENT_DELETED", publicReplySkipReason: "comment_hidden" }),
+        log("plan_limit", { status: "SKIPPED_PLAN_LIMIT" }),
+      ]);
+      await reconcileComments();
+      expect(enqueuedIds()).toEqual(["new"]);
+    });
+
+    it("a public reply not posted on purpose (the store had already replied) closes the reply like a posted one", async () => {
+      mockPrisma.automation.findMany.mockResolvedValue([campaign({ activeSince: ago(2), publicReplyEnabled: true })]);
+      readComments.mockResolvedValue([comment("store_replied", 0.5), comment("reply_failed", 0.4)]);
+      mockPrisma.dmLog.findMany.mockResolvedValue([
+        log("store_replied", { status: "SENT", attempts: 1, publicReplySkipReason: "account_replied" }),
+        // A public reply that failed is still retried, as before.
+        log("reply_failed", { status: "SENT", attempts: 1 }),
+      ]);
+      await reconcileComments();
+      expect(enqueuedIds()).toEqual(["reply_failed"]);
+    });
   });
 
   it("passes the cutoff to the comment reader so older pages are not fetched", async () => {

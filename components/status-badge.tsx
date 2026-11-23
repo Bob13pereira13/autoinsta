@@ -15,6 +15,7 @@ const statusConfig: Record<string, { tone: StatusTone; label: StaticMessageKey }
   SKIPPED_NO_MATCH: { tone: "neutral", label: "No match" },
   SKIPPED_COOLDOWN: { tone: "neutral", label: "Already answered" },
   SKIPPED_HUMAN_ACTIVE: { tone: "neutral", label: "Team talking" },
+  SKIPPED_COMMENT_DELETED: { tone: "neutral", label: "Comment deleted" },
 };
 
 export default function StatusBadge({ status }: { status: string }) {

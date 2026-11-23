@@ -325,9 +325,11 @@ model Automation {
   /// STORIES/DIRECT without keywords: reply to the same person at most once
   /// per this many hours.
   replyCooldownHours      Int            @default(24)
-  /// Wait before the first DM (any channel): 0, 30, 60 or 300 seconds. The
-  /// public reply to a comment still goes out at once. The DM is sent by a
-  /// delayed job that checks everything again when it runs.
+  /// Wait before answering (any channel): 0, 30, 60 or 300 seconds. In
+  /// Comments the public reply and the DM both go after it, from one delayed
+  /// job that checks everything again when it runs. New automations get 30
+  /// from the API and the editor (DEFAULT_DM_DELAY_SECONDS); the column
+  /// default stays 0, so rows written without it keep answering at once.
   dmDelaySeconds          Int            @default(0)
   /// Deprecated: replaced by DIRECT/STORIES automations (the migration that
   /// added `type` converted every true value). Kept, always false, so API v1
@@ -400,6 +402,11 @@ model DmLog {
   publicReplyDeliveryUnconfirmed Boolean   @default(false)
   publicReplySentAt              DateTime?
   publicReplyError               String?
+  /// Why the public reply was deliberately not posted after the wait
+  /// (lib/queue/comment-delivery.ts, PublicReplySkipReason): "account_replied",
+  /// "comment_deleted", "comment_hidden" or "team_answered". Closes the public
+  /// leg like publicReplySentAt, so neither a retry nor the sweep posts it.
+  publicReplySkipReason          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -657,8 +664,12 @@ enum DmStatus {
   /// within replyCooldownHours.
   SKIPPED_COOLDOWN
   /// No-keyword STORIES/DIRECT: a human from the account talked to this
-  /// person in the last 24 hours.
+  /// person in the last 24 hours. Also: someone from the account answered the
+  /// person during the wait (dmDelaySeconds), so nothing was sent.
   SKIPPED_HUMAN_ACTIVE
+  /// COMMENTS with a wait: the comment was deleted or hidden during it, so
+  /// nothing was sent (not a failure, never retried).
+  SKIPPED_COMMENT_DELETED
 }
 
 enum WebhookStatus {

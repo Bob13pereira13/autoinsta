@@ -36,7 +36,7 @@ import {
 import { automationSummary } from "@/lib/automation/summary";
 import { editorWarnings, mainMessageKind, type EditorDraft, type WarningId } from "@/lib/automation/editor-warnings";
 import { messageLimit } from "@/lib/automation/message-limits";
-import { deliveryModeOf, deliverySequence, DM_DELAY_OPTIONS, type DeliveryMode, type DmDelay } from "@/lib/automation/delivery";
+import { DEFAULT_DM_DELAY_SECONDS, deliveryModeOf, deliverySequence, DM_DELAY_OPTIONS, type DeliveryMode, type DmDelay } from "@/lib/automation/delivery";
 import { accountProblem } from "@/lib/automation/account-status";
 import { findConflicts, sharedNextReel, type Conflict, type ConflictCandidate } from "@/lib/automation/conflicts";
 import {
@@ -206,8 +206,9 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   // steps first (opening DM and/or follow request). Saved automations open on
   // the mode their steps say.
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("direct");
-  // Wait before the first DM, in seconds.
-  const [dmDelay, setDmDelay] = useState<DmDelay>(0);
+  // Wait before answering, in seconds: 30 for a new automation; a saved one
+  // opens on its own value.
+  const [dmDelay, setDmDelay] = useState<DmDelay>(DEFAULT_DM_DELAY_SECONDS);
   const [media, setMedia] = useState<Record<MediaSlot, BuilderMedia[]>>(EMPTY_MEDIA);
   const [storageVersion, setStorageVersion] = useState(0);
   const isComments = automationType === "COMMENTS";
@@ -475,15 +476,17 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     followUp: followUpEnabled,
     followUpMinutes: followUpDelayMinutes,
   });
-  const delayText = (seconds: number) =>
-    seconds === 30 ? t("after 30 seconds") : seconds === 60 ? t("after 1 minute") : seconds === 300 ? t("after 5 minutes") : t("right away");
+  // "Wait 30 seconds → public reply on the comment → main message by DM".
   const sequenceText = sequence
     .map((item) => {
+      if (item.kind === "wait") {
+        const delay = item.seconds === 30 ? t("30 seconds") : item.seconds === 60 ? t("1 minute") : t("5 minutes");
+        return t("wait {delay}", { delay });
+      }
       if (item.kind === "publicReply") return t("public reply on the comment");
       if (item.kind === "followUp") return item.minutes > 0 ? t("thank-you {count} min later", { count: item.minutes }) : t("thank-you right after");
       const label = item.kind === "opening" ? t("opening DM") : item.kind === "follow" ? t("follow request") : t("main message");
-      if (!item.firstDm) return label;
-      return `${item.kind === "opening" ? label : t("{item} by DM", { item: label })} ${delayText(item.delaySeconds)}`;
+      return item.firstDm && item.kind !== "opening" ? t("{item} by DM", { item: label }) : label;
     })
     .join(" → ");
   const sequenceLine = sequenceText.charAt(0).toUpperCase() + sequenceText.slice(1);
@@ -1155,7 +1158,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
 
           <div className="rounded-control border border-border-subtle bg-surface px-3.5 py-3">
             <label htmlFor="dm-delay" className="font-semibold text-heading">
-              {t("Wait before sending the DM")}
+              {t("Wait before answering")}
             </label>
             <select
               id="dm-delay"
@@ -1169,9 +1172,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
               <option value={300}>{t("5 minutes")}</option>
             </select>
             <Hint className="mt-1.5">
-              {isComments
-                ? t("Applies to the first DM. The public reply on the comment goes right away. If someone from your team answers the person in the Direct during the wait, the DM is not sent.")
-                : t("Applies to the first reply. If someone from your team answers the person during the wait, the automation does not answer.")}
+              {t("In Comments, the public reply and the DM go together after the wait. In Stories and Direct, the DM goes after the wait.")}
             </Hint>
           </div>
 

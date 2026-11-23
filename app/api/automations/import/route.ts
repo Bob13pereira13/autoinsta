@@ -6,6 +6,7 @@ import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
 import { automationRuleIssues } from "@/lib/automation/rules";
+import { DEFAULT_DM_DELAY_SECONDS } from "@/lib/automation/delivery";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -122,6 +123,8 @@ export async function POST(request: NextRequest) {
         dmMessage: campaign.dmMessage.slice(0, 1000),
         publicReplyEnabled: Boolean(publicReply),
         publicReplyMessage: publicReply ? publicReply.slice(0, 1000) : null,
+        // A new automation: the editor's default wait.
+        dmDelaySeconds: DEFAULT_DM_DELAY_SECONDS,
         isActive: campaign.isActive,
         wholeWordMatch: campaign.wholeWordMatch,
         workspaceId: context.workspaceId,

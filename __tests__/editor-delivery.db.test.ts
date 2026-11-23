@@ -92,11 +92,28 @@ describe.skipIf(!databaseUrl)("step 3: Direct or steps, media, wait before the D
     expect(row.dmDelaySeconds).toBe(0);
   });
 
-  it("Direct saves with both steps off; the wait defaults to 0", async () => {
+  it("Direct saves with both steps off; a new automation waits 30 seconds unless it says otherwise", async () => {
     const res = await POST(req("POST", comments({ openingDmEnabled: false, requireFollow: false })));
     expect(res.status).toBe(201);
     const row = await state.db.automation.findUniqueOrThrow({ where: { id: (await res.json()).data.id } });
-    expect(row).toMatchObject({ openingDmEnabled: false, requireFollow: false, dmDelaySeconds: 0 });
+    expect(row).toMatchObject({ openingDmEnabled: false, requireFollow: false, dmDelaySeconds: 30 });
+    const now = await POST(req("POST", comments({ name: "Na hora", dmDelaySeconds: 0 })));
+    expect((await state.db.automation.findUniqueOrThrow({ where: { id: (await now.json()).data.id } })).dmDelaySeconds).toBe(0);
+  });
+
+  it("an existing automation keeps its saved wait when edited without it", async () => {
+    expect((await PATCH(req("PATCH", { name: "Antiga editada" }, "?id=old_auto"))).status).toBe(200);
+    expect((await state.db.automation.findUniqueOrThrow({ where: { id: "old_auto" } })).dmDelaySeconds).toBe(0);
+  });
+
+  it("the log takes the new “comment deleted” status and the reason a public reply was not posted", async () => {
+    const log = await state.db.dmLog.create({
+      data: {
+        workspaceId: "w1", automationId: "old_auto", instagramAccountId: "acc1", commenterId: "p1", commentText: "LINK", commentId: "c_gone",
+        status: "SKIPPED_COMMENT_DELETED", errorMessage: "Not sent: the comment was deleted during the wait", publicReplySkipReason: "comment_deleted",
+      },
+    });
+    expect(log).toMatchObject({ status: "SKIPPED_COMMENT_DELETED", publicReplySkipReason: "comment_deleted", publicReplySentAt: null });
   });
 
   it("the wait takes only 0, 30, 60 or 300 seconds", async () => {

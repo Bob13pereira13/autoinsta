@@ -43,6 +43,7 @@ const STATUS_FILTERS = [
   "SKIPPED_DEDUP",
   "SKIPPED_COOLDOWN",
   "SKIPPED_HUMAN_ACTIVE",
+  "SKIPPED_COMMENT_DELETED",
 ];
 
 export default function LogsPage() {

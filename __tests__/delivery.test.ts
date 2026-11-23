@@ -1,9 +1,9 @@
 /**
  * Step 3, "What the person receives": "Direct" or "With steps first", the
- * wait before the first DM, and the order shown live above the cards.
+ * wait before answering, and the order shown live above the cards.
  */
 import { describe, expect, it } from "vitest";
-import { deliveryModeOf, deliverySequence, DM_DELAY_OPTIONS, stepsMissing } from "@/lib/automation/delivery";
+import { DEFAULT_DM_DELAY_SECONDS, deliveryModeOf, deliverySequence, DM_DELAY_OPTIONS, stepsMissing } from "@/lib/automation/delivery";
 
 describe("which mode an automation opens on (what it has saved)", () => {
   it("no opening DM and no follow request: Direct", () => {
@@ -33,19 +33,28 @@ describe("the order the person receives things in", () => {
   const base = { type: "COMMENTS" as "COMMENTS" | "STORIES" | "DIRECT", publicReply: false, openingDm: false, requireFollow: false, delaySeconds: 0, followUp: false, followUpMinutes: 0 };
   const kinds = (a: Partial<typeof base>) => deliverySequence({ ...base, ...a }).map((i) => i.kind);
 
-  it("Direct with a public reply: the public reply, then the DM (the wait is on the DM)", () => {
+  it("Comments with a wait: the wait, then the public reply, then the DM", () => {
     const items = deliverySequence({ ...base, publicReply: true, delaySeconds: 30 });
-    expect(items).toEqual([{ kind: "publicReply" }, { kind: "main", firstDm: true, delaySeconds: 30 }]);
+    expect(items).toEqual([{ kind: "wait", seconds: 30 }, { kind: "publicReply" }, { kind: "main", firstDm: true }]);
   });
 
-  it("steps: opening DM → follow request → main message; the wait goes on the first DM", () => {
+  it("without a wait, nothing before the public reply", () => {
+    expect(kinds({ publicReply: true })).toEqual(["publicReply", "main"]);
+  });
+
+  it("steps: the wait → opening DM → follow request → main message", () => {
     const items = deliverySequence({ ...base, openingDm: true, requireFollow: true, delaySeconds: 60 });
     expect(items).toEqual([
-      { kind: "opening", firstDm: true, delaySeconds: 60 },
-      { kind: "follow", firstDm: false, delaySeconds: 0 },
-      { kind: "main", firstDm: false, delaySeconds: 0 },
+      { kind: "wait", seconds: 60 },
+      { kind: "opening", firstDm: true },
+      { kind: "follow", firstDm: false },
+      { kind: "main", firstDm: false },
     ]);
     expect(kinds({ requireFollow: true })).toEqual(["follow", "main"]);
+  });
+
+  it("Stories and Direct: the wait, then the DM", () => {
+    expect(kinds({ type: "DIRECT", delaySeconds: 300 })).toEqual(["wait", "main"]);
   });
 
   it("the thank-you comes last; Stories/Direct have no public reply or opening DM", () => {
@@ -53,7 +62,8 @@ describe("the order the person receives things in", () => {
     expect(kinds({ type: "DIRECT", publicReply: true, openingDm: true })).toEqual(["main"]);
   });
 
-  it("the waits the editor offers", () => {
+  it("the waits the editor offers; new automations start at 30 seconds", () => {
     expect(DM_DELAY_OPTIONS).toEqual([0, 30, 60, 300]);
+    expect(DEFAULT_DM_DELAY_SECONDS).toBe(30);
   });
 });

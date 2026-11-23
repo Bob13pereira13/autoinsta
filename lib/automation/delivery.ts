@@ -14,9 +14,14 @@
 export type AutomationKind = "COMMENTS" | "STORIES" | "DIRECT";
 export type DeliveryMode = "direct" | "steps";
 
-/** Wait before the first DM, in seconds: at once, 30 s, 1 min, 5 min. */
+/**
+ * Wait before answering, in seconds: at once, 30 s, 1 min, 5 min. In Comments
+ * the public reply and the DM both go after it; in Stories and Direct, the DM.
+ */
 export const DM_DELAY_OPTIONS = [0, 30, 60, 300] as const;
 export type DmDelay = (typeof DM_DELAY_OPTIONS)[number];
+/** What a new automation starts with (the editor and the API). Saved ones keep theirs. */
+export const DEFAULT_DM_DELAY_SECONDS: DmDelay = 30;
 
 /** The mode an automation opens on, from what it has saved. */
 export function deliveryModeOf(a: { type: AutomationKind; openingDmEnabled?: boolean | null; requireFollow?: boolean | null }): DeliveryMode {
@@ -31,13 +36,14 @@ export function stepsMissing(a: { type: AutomationKind; mode: DeliveryMode; open
 }
 
 export type SequenceItem =
+  | { kind: "wait"; seconds: number }
   | { kind: "publicReply" }
-  | { kind: "opening" | "follow" | "main"; firstDm: boolean; delaySeconds: number }
+  | { kind: "opening" | "follow" | "main"; firstDm: boolean }
   | { kind: "followUp"; minutes: number };
 
 /**
- * What the person receives, in order. The public reply to a comment goes at
- * once; the wait applies to the first DM, whichever it is.
+ * What the person receives, in order. The wait comes first: everything after
+ * it, the public reply on a comment included, goes once it is over.
  */
 export function deliverySequence(a: {
   type: AutomationKind;
@@ -49,13 +55,14 @@ export function deliverySequence(a: {
   followUpMinutes: number;
 }): SequenceItem[] {
   const items: SequenceItem[] = [];
+  if (a.delaySeconds > 0) items.push({ kind: "wait", seconds: a.delaySeconds });
   const comments = a.type === "COMMENTS";
   if (comments && a.publicReply) items.push({ kind: "publicReply" });
   const dms: Array<"opening" | "follow" | "main"> = [];
   if (comments && a.openingDm) dms.push("opening");
   if (a.requireFollow) dms.push("follow");
   dms.push("main");
-  dms.forEach((kind, i) => items.push({ kind, firstDm: i === 0, delaySeconds: i === 0 ? a.delaySeconds : 0 }));
+  dms.forEach((kind, i) => items.push({ kind, firstDm: i === 0 }));
   if (a.followUp) items.push({ kind: "followUp", minutes: a.followUpMinutes });
   return items;
 }

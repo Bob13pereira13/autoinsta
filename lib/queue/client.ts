@@ -34,8 +34,8 @@ export interface ProcessCommentJob {
   // from. Campaigns are bound to that post, so both ids have to be matched.
   originalMediaId?: string;
   requeueAttempt?: number;
-  // The delayed pass of the DM (Automation.dmDelaySeconds): the public reply
-  // already went out; this pass only sends the DM, checking everything again.
+  // The delayed pass (Automation.dmDelaySeconds): nothing went out before it.
+  // It checks everything again, then sends the public reply and the DM.
   // `dmScheduledAt` is when the wait started (ISO), for the team-reply check.
   dmDelayed?: boolean;
   dmScheduledAt?: string;

@@ -4,7 +4,13 @@ import {
   isConfirmedSendRejection,
   isDeliveryUnconfirmed,
 } from "@/lib/instagram/delivery-errors";
-import { claimCommentDelivery, MAX_COMMENT_SEND_ATTEMPTS } from "./comment-delivery";
+import {
+  claimCommentDelivery,
+  COMMENT_FINAL_SKIPS,
+  delayedCommentJobId,
+  MAX_COMMENT_SEND_ATTEMPTS,
+  type PublicReplySkipReason,
+} from "./comment-delivery";
 import { createHash } from "node:crypto";
 import { UnrecoverableError, Worker, type Job } from "bullmq";
 import {
@@ -26,6 +32,7 @@ import {
   MetaApiError,
   RateLimitError,
   TokenExpiredError,
+  getCommentState,
   getUserFollowStatus,
   resolveRecipientName,
   sendCommentReply,
@@ -462,14 +469,16 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     }
 
     const alreadyDmd = existingLog?.status === "SENT";
-    const alreadyPublicReplied = Boolean(existingLog?.publicReplySentAt);
+    // Posted, or deliberately not posted (publicReplySkipReason): either way
+    // the public leg is closed.
+    const alreadyPublicReplied = Boolean(existingLog?.publicReplySentAt || existingLog?.publicReplySkipReason);
     const needsDm = !alreadyDmd && !existingLog?.dmDeliveryUnconfirmed &&
       (existingLog?.attempts ?? 0) < MAX_COMMENT_SEND_ATTEMPTS;
 
     // Skip only when there is genuinely nothing left to do. A comment whose DM
     // already sent but whose public reply never posted (e.g. it hit a rate
     // limit) must still come back so the public reply can be retried.
-    if (existingLog?.status === "SKIPPED_PLAN_LIMIT" || existingLog?.status === "SKIPPED_HUMAN_ACTIVE") continue;
+    if (existingLog && COMMENT_FINAL_SKIPS.includes(existingLog.status)) continue;
     if (
       !needsDm &&
       (alreadyPublicReplied || existingLog?.publicReplyDeliveryUnconfirmed || !automation.publicReplyEnabled)
@@ -552,20 +561,106 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       update: {},
     });
 
-    // Public reply leg — decoupled from the DM and posted first so a DM failure
-    // (e.g. a non-follower whose messaging is restricted) never suppresses it.
-    // Idempotent across retries via publicReplySentAt.
     const replyPool =
       automation.publicReplyMessages.length > 0
         ? automation.publicReplyMessages
         : automation.publicReplyMessage
           ? [automation.publicReplyMessage]
           : [];
-    if (
+    const publicReplyPending =
       automation.publicReplyEnabled &&
       replyPool.length > 0 &&
       !existingLog?.publicReplySentAt &&
-      !existingLog?.publicReplyDeliveryUnconfirmed &&
+      !existingLog?.publicReplySkipReason &&
+      !existingLog?.publicReplyDeliveryUnconfirmed;
+
+    // The wait (dmDelaySeconds) comes before the public reply AND the DM. This
+    // pass only schedules a delayed job; that job sends the public reply, then
+    // the DM, checking everything again when it runs (the account and the
+    // automation still on, the client still active, the limits). The job id
+    // carries the attempt count: a repeated webhook or a sweep during the wait
+    // collapses onto the same job, a retry after a failure gets its own.
+    // Without a wait nothing changes: both go right away, as before.
+    if ((automation.dmDelaySeconds ?? 0) > 0 && !job.data.dmDelayed) {
+      await getDMQueue().add(
+        "process-comment",
+        { ...job.data, dmDelayed: true, dmScheduledAt: new Date().toISOString() },
+        {
+          delay: automation.dmDelaySeconds * 1000,
+          jobId: delayedCommentJobId(instagramAccountId, commentId, existingLog?.attempts ?? 0),
+        }
+      );
+      continue;
+    }
+
+    let accountAlreadyReplied = false;
+    if (job.data.dmDelayed) {
+      // A reason to send nothing more. If the DM is no longer pending (a pass
+      // that only retries the public reply), its status stays as it is (SENT,
+      // or FAILED after the last attempt) and only the public reply is closed.
+      const stop = async (status: "SKIPPED_HUMAN_ACTIVE" | "SKIPPED_COMMENT_DELETED", reason: PublicReplySkipReason, errorMessage: string) => {
+        await prisma.dmLog.update({
+          where: { automationId_commentId: { automationId: automation.id, commentId } },
+          data: {
+            ...(needsDm ? { status, errorMessage } : {}),
+            ...(publicReplyPending ? { publicReplySkipReason: reason } : {}),
+          },
+        });
+      };
+
+      // Someone from the team answered the person in the Direct during the
+      // wait: neither the public reply nor the DM (final, a later sweep sends
+      // nothing either).
+      if (
+        job.data.dmScheduledAt &&
+        (await humanRepliedSince({
+          accountConnectionId: automation.instagramAccountId,
+          recipientId: commenterId,
+          since: new Date(job.data.dmScheduledAt),
+        }))
+      ) {
+        await stop("SKIPPED_HUMAN_ACTIVE", "team_answered", "Not sent: someone from the account answered this person in the Direct during the wait");
+        continue;
+      }
+
+      // The comment itself, one call: deleted or hidden during the wait means
+      // ignored (no retry, not a failure); a reply the account already made
+      // means no second public reply, and the DM still goes. If Instagram
+      // cannot tell, both go as without the check.
+      let comment: Awaited<ReturnType<typeof getCommentState>> = null;
+      try {
+        comment = await getCommentState({
+          context: accessToken,
+          commentId,
+          accountInstagramId: automation.instagramAccount.instagramId,
+        });
+      } catch (error) {
+        console.warn("[DM Worker] Could not check the comment before the delayed reply:", formatError(error));
+      }
+      if (comment && comment.state !== "visible") {
+        const hidden = comment.state === "hidden";
+        await stop(
+          "SKIPPED_COMMENT_DELETED",
+          hidden ? "comment_hidden" : "comment_deleted",
+          hidden ? "Not sent: the comment was hidden during the wait" : "Not sent: the comment was deleted during the wait"
+        );
+        continue;
+      }
+      accountAlreadyReplied = Boolean(comment?.ownerReplied);
+      if (accountAlreadyReplied && publicReplyPending) {
+        await prisma.dmLog.update({
+          where: { automationId_commentId: { automationId: automation.id, commentId } },
+          data: { publicReplySkipReason: "account_replied" },
+        });
+      }
+    }
+
+    // Public reply leg — decoupled from the DM and posted first so a DM failure
+    // (e.g. a non-follower whose messaging is restricted) never suppresses it.
+    // Idempotent across retries via publicReplySentAt.
+    if (
+      publicReplyPending &&
+      !accountAlreadyReplied &&
       await claimCommentDelivery(automation.id, commentId, "public")
     ) {
       try {
@@ -610,45 +705,6 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     // DM already sent on an earlier pass; the public reply retry above was all
     // this run needed. Don't re-send the DM.
     if (!needsDm) continue;
-
-    // Wait before the DM (dmDelaySeconds). The public reply above went out at
-    // once; the DM leg runs again as its own delayed job, so everything below
-    // (dedup, plan and hourly limits) and above (the account still on, the
-    // automation still active, the client still active) is checked when it is
-    // sent, not now. The job id carries the attempt count: a sweep during the
-    // wait collapses onto the same job, a retry after a failure gets its own.
-    const dmDelaySeconds = automation.dmDelaySeconds ?? 0;
-    if (dmDelaySeconds > 0 && !job.data.dmDelayed) {
-      await getDMQueue().add(
-        "process-comment",
-        { ...job.data, dmDelayed: true, dmScheduledAt: new Date().toISOString() },
-        {
-          delay: dmDelaySeconds * 1000,
-          jobId: `dmdelay_${instagramAccountId}_${commentId}_${existingLog?.attempts ?? 0}`,
-        }
-      );
-      continue;
-    }
-    // Someone from the team answered the person during the wait: the bot
-    // stays out of it (final, a later sweep does not send it either).
-    if (
-      job.data.dmDelayed &&
-      job.data.dmScheduledAt &&
-      (await humanRepliedSince({
-        accountConnectionId: automation.instagramAccountId,
-        recipientId: commenterId,
-        since: new Date(job.data.dmScheduledAt),
-      }))
-    ) {
-      await prisma.dmLog.update({
-        where: { automationId_commentId: { automationId: automation.id, commentId } },
-        data: {
-          status: "SKIPPED_HUMAN_ACTIVE",
-          errorMessage: "Not sent: someone from the account answered this person while the DM was waiting",
-        },
-      });
-      continue;
-    }
 
     // Meta allows exactly ONE private reply per comment, ever — across every
     // campaign. When several campaigns match the same comment (duplicated

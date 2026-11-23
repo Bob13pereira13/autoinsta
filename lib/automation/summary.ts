@@ -23,7 +23,7 @@ export interface SummaryInput {
   followUpMinutes: number;
   publicReply: boolean;
   cooldownHours: number;
-  /** Wait before the first DM (0 = at once). */
+  /** Wait before answering (0 = at once): in Comments it holds the public reply too. */
   dmDelaySeconds?: number;
 }
 
@@ -79,14 +79,15 @@ export function automationSummary({ t }: Pick<I18n, "t">, s: SummaryInput): stri
     (s.requireFollow
       ? t(", the person follows you and then receives {what} by DM", { what })
       : t(", the person receives {what} by DM", { what }));
+  // The wait holds everything before it: in Comments the DM and the public
+  // reply, in Stories and Direct the DM.
+  if (s.type === "COMMENTS" && s.publicReply) sentence += t(" and the comment is answered publicly");
   const delay = s.dmDelaySeconds ?? 0;
   if (delay > 0) {
     sentence += t(" ({delay} later)", {
       delay: delay === 30 ? t("30 seconds") : delay === 60 ? t("1 minute") : delay === 300 ? t("5 minutes") : `${delay} s`,
     });
   }
-
-  if (s.type === "COMMENTS" && s.publicReply) sentence += t(" and the comment is answered publicly");
   if (s.followUp) {
     sentence +=
       s.followUpMinutes > 0

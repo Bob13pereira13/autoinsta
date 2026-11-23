@@ -180,6 +180,9 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
 
 function CommentThread(props: CampaignPreviewProps) {
   const { t } = useI18n();
+  // The public reply waits too (dmDelaySeconds), and the DM goes right after it.
+  const delay = props.dmDelaySeconds ?? 0;
+  const delayLabel = delay === 30 ? t("30 seconds") : delay === 60 ? t("1 minute") : delay === 300 ? t("5 minutes") : null;
   return (
     <div className="flex flex-col gap-4">
       {props.postThumb && <img src={props.postThumb} alt="" className="aspect-[4/5] w-24 rounded-control object-cover" />}
@@ -194,14 +197,21 @@ function CommentThread(props: CampaignPreviewProps) {
         </div>
       </div>
       {props.publicReplyEnabled && (
-        <div className="flex gap-2.5 pl-10">
-          <Avatar url={props.avatarUrl} size={28} />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs">
-              <span className="font-semibold text-heading">{props.username}</span> <span className="text-faint">{t("Now")}</span>
+        <div className="flex flex-col gap-1.5">
+          {delayLabel && (
+            <p data-preview-wait className="pl-10 text-[11px] text-faint">
+              {t("{delay} later", { delay: delayLabel })}
             </p>
-            <p className="text-foreground">{props.publicReplyMessage || t("Sent you a DM! 📩")}</p>
-            <p className="mt-0.5 text-xs text-faint">{t("Reply")}</p>
+          )}
+          <div className="flex gap-2.5 pl-10">
+            <Avatar url={props.avatarUrl} size={28} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs">
+                <span className="font-semibold text-heading">{props.username}</span> <span className="text-faint">{t("Now")}</span>
+              </p>
+              <p className="text-foreground">{props.publicReplyMessage || t("Sent you a DM! 📩")}</p>
+              <p className="mt-0.5 text-xs text-faint">{t("Reply")}</p>
+            </div>
           </div>
         </div>
       )}

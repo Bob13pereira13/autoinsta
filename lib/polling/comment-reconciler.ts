@@ -25,7 +25,7 @@
  * filter on the account to widen results.
  */
 
-import { MAX_COMMENT_SEND_ATTEMPTS } from "@/lib/queue/comment-delivery";
+import { COMMENT_FINAL_SKIPS, delayedCommentJobId, MAX_COMMENT_SEND_ATTEMPTS } from "@/lib/queue/comment-delivery";
 import { hasLegacyUnconfirmedDelivery } from "@/lib/instagram/delivery-errors";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
@@ -86,6 +86,8 @@ interface SweepStat {
   keywords: string;
   matched: number;
   alreadyReplied: number;
+  /** In their wait (dmDelaySeconds): the delayed job answers them. */
+  waiting: number;
   enqueued: number;
   errors: string[];
 }
@@ -157,6 +159,7 @@ export async function reconcileComments(): Promise<void> {
         keywords: automation.keywords.join(","),
         matched: 0,
         alreadyReplied: 0,
+        waiting: 0,
         enqueued: 0,
         errors: [errMessage(error)],
       })
@@ -202,6 +205,7 @@ async function sweepCampaign({
       : automation.keywords.join(","),
     matched: 0,
     alreadyReplied: 0,
+    waiting: 0,
     enqueued: 0,
     errors: [],
   };
@@ -303,20 +307,22 @@ async function sweepCampaign({
       select: {
         commentId: true, status: true, attempts: true, errorMessage: true,
         dmDeliveryUnconfirmed: true, publicReplySentAt: true,
-        publicReplyDeliveryUnconfirmed: true,
+        publicReplySkipReason: true, publicReplyDeliveryUnconfirmed: true,
       },
     });
     const handledSet = new Set(logs.filter((log) => {
-      const dmStopped = log.status === "SENT" || log.status === "SKIPPED_PLAN_LIMIT" ||
-        // Cancelled because the team answered during the wait (dmDelaySeconds):
-        // a later sweep must not send it after all.
-        log.status === "SKIPPED_HUMAN_ACTIVE" ||
+      // Nothing more goes to this comment: the plan limit, or, during the wait
+      // (dmDelaySeconds), the team answered the person or the comment was
+      // deleted or hidden. A later sweep must not send it after all.
+      if (COMMENT_FINAL_SKIPS.includes(log.status)) return true;
+      const dmStopped = log.status === "SENT" ||
         log.dmDeliveryUnconfirmed || log.attempts >= MAX_COMMENT_SEND_ATTEMPTS ||
         (log.status === "FAILED" && hasLegacyUnconfirmedDelivery(log.errorMessage));
       const replyStopped = !automation.publicReplyEnabled ||
-        log.publicReplySentAt || log.publicReplyDeliveryUnconfirmed;
+        log.publicReplySentAt || log.publicReplySkipReason || log.publicReplyDeliveryUnconfirmed;
       return dmStopped && replyStopped;
     }).map((log) => log.commentId));
+    const attemptsOf = new Map(logs.map((log) => [log.commentId, log.attempts]));
 
     // Oldest first, so whoever commented earliest gets answered first, capped.
     const fresh = needsAction
@@ -325,6 +331,13 @@ async function sweepCampaign({
       .slice(0, MAX_NEW_PER_SWEEP);
 
     for (const c of fresh) {
+      // In its wait (dmDelaySeconds): the delayed job will send the public
+      // reply and the DM, so the sweep leaves it alone. (A job added anyway
+      // would land on the same delayed job id and be dropped.)
+      if (await isWaiting(queue, delayedCommentJobId(account.instagramId, c.id, attemptsOf.get(c.id) ?? 0))) {
+        stat.waiting += 1;
+        continue;
+      }
       // No deterministic jobId here: a retained completed/failed job from an
       // earlier sweep would otherwise be treated as a duplicate and silently
       // drop this add, so the comment would never be retried. Dedup is handled
@@ -350,6 +363,18 @@ async function sweepCampaign({
   }
 
   return stat;
+}
+
+/** Is this delayed job still to run (or running)? A Redis read; false if Redis fails. */
+async function isWaiting(queue: ReturnType<typeof getDMQueue>, jobId: string): Promise<boolean> {
+  try {
+    const job = await queue.getJob(jobId);
+    if (!job) return false;
+    const state = await job.getState();
+    return state === "delayed" || state === "waiting" || state === "active" || state === "prioritized" || state === "waiting-children";
+  } catch {
+    return false;
+  }
 }
 
 /**
