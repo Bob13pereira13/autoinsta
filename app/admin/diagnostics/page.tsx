@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { getDiagnostics, type DiagnosticsClient } from "@/lib/admin/diagnostics";
 import { getI18n } from "@/lib/i18n/server";
+import { logReasonText } from "@/lib/dm-logs/reasons";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +139,13 @@ export default async function AdminDiagnosticsPage({ searchParams }: { searchPar
                     <StatusBadge status={item.status} />
                   </div>
                   <p className="mt-1 truncate text-xs text-muted">{item.commentText}</p>
-                  {item.errorMessage && <p className="mt-1 text-xs text-error">{item.errorMessage}</p>}
+                  {item.errorMessage && (
+                    <>
+                      <p className="mt-1 text-xs text-error">{logReasonText(item.errorMessage, t)}</p>
+                      {/* For support: what was stored (Meta's own text, codes). */}
+                      <p className="mt-0.5 break-words font-mono text-[11px] text-faint">{t("Technical detail: {detail}", { detail: item.errorMessage })}</p>
+                    </>
+                  )}
                   <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-faint">
                     <ClientTag client={item.client} />
                     <span>{formatDate(item.updatedAt, locale, true)}</span>

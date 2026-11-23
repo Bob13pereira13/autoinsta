@@ -7,6 +7,7 @@
  */
 
 import { useI18n } from "@/lib/i18n/provider";
+import { logReasonText } from "@/lib/dm-logs/reasons";
 import { useEffect, useState, useCallback } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import StatusBadge from "@/components/status-badge";
@@ -47,7 +48,7 @@ const STATUS_FILTERS = [
 ];
 
 export default function LogsPage() {
-  const { t, label, locale, message } = useI18n();
+  const { t, label, locale } = useI18n();
   const [logs, setLogs] = useState<DmLog[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
@@ -179,7 +180,7 @@ export default function LogsPage() {
                     <td>
                       <StatusBadge status={log.status} />
                       {log.errorMessage && log.status !== "SENT" && (
-                        <span className="mt-1 block max-w-[220px] text-xs text-faint">{message(log.errorMessage)}</span>
+                        <span className="mt-1 block max-w-[220px] text-xs text-faint">{logReasonText(log.errorMessage, t)}</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap text-muted">

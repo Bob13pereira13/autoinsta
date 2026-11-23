@@ -12,6 +12,8 @@ import {
   type PublicReplySkipReason,
 } from "./comment-delivery";
 import { createHash } from "node:crypto";
+import { LOG_REASONS } from "@/lib/dm-logs/reasons";
+import { formatErrorForLog } from "@/lib/dm-logs/format-error";
 import { UnrecoverableError, Worker, type Job } from "bullmq";
 import {
   getDMQueue,
@@ -123,15 +125,9 @@ const FOLLOW_RECHECK_TOTAL_MS = FOLLOW_RECHECK_DELAYS_MS.reduce(
  * again, which is far better than spamming someone who already received it.
  */
 
-function formatError(error: unknown): string {
-  if (error instanceof MetaApiError) {
-    return `${error.name} ${error.code}: ${error.message}`;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Unknown error";
-}
+// What a DM log stores for an error (lib/dm-logs/format-error.ts); the logs
+// page shows it through lib/dm-logs/reasons.ts, never as is.
+const formatError = formatErrorForLog;
 
 // Meta rejections that a plain-text retry cannot fix: the send was refused for
 // the conversation, not for the button template. Retrying as text just burns
@@ -337,7 +333,7 @@ async function sendSlotMedia({
 
   const instagramId = automation.instagramAccount.instagramId;
   if (!(await reserveSendSlots(instagramId, items.length))) {
-    return "Media not sent: the account's hourly send limit was reached";
+    return LOG_REASONS.mediaHourlyLimit;
   }
 
   const failures: string[] = [];
@@ -357,7 +353,7 @@ async function sendSlotMedia({
     }
   }
   return failures.length
-    ? `Media not fully sent (${failures.length}/${items.length} failed): ${failures[0]}`
+    ? LOG_REASONS.mediaPartial(failures.length, items.length, failures[0])
     : null;
 }
 
@@ -504,11 +500,11 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commentId,
           matchedKeyword: matchResult.matchedKeyword,
           status: "FAILED",
-          errorMessage: "No Instagram access token available",
+          errorMessage: LOG_REASONS.noToken,
         },
         update: {
           status: "FAILED",
-          errorMessage: "No Instagram access token available",
+          errorMessage: LOG_REASONS.noToken,
         },
       });
       continue;
@@ -538,11 +534,11 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commentId,
           matchedKeyword: matchResult.matchedKeyword,
           status: "FAILED",
-          errorMessage: "Failed to decrypt Instagram access token",
+          errorMessage: LOG_REASONS.tokenUnreadable,
         },
         update: {
           status: "FAILED",
-          errorMessage: "Failed to decrypt Instagram access token",
+          errorMessage: LOG_REASONS.tokenUnreadable,
         },
       });
       continue;
@@ -619,7 +615,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           since: new Date(job.data.dmScheduledAt),
         }))
       ) {
-        await stop("SKIPPED_HUMAN_ACTIVE", "team_answered", "Not sent: someone from the account answered this person in the Direct during the wait");
+        await stop("SKIPPED_HUMAN_ACTIVE", "team_answered", LOG_REASONS.teamAnsweredDuringWait);
         continue;
       }
 
@@ -642,7 +638,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         await stop(
           "SKIPPED_COMMENT_DELETED",
           hidden ? "comment_hidden" : "comment_deleted",
-          hidden ? "Not sent: the comment was hidden during the wait" : "Not sent: the comment was deleted during the wait"
+          hidden ? LOG_REASONS.commentHidden : LOG_REASONS.commentDeleted
         );
         continue;
       }
@@ -729,7 +725,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         data: {
           status: "SKIPPED_DEDUP",
           matchedKeyword: matchResult.matchedKeyword,
-          errorMessage: `Another campaign (${privateReplyUsedBy.automation?.name ?? "unknown"}) already sent the one private reply Instagram allows for this comment`,
+          errorMessage: LOG_REASONS.privateReplyUsed(privateReplyUsedBy.automation?.name),
         },
       });
       continue;
@@ -747,7 +743,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         data: {
           status: "SKIPPED_PLAN_LIMIT",
           matchedKeyword: matchResult.matchedKeyword,
-          errorMessage: `Monthly DM limit reached (${usage.limit})`,
+          errorMessage: LOG_REASONS.monthlyLimit(usage.limit),
         },
       });
       continue;
@@ -793,7 +789,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           data: {
             status: "SKIPPED_RATE_LIMIT",
             matchedKeyword: matchResult.matchedKeyword,
-            errorMessage: "Hourly Instagram DM rate limit reached",
+            errorMessage: LOG_REASONS.hourlyLimit,
           },
         });
         continue;
@@ -810,7 +806,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           data: {
             status: "PENDING",
             matchedKeyword: matchResult.matchedKeyword,
-            errorMessage: "Hourly rate limit hit; retry scheduled",
+            errorMessage: LOG_REASONS.hourlyLimitRetry,
           },
         });
 
@@ -1319,7 +1315,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         commentText: "(button tap)",
         commentId: dedupeId,
         status: "SKIPPED_PLAN_LIMIT",
-        errorMessage: `Monthly DM limit reached (${usage.limit})`,
+        errorMessage: LOG_REASONS.monthlyLimit(usage.limit),
       },
       update: { status: "SKIPPED_PLAN_LIMIT" },
     });
@@ -1624,13 +1620,13 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   ) {
     await writeLog({
       status: "SKIPPED_HUMAN_ACTIVE",
-      errorMessage: "Not sent: someone from the account answered this person while the reply was waiting",
+      errorMessage: LOG_REASONS.teamAnsweredReplyWaiting,
     });
     return;
   }
 
   if (!hasInstagramCredentials(automation.instagramAccount)) {
-    await writeLog({ status: "FAILED", errorMessage: "No Instagram access token available" });
+    await writeLog({ status: "FAILED", errorMessage: LOG_REASONS.noToken });
     return;
   }
 
@@ -1646,7 +1642,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
     ) {
       await writeLog({
         status: "SKIPPED_HUMAN_ACTIVE",
-        errorMessage: "Not sent: someone from the account talked to this person in the last 24 hours",
+        errorMessage: LOG_REASONS.teamTalkedRecently,
       });
       return;
     }
@@ -1659,7 +1655,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
     if (!claim.allowed) {
       await writeLog({
         status: "SKIPPED_COOLDOWN",
-        errorMessage: "Not sent: this automation already answered this person within its reply interval",
+        errorMessage: LOG_REASONS.cooldown,
       });
       return;
     }
@@ -1674,7 +1670,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
     );
   } catch {
     await releaseCooldown?.();
-    await writeLog({ status: "FAILED", errorMessage: "Failed to decrypt Instagram access token" });
+    await writeLog({ status: "FAILED", errorMessage: LOG_REASONS.tokenUnreadable });
     return;
   }
 
@@ -1704,7 +1700,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   const usage = await reserveWorkspaceDMSend(automation.workspaceId);
   if (!usage.allowed) {
     await releaseCooldown?.();
-    await writeLog({ status: "SKIPPED_PLAN_LIMIT", errorMessage: `Monthly DM limit reached (${usage.limit})` });
+    await writeLog({ status: "SKIPPED_PLAN_LIMIT", errorMessage: LOG_REASONS.monthlyLimit(usage.limit) });
     return;
   }
 
@@ -1716,7 +1712,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
     await releaseWorkspaceDMReservation(automation.workspaceId, usage.periodStart);
     await releaseCooldown?.();
     if (rateLimit.shouldRequeue) {
-      await writeLog({ status: "PENDING", errorMessage: "Hourly rate limit hit; retry scheduled" });
+      await writeLog({ status: "PENDING", errorMessage: LOG_REASONS.hourlyLimitRetry });
       await getDMQueue().add(
         MESSAGE_JOB_NAME,
         { ...job.data, requeueAttempt: requeueAttempt + 1 },
@@ -1726,7 +1722,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
         }
       );
     } else {
-      await writeLog({ status: "SKIPPED_RATE_LIMIT", errorMessage: "Hourly Instagram DM rate limit reached" });
+      await writeLog({ status: "SKIPPED_RATE_LIMIT", errorMessage: LOG_REASONS.hourlyLimit });
     }
     return;
   }
