@@ -469,17 +469,6 @@ select:focus-visible {
   .btn-danger:not(:disabled):active {
     transform: translateY(1px);
   }
-  /* Meta's "Continue with Facebook" button (Facebook brand guidelines):
-     Facebook Blue, white logo and text, in both themes, never restyled. */
-  .btn-facebook {
-    background: #1877f2;
-    color: #ffffff;
-    font-weight: 600;
-    gap: 10px;
-  }
-  .btn-facebook:not(:disabled):hover {
-    background: #166fe5;
-  }
   .btn-secondary {
     background: transparent;
     border: 1px solid var(--border);

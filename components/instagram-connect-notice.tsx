@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * What happened with the Meta login (the ?instagram= code the callback
+ * What happened with the Instagram login (the ?instagram= code the callback
  * returns with), in plain words, and how to try again. Meta's raw errors never
  * show here: the detail goes to the admin's Diagnostics.
  */
@@ -28,14 +28,7 @@ const MESSAGES: Record<string, { tone: Tone; title: StaticMessageKey; detail: St
   denied: {
     tone: "warning",
     title: "Instagram connection cancelled",
-    detail: "You closed or cancelled the Facebook login, so nothing was connected. You can try again whenever you want.",
-    retry: true,
-  },
-  no_account: {
-    tone: "warning",
-    title: "No Instagram professional account found",
-    detail:
-      "The login worked, but no Instagram account came with it. Your Instagram account must be a professional account (Business or Creator) linked to a Facebook Page, and you must select it on the login screen. Then try again.",
+    detail: "You closed or cancelled the Instagram login, so nothing was connected. You can try again whenever you want.",
     retry: true,
   },
   invalid: {
@@ -60,7 +53,7 @@ const MESSAGES: Record<string, { tone: Tone; title: StaticMessageKey; detail: St
     tone: "error",
     title: "Instagram connection failed",
     detail:
-      "Meta accepted the login, but the connection could not be completed. Try again in a moment. If it keeps happening, contact support.",
+      "Instagram accepted the login, but the connection could not be completed. Try again in a moment. If it keeps happening, contact support.",
     retry: true,
   },
 };

@@ -6,8 +6,6 @@ export type InstagramContext =
       provider: "META";
       accessToken: string;
       instagramId: string;
-      // The token came from Unified login, so calls go to graph.facebook.com.
-      unifiedLogin: boolean;
     }
   | {
       provider: "ZERNIO";
@@ -26,6 +24,14 @@ export type ProviderAccount = {
   accessToken: string;
 };
 
+/** The account was connected through a login the app no longer supports. */
+export class ReconnectRequiredError extends Error {
+  constructor() {
+    super("This Instagram account was connected through the Facebook login and has to be connected again with Instagram");
+    this.name = "ReconnectRequiredError";
+  }
+}
+
 export function hasInstagramCredentials(
   account: Pick<ProviderAccount, "provider" | "accessToken" | "zernioAccountId">
 ) {
@@ -38,13 +44,17 @@ export async function createInstagramContext(
   account: ProviderAccount,
   operationId?: string
 ): Promise<InstagramContext> {
-  if (account.provider !== "ZERNIO")
+  if (account.provider !== "ZERNIO") {
+    // A token from the Facebook (Unified) login, which the app no longer
+    // uses: it only worked on graph.facebook.com. The account has to be
+    // connected again with Instagram (marked for it by migration).
+    if (account.metaLogin === "UNIFIED") throw new ReconnectRequiredError();
     return {
       provider: "META",
       accessToken: decryptToken(account.accessToken),
       instagramId: account.instagramId,
-      unifiedLogin: account.metaLogin === "UNIFIED",
     };
+  }
   if (!account.zernioAccountId)
     throw new Error("Zernio account is not connected");
   const connection = await prisma.zernioConnection.findUnique({

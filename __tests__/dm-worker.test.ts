@@ -302,12 +302,9 @@ beforeEach(() => {
 });
 
 
-// An account connected through Instagram Login, as every pre-Unified-login row
-// is: the worker hands its decrypted token to the Meta client with its login.
-const META_AUTH = expect.objectContaining({
-  accessToken: "decrypted_token",
-  unifiedLogin: false,
-});
+// An account connected through Instagram's login: the worker hands its
+// decrypted token to the Meta client.
+const META_AUTH = expect.objectContaining({ accessToken: "decrypted_token" });
 describe("DM Worker — comments left on an ad", () => {
   it("also matches the organic post the ad was created from", async () => {
     const processor = getProcessor();

@@ -20,7 +20,7 @@ function formatDateTime(value: Date, locale: LegalLocale) {
 const TEXT = {
   "pt-BR": {
     lookupTitle: "Consultar um pedido",
-    lookupIntro: `Se você removeu o ${brand.name} da sua conta pelo Facebook ou pelo Instagram, a Meta mostrou um código de confirmação. Digite-o abaixo para ver o status.`,
+    lookupIntro: `Se você removeu o ${brand.name} da sua conta pelo Instagram, a Meta mostrou um código de confirmação. Digite-o abaixo para ver o status.`,
     codeLabel: "Código de confirmação",
     codePlaceholder: "Ex.: 9F2C04A1B7D35E60",
     lookup: "Consultar",
@@ -38,7 +38,7 @@ const TEXT = {
   },
   en: {
     lookupTitle: "Check a request",
-    lookupIntro: `If you removed ${brand.name} from your account through Facebook or Instagram, Meta showed you a confirmation code. Enter it below to see the status.`,
+    lookupIntro: `If you removed ${brand.name} from your account through Instagram, Meta showed you a confirmation code. Enter it below to see the status.`,
     codeLabel: "Confirmation code",
     codePlaceholder: "e.g. 9F2C04A1B7D35E60",
     lookup: "Check",
@@ -155,9 +155,8 @@ function InstructionsPt() {
             nada.
           </li>
           <li>
-            <strong>Pela Meta:</strong> remova o {brand.name} das integrações da sua conta: no Facebook, em Configurações →
-            Integrações empresariais (ou no portfólio empresarial, em Integrações → Apps conectados); no Instagram, em
-            Configurações → Permissões de apps e sites. A Meta nos envia o pedido, apagamos os mesmos dados automaticamente e
+            <strong>Pelo Instagram:</strong> remova o {brand.name} nas configurações do Instagram, em Configurações →
+            Permissões de apps e sites. A Meta nos envia o pedido, apagamos os mesmos dados automaticamente e
             você recebe um código para consultar nesta página.
           </li>
           <li>
@@ -204,9 +203,8 @@ function InstructionsEn() {
             logs related to it are deleted at once. Turning the account off only pauses the replies and deletes nothing.
           </li>
           <li>
-            <strong>Through Meta:</strong> remove {brand.name} from your account’s integrations: on Facebook, Settings →
-            Business integrations (or, in your business portfolio, Integrations → Connected apps); on Instagram, Settings →
-            Apps and websites. Meta sends us the request, we delete the same data automatically, and you get a code to check
+            <strong>Through Instagram:</strong> remove {brand.name} in your Instagram settings, Settings → Apps and
+            websites. Meta sends us the request, we delete the same data automatically, and you get a code to check
             on this page.
           </li>
           <li>

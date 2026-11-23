@@ -88,7 +88,7 @@ export async function getUserMedia({
   limit?: number;
 }): Promise<meta.InstagramMedia[]> {
   if (context.provider === "META")
-    return meta.getUserMedia(context, limit, context.instagramId);
+    return meta.getUserMedia(context, limit);
   const result = await zernioRequest<{
     posts: {
       id: string;
@@ -137,7 +137,7 @@ export async function getUserMediaPage({
   after?: string | null;
 }): Promise<{ data: meta.InstagramMedia[]; nextCursor: string | null }> {
   if (context.provider === "META") {
-    return meta.getUserMediaPage(context, { limit, after, igUserId: context.instagramId });
+    return meta.getUserMediaPage(context, { limit, after });
   }
   // Other providers only return the most recent posts, in one page.
   return after ? { data: [], nextCursor: null } : { data: await getUserMedia({ context, limit: 25 }), nextCursor: null };
@@ -151,7 +151,7 @@ export async function getAllUserMedia({
   max?: number;
 }) {
   return context.provider === "META"
-    ? meta.getAllUserMedia(context, max, context.instagramId)
+    ? meta.getAllUserMedia(context, max)
     : getUserMedia({ context, limit: max });
 }
 
@@ -161,7 +161,7 @@ export async function getUserInfo({
   context: InstagramContext;
 }): Promise<meta.InstagramUser> {
   if (context.provider === "META")
-    return meta.getUserInfo(context, context.instagramId);
+    return meta.getUserInfo(context);
   const result = await zernioRequest<{
     accounts: {
       _id: string;

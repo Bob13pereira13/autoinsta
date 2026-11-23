@@ -46,7 +46,7 @@ export default function SiteFooter({ locale }: { locale: Locale }) {
         </nav>
       </div>
       <p className="mx-auto max-w-5xl px-5 pb-8 text-xs leading-5 text-faint">
-        {t("Instagram and Facebook are trademarks of Meta Platforms, Inc. {brand} uses Meta's official API and is not affiliated with, sponsored or endorsed by Meta.")}
+        {t("Instagram is a trademark of Meta Platforms, Inc. {brand} uses Meta's official API and is not affiliated with, sponsored or endorsed by Meta.")}
       </p>
     </footer>
   );

@@ -36,8 +36,9 @@ export function deletionStatusUrl(confirmationCode: string): string {
 
 /**
  * Meta may identify the user by the Instagram professional account id
- * (`instagramId`), the app-scoped id (`instagramScopedId`) or — for Unified
- * login — the token's user (`metaLoginUserId`); match all of them. Requests
+ * (`instagramId`), the app-scoped id (`instagramScopedId`) or — for accounts
+ * from the old Unified login — the token's user (`metaLoginUserId`); match all
+ * of them. Requests
  * that match nothing are recorded and raise a warning (see runDataDeletion).
  */
 export function findAccountsForMetaUser(userId: string) {

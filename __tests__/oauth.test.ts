@@ -87,28 +87,33 @@ describe("OAuth state and token encryption", () => {
   });
 });
 
-describe("authorization URL", () => {
-  it("uses Instagram Login when no login configuration is set", () => {
+describe("authorization URL (Business Login for Instagram)", () => {
+  it("goes to Instagram's login with the three permissions, no Facebook option", () => {
     vi.stubEnv("INSTAGRAM_APP_ID", "123");
-    vi.stubEnv("META_LOGIN_CONFIG_ID", "");
-    const url = new URL(getAuthorizationUrl("https://app.test/cb", "s"));
-    expect(url.origin).toBe("https://www.instagram.com");
-    expect(url.searchParams.get("scope")).toContain("instagram_business_basic");
+    const url = new URL(getAuthorizationUrl("https://app.test/api/instagram/callback", "signed-state"));
+    expect(`${url.origin}${url.pathname}`).toBe("https://www.instagram.com/oauth/authorize");
+    expect(url.searchParams.get("client_id")).toBe("123");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://app.test/api/instagram/callback");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("state")).toBe("signed-state");
+    expect(url.searchParams.get("scope")).toBe(
+      "instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages"
+    );
+    expect(url.searchParams.get("enable_fb_login")).toBe("false");
   });
 
-  it("uses the Facebook dialog with config_id under Unified login", () => {
+  it("ignores what the old Facebook (Unified) login used", () => {
     vi.stubEnv("INSTAGRAM_APP_ID", "123");
     vi.stubEnv("META_APP_ID", "789");
     vi.stubEnv("META_LOGIN_CONFIG_ID", "456");
+    vi.stubEnv(
+      "META_UNIFIED_LOGIN_URL",
+      "https://www.facebook.com/v25.0/dialog/oauth?client_id=789&config_id=456&response_type=code"
+    );
     const url = new URL(getAuthorizationUrl("https://app.test/cb", "s"));
-    expect(url.origin).toBe("https://www.facebook.com");
-    expect(url.pathname).toBe("/dialog/oauth");
-    expect(url.searchParams.get("config_id")).toBe("456");
-    // The Meta app's own ID, not the Instagram app ID.
-    expect(url.searchParams.get("client_id")).toBe("789");
-    expect(url.searchParams.get("redirect_uri")).toBe("https://app.test/cb");
-    expect(url.searchParams.get("response_type")).toBe("code");
-    expect(url.searchParams.get("state")).toBe("s");
-    expect(url.searchParams.has("scope")).toBe(false);
+    expect(url.origin).toBe("https://www.instagram.com");
+    expect(url.searchParams.get("client_id")).toBe("123");
+    expect(url.searchParams.has("config_id")).toBe(false);
+    expect(url.toString()).not.toMatch(/facebook|business_management|pages_/);
   });
 });

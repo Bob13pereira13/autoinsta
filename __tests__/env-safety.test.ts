@@ -144,8 +144,6 @@ describe("verification points ignore placeholders", () => {
   it("refuses to sign OAuth state or exchange codes with example secrets", () => {
     vi.stubEnv("NEXTAUTH_SECRET", "replace-with-a-strong-random-secret");
     expect(() => requireSecret("NEXTAUTH_SECRET")).toThrow(/example value/);
-    vi.stubEnv("META_LOGIN_CONFIG_ID", "");
-    vi.stubEnv("META_UNIFIED_LOGIN_URL", "");
     vi.stubEnv("INSTAGRAM_APP_ID", "123");
     vi.stubEnv("INSTAGRAM_APP_SECRET", "your-instagram-app-secret");
     vi.stubEnv("ENCRYPTION_KEY", "9f2c04a1b7d35e60aa11bb22cc33dd449f2c04a1b7d35e60aa11bb22cc33dd44");

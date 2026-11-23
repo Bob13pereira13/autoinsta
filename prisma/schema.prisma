@@ -261,18 +261,19 @@ model InstagramAccount {
   username             String
   name                 String?
   provider             InstagramProvider @default(META)
-  /// Which Meta setup issued the token, for META accounts. Existing rows are
-  /// INSTAGRAM: their tokens only work on graph.instagram.com. UNIFIED tokens
-  /// are business system user tokens that only work on graph.facebook.com.
+  /// Which login issued the token, for META accounts. INSTAGRAM: Instagram's
+  /// login (Business Login for Instagram), tokens for graph.instagram.com, the
+  /// only login the app uses. UNIFIED: the Facebook (Unified) login the app
+  /// used for a while; those accounts must connect again with Instagram.
   metaLogin            MetaLogin         @default(INSTAGRAM)
   zernioAccountId      String?
   /// App-scoped Instagram user id (`id` from /me). Meta's data deletion and
   /// deauthorize callbacks may identify the user by this id instead of
   /// `instagramId` (the professional account id), so both are stored.
   instagramScopedId    String?
-  /// Unified login only: the user id debug_token reports for the token (the
-  /// business system user). Also matched by the data deletion / deauthorize
-  /// callbacks, since Meta does not document which id they send for this flow.
+  /// Old Unified login accounts only: the user id debug_token reported for the
+  /// token. Still matched by the data deletion / deauthorize callbacks; null
+  /// for accounts connected with Instagram's login.
   metaLoginUserId      String?
   /// Long-lived token, AES-256-GCM encrypted (lib/meta/oauth.ts). Empty when
   /// the user removed the app on Instagram.
@@ -714,7 +715,7 @@ enum InstagramProvider {
   ZERNIO
 }
 
-/// Instagram Login (Business Login for Instagram) or Meta's Unified login.
+/// Instagram Login (Business Login for Instagram), or the old Unified login (no longer used).
 enum MetaLogin {
   INSTAGRAM
   UNIFIED

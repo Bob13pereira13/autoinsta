@@ -25,7 +25,7 @@ function routeFiles(dir: string): string[] {
   });
 }
 
-const META: InstagramContext = { provider: "META", accessToken: "token", instagramId: "ig_business", unifiedLogin: false };
+const META: InstagramContext = { provider: "META", accessToken: "token", instagramId: "ig_business" };
 
 afterEach(() => {
   vi.unstubAllGlobals();
