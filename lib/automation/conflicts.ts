@@ -1,10 +1,20 @@
 /**
- * Conflicts between automations: another ACTIVE automation of the same account
+ * Overlaps between automations: another ACTIVE automation of the same account
  * and channel that would catch the same comment or message (same post or "all
  * posts", the same keyword or "any"). Only one of them answers each event, so
  * the owner is told which one, by the same rules the worker uses
  * (lib/automation/select.ts): keyword first, then specific posts, then the
  * oldest.
+ *
+ * Two kinds:
+ * - "split": a normal combination, both keep answering. One has a keyword and
+ *   the other not (the keyword one takes those words, the other the rest), or
+ *   one is on specific posts (or the next reel) and the other on all posts
+ *   (the specific one takes its posts, the other the rest). An information
+ *   note, not a warning.
+ * - "conflict": one of them stops answering what both catch, for no reason
+ *   but its age: two without keywords on the same posts, the same keyword on
+ *   the same posts. A warning ("never" when it answers nothing at all).
  *
  * Pure: the editor runs it live on what it shows, the API runs it on save and
  * the automations list tags the rows.
@@ -34,16 +44,24 @@ export interface ConflictCandidate {
 
 export type ConflictReason = "keyword" | "specific" | "older";
 
+/** "split": both keep answering, each its part (information). "conflict": one stops answering (warning). */
+export type ConflictKind = "split" | "conflict";
+
 export interface Conflict {
+  kind: ConflictKind;
   other: { id: string; name: string };
   /** Which of the two answers the events both catch. */
   winner: "this" | "other";
   reason: ConflictReason;
   /** What both catch: the keyword (null = anything) and where. */
   keyword: string | null;
+  /** Every word both catch (empty = anything): the ones that decide which answers. */
+  keywords: string[];
   where: "allPosts" | "samePost" | "nextReel" | "storyReplies" | "storyMentions" | "direct";
   /** This automation would never answer anything: the other one covers all of it and wins. */
   never: boolean;
+  /** Comments: where the one that answers listens (marked posts, the next reel or every post). */
+  winnerScope: "all" | "posts" | "nextReel";
 }
 
 const NEXT_REEL = "\u0000next-reel";
@@ -102,6 +120,21 @@ function sharedText(a: ConflictCandidate, b: ConflictCandidate): { text: string;
     }
   }
   return null;
+}
+
+/**
+ * Every keyword both would answer, `a`'s spelling first, without repeats (the
+ * matcher ignores case and accents: “PREÇO” and “preco” are one word).
+ */
+function sharedWords(a: ConflictCandidate, b: ConflictCandidate): string[] {
+  if (a.matchAnyWord && b.matchAnyWord) return [];
+  const catches = (x: ConflictCandidate, word: string) => x.matchAnyWord || matchKeywords(word, x.keywords, x.wholeWordMatch ?? true).matched;
+  const same = (x: string, y: string) => matchKeywords(x, [y], true).matched && matchKeywords(y, [x], true).matched;
+  const words: string[] = [];
+  for (const word of [...(a.matchAnyWord ? [] : a.keywords), ...(b.matchAnyWord ? [] : b.keywords)]) {
+    if (catches(a, word) && catches(b, word) && !words.some((w) => same(w, word))) words.push(word);
+  }
+  return words;
 }
 
 function sharedEvent(a: ConflictCandidate, b: ConflictCandidate): { event: TriggerEvent; keyword: string | null; where: Conflict["where"] } | null {
@@ -174,16 +207,32 @@ export function findConflicts(self: ConflictCandidate, others: ConflictCandidate
         : self.type === "COMMENTS" && isSpecific(self) !== isSpecific(other)
           ? "specific"
           : "older";
+    const keywords = shared.keyword === null ? [] : sharedWords(self, other);
+    const answerer = winner === "this" ? self : other;
     conflicts.push({
+      // A keyword or specific posts decide: each keeps its part. Age decides: one loses.
+      kind: reason === "older" ? "conflict" : "split",
       other: { id: other.id, name: other.name },
       winner,
       reason,
       keyword: shared.keyword,
+      keywords: keywords.length || shared.keyword === null ? keywords : [shared.keyword],
       where: shared.where,
       never: winner === "other" && covers(other, self),
+      winnerScope: self.type !== "COMMENTS" ? "all" : answerer.pendingNextReel ? "nextReel" : answerer.matchAnyPost ? "all" : "posts",
     });
   }
   return conflicts;
+}
+
+/** The kind of an overlap; one saved by an older version has none (only age made a conflict). */
+export function kindOf(c: Pick<Conflict, "reason"> & { kind?: ConflictKind }): ConflictKind {
+  return c.kind ?? (c.reason === "older" ? "conflict" : "split");
+}
+
+/** Warnings (one of the two stops answering) and information notes (both keep answering), apart. */
+export function byKind<T extends Pick<Conflict, "reason"> & { kind?: ConflictKind }>(overlaps: T[]): { conflicts: T[]; splits: T[] } {
+  return { conflicts: overlaps.filter((c) => kindOf(c) === "conflict"), splits: overlaps.filter((c) => kindOf(c) === "split") };
 }
 
 /**

@@ -38,7 +38,7 @@ import { editorWarnings, mainMessageKind, type EditorDraft, type WarningId } fro
 import { messageLimit } from "@/lib/automation/message-limits";
 import { DEFAULT_DM_DELAY_SECONDS, deliveryModeOf, deliverySequence, DM_DELAY_OPTIONS, type DeliveryMode, type DmDelay } from "@/lib/automation/delivery";
 import { accountProblem } from "@/lib/automation/account-status";
-import { findConflicts, sharedNextReel, type Conflict, type ConflictCandidate } from "@/lib/automation/conflicts";
+import { byKind, findConflicts, sharedNextReel, type Conflict, type ConflictCandidate } from "@/lib/automation/conflicts";
 import {
   AccountNote,
   ConflictNotes,
@@ -687,9 +687,11 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         router.push(`/automations?tipo=${automationTypeSlug(automationType)}`);
         router.refresh();
         };
-        // Saved. Conflicts with other active automations are listed (the save
-        // already went through); closing the list carries on.
-        const saved: Conflict[] = Array.isArray(data.conflicts) ? data.conflicts : [];
+        // Saved. Conflicts with other active automations (one of the two stops
+        // answering) are listed; the save already went through and closing the
+        // list carries on. Splits (each answers its part) were already shown
+        // as information in the editor: no stop for them.
+        const saved: Conflict[] = byKind(Array.isArray(data.conflicts) ? (data.conflicts as Conflict[]) : []).conflicts;
         if (saved.length) {
           setSavedConflicts({ conflicts: saved, next: proceed });
           return;
@@ -892,7 +894,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 <Hint>{t("Photos and carousels published before the reel are ignored. Once you publish the reel, the automation attaches to it within 5 minutes.")}</Hint>
               )}
               {nextReelShared && (
-                <Note tone="warning" id="nextReelShared">
+                <Note tone="info" id="nextReelShared">
                   {t("“{name}” is also waiting for the next reel. Both will attach to the same reel and only one answers each comment: the one with a keyword; if tied, the oldest (“{oldest}”).", {
                     name: nextReelShared.others.map((o) => o.name).join("”, “"),
                     oldest: nextReelShared.oldest.id === selfCandidate.id ? t("this one") : nextReelShared.oldest.name,
@@ -1402,7 +1404,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
           next?.();
         }}
         title={t("Automation saved")}
-        description={t("Heads-up: it shares triggers with other active automations. Only one answers each comment or message.")}
+        description={t("Heads-up: another active automation catches the same comments or messages, and one of the two stops answering them.")}
         footer={
           <Button
             variant="primary"

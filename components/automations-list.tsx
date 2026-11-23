@@ -22,7 +22,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { StatusDot, type StatusTone } from "@/components/ui/status";
 import { accountNeedsReconnect } from "@/lib/automation/account-status";
-import { findConflicts, type ConflictCandidate } from "@/lib/automation/conflicts";
+import { byKind, findConflicts, type ConflictCandidate } from "@/lib/automation/conflicts";
+import { channelOfType, overlapText, splitTag } from "@/lib/automation/conflict-text";
 import { needsReview } from "@/lib/automation/text-rules";
 import { ReviewTag } from "@/components/review-tag";
 import { Switch } from "@/components/ui/switch";
@@ -93,7 +94,8 @@ interface Campaign {
 }
 
 export default function AutomationsList({ initialType }: { initialType: AutomationType }) {
-  const { t, label } = useI18n();
+  const i18n = useI18n();
+  const { t, label } = i18n;
   const router = useRouter();
   const [activeType, setActiveType] = useState<AutomationType>(initialType);
   const [automations, setAutomations] = useState<Campaign[]>([]);
@@ -335,7 +337,8 @@ export default function AutomationsList({ initialType }: { initialType: Automati
         .map((a) => a.instagramAccount.username)
     )
   );
-  // Active automations that catch the same events as another one.
+  // Active automations that catch the same events as another one: a warning
+  // when one of the two stops answering, a neutral tag when each answers its part.
   const candidates: ConflictCandidate[] = automations.map((a) => ({
     ...a,
     type: typeOf(a),
@@ -479,7 +482,7 @@ export default function AutomationsList({ initialType }: { initialType: Automati
           const type = typeOf(auto);
           const accountOff = auto.instagramAccount.automationsEnabled === false;
           const reconnect = accountNeedsReconnect(auto.instagramAccount);
-          const rowConflicts = conflictsOf(auto.id);
+          const { conflicts: rowConflicts, splits: rowSplits } = byKind(conflictsOf(auto.id));
           const nameId = `automation-${auto.id}`;
           const status: { tone: StatusTone; text: string } = !auto.isActive
             ? { tone: "neutral", text: t("Paused") }
@@ -551,11 +554,25 @@ export default function AutomationsList({ initialType }: { initialType: Automati
                     {facts.length > 0 && <span className="ml-0.5">{facts.join(" · ")}</span>}
                     {needsReview({ ...auto, type: typeOf(auto) }) && <ReviewTag />}
                     {rowConflicts.length > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-warning-border bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning" data-note="conflict">
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-warning-border bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning"
+                        data-note="conflict"
+                        title={rowConflicts.map((c) => overlapText(c, i18n)).join("\n")}
+                      >
                         <Icon name="alert" size={13} strokeWidth={2} />
                         {rowConflicts.length === 1
                           ? t("Conflict with “{name}”", { name: rowConflicts[0].other.name })
                           : t("Conflicts with {count} automations", { count: rowConflicts.length })}
+                      </span>
+                    )}
+                    {rowSplits.length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-medium text-muted"
+                        data-note="split"
+                        title={rowSplits.map((c) => overlapText(c, i18n)).join("\n")}
+                      >
+                        <Icon name="info" size={13} strokeWidth={2} />
+                        {splitTag(channelOfType(type), rowSplits, i18n)}
                       </span>
                     )}
                   </div>

@@ -39,23 +39,23 @@ describe("Comments", () => {
     const older = auto();
     const draft = auto();
     const c = one(draft, older);
-    expect(c).toMatchObject({ other: { id: older.id }, winner: "other", reason: "older", keyword: "link", where: "allPosts", never: true });
+    expect(c).toMatchObject({ kind: "conflict", other: { id: older.id }, winner: "other", reason: "older", keyword: "link", keywords: ["link"], where: "allPosts", never: true });
     // Seen from the older one: it wins.
-    expect(one(older, draft)).toMatchObject({ winner: "this", reason: "older", never: false });
+    expect(one(older, draft)).toMatchObject({ kind: "conflict", winner: "this", reason: "older", never: false });
   });
 
   it("keyword beats “any comment”", () => {
     const any = auto({ matchAnyWord: true, keywords: [] });
     const keyword = auto();
-    expect(one(keyword, any)).toMatchObject({ winner: "this", reason: "keyword", never: false });
-    expect(one(any, keyword)).toMatchObject({ winner: "other", reason: "keyword", never: false });
+    expect(one(keyword, any)).toMatchObject({ kind: "split", winner: "this", reason: "keyword", never: false });
+    expect(one(any, keyword)).toMatchObject({ kind: "split", winner: "other", reason: "keyword", never: false });
   });
 
   it("specific posts beat all posts (same keyword)", () => {
     const all = auto();
     const specific = auto({ matchAnyPost: false, postIds: ["p1"] });
-    expect(one(specific, all)).toMatchObject({ winner: "this", reason: "specific", where: "samePost" });
-    expect(one(all, specific)).toMatchObject({ winner: "other", reason: "specific", never: false });
+    expect(one(specific, all)).toMatchObject({ kind: "split", winner: "this", reason: "specific", where: "samePost", winnerScope: "posts" });
+    expect(one(all, specific)).toMatchObject({ kind: "split", winner: "other", reason: "specific", never: false, winnerScope: "posts" });
   });
 
   it("different posts, or different keywords: no conflict", () => {

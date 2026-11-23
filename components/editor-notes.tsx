@@ -6,6 +6,8 @@
  * - FieldNotes: the warnings of one field (lib/automation/editor-warnings.ts),
  *   yellow (heads-up), red (high risk) or red marked "fix to save" (blocks the
  *   save). They show only while their condition holds.
+ * - Notes in a neutral tone ("info") say how things work, with nothing to fix:
+ *   e.g. which comments go to this automation and which to another one.
  * - Counter: how much room a message has left, as Instagram counts it.
  */
 
@@ -15,7 +17,8 @@ import { useI18n } from "@/lib/i18n/provider";
 import { Alert } from "@/components/ui/alert";
 import type { EditorWarning, WarningField } from "@/lib/automation/editor-warnings";
 import { limitState, type MessageLimit } from "@/lib/automation/message-limits";
-import type { Conflict } from "@/lib/automation/conflicts";
+import { byKind, kindOf, type Conflict } from "@/lib/automation/conflicts";
+import { overlapText, overlapTone } from "@/lib/automation/conflict-text";
 import { cx } from "@/components/ui/cx";
 
 const LINK = { link: "{link}" };
@@ -24,14 +27,14 @@ export function Hint({ children, className }: { children: ReactNode; className?:
   return <p className={cx("hint leading-relaxed", className)}>{children}</p>;
 }
 
-/** One note. "error" also says it has to be fixed before saving. */
+/** One note. "error" also says it has to be fixed before saving; "info" is neutral, nothing to fix. */
 export function Note({
   tone,
   children,
   action,
   id,
 }: {
-  tone: EditorWarning["tone"];
+  tone: EditorWarning["tone"] | "info";
   children: ReactNode;
   action?: ReactNode;
   id?: string;
@@ -39,7 +42,7 @@ export function Note({
   const { t } = useI18n();
   return (
     <div data-note={id} data-tone={tone}>
-      <Alert tone={tone === "warning" ? "warning" : "error"} role="status" action={action} title={tone === "error" ? t("Fix to save") : undefined}>
+      <Alert tone={tone === "info" ? "neutral" : tone === "warning" ? "warning" : "error"} role="status" action={action} title={tone === "error" ? t("Fix to save") : undefined}>
         {children}
       </Alert>
     </div>
@@ -169,57 +172,30 @@ export function Counter({ limit }: { limit: MessageLimit }) {
   );
 }
 
-/** What two automations both catch, in words. */
-export function useConflictWhat() {
-  const { t } = useI18n();
-  return (c: Pick<Conflict, "where" | "keyword">): string => {
-    const k = c.keyword;
-    switch (c.where) {
-      case "allPosts":
-        return k ? t("comments with “{keyword}” on all posts", { keyword: k }) : t("any comment on all posts");
-      case "samePost":
-        return k ? t("comments with “{keyword}” on the same post", { keyword: k }) : t("any comment on the same post");
-      case "nextReel":
-        return k ? t("comments with “{keyword}” on the next reel", { keyword: k }) : t("any comment on the next reel");
-      case "storyReplies":
-        return k ? t("story replies with “{keyword}”", { keyword: k }) : t("any story reply");
-      case "storyMentions":
-        return t("story mentions");
-      case "direct":
-        return k ? t("messages with “{keyword}”", { keyword: k }) : t("any message");
-    }
-  };
-}
-
+/** The note of one overlap with another automation: information (split) or warning (conflict). */
 export function useConflictText() {
-  const { t } = useI18n();
-  const what = useConflictWhat();
-  return (c: Conflict): string => {
-    const reason = c.reason === "keyword" ? t("it has a keyword") : c.reason === "specific" ? t("it is on specific posts") : t("it is older");
-    const values = { name: c.other.name, what: what(c), reason };
-    if (c.never) {
-      return t("This automation won't answer anything: “{name}” takes everything it would answer ({what}), because {reason}. Change the keyword or pause one of them.", values);
-    }
-    return c.winner === "other"
-      ? t("Conflict with “{name}” ({what}): “{name}” answers instead of this one, because {reason}. Change the keyword or pause one of them.", values)
-      : t("Conflict with “{name}” ({what}): this one answers instead of “{name}”, because {reason}. Change the keyword or pause one of them.", values);
-  };
+  const i18n = useI18n();
+  return (c: Conflict): string => overlapText(c, i18n);
 }
 
-/** The live conflicts of the automation being edited. */
+/**
+ * The live overlaps of the automation being edited: the warnings (one of the
+ * two stops answering) first, then the information notes (each answers its part).
+ */
 export function ConflictNotes({ conflicts }: { conflicts: Conflict[] }) {
   const { t } = useI18n();
   const text = useConflictText();
   if (!conflicts.length) return null;
+  const { conflicts: warnings, splits } = byKind(conflicts);
   return (
     <div className="space-y-2">
-      {conflicts.map((c) => (
+      {[...warnings, ...splits].map((c) => (
         <Note
           key={c.other.id}
-          tone={c.never ? "danger" : "warning"}
-          id="conflict"
+          tone={overlapTone(c)}
+          id={kindOf(c) === "split" ? "split" : "conflict"}
           action={
-            <Link href={`/campaigns/${c.other.id}`} className="whitespace-nowrap font-semibold underline underline-offset-4">
+            <Link href={`/campaigns/${c.other.id}`} className="font-semibold underline underline-offset-4">
               {t("Open “{name}”", { name: c.other.name })}
             </Link>
           }

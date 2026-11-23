@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { findConflicts, type Conflict } from "@/lib/automation/conflicts";
+import { byKind, findConflicts, type Conflict } from "@/lib/automation/conflicts";
 import { DEFAULT_DM_DELAY_SECONDS, DM_DELAY_OPTIONS } from "@/lib/automation/delivery";
 import { deleteMediaFiles, mediaKeysForAutomations } from "@/lib/media/storage";
 import {
@@ -211,10 +211,11 @@ const RULE_FIELDS = [
 
 /**
  * Other active automations of the same account and channel that catch the same
- * events as this one (saved and active). Returned with the save so the editor
- * can list them; saving is never blocked by a conflict.
+ * events as this one (saved and active), returned with the save and apart:
+ * `conflicts`, where one of the two stops answering (a warning), and `splits`,
+ * where both keep answering their part (information). Saving is never blocked.
  */
-async function conflictsOf(automationId: string, workspaceId: string): Promise<Conflict[]> {
+async function overlapsOf(automationId: string, workspaceId: string): Promise<{ conflicts: Conflict[]; splits: Conflict[] }> {
   const select = {
     id: true,
     name: true,
@@ -233,13 +234,13 @@ async function conflictsOf(automationId: string, workspaceId: string): Promise<C
     posts: { select: { postId: true } },
   } as const;
   const self = await prisma.automation.findFirst({ where: { id: automationId, workspaceId }, select });
-  if (!self?.isActive) return [];
+  if (!self?.isActive) return { conflicts: [], splits: [] };
   const others = await prisma.automation.findMany({
     where: { workspaceId, instagramAccountId: self.instagramAccountId, type: self.type, isActive: true, id: { not: self.id } },
     select,
   });
   const candidate = (a: typeof self) => ({ ...a, postIds: a.posts.map((p) => p.postId) });
-  return findConflicts(candidate(self), others.map(candidate));
+  return byKind(findConflicts(candidate(self), others.map(candidate)));
 }
 
 function invalidRules(issues: RuleIssue[]) {
@@ -597,7 +598,7 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json(
-    { success: true, data: automation, conflicts: await conflictsOf(automation.id, workspaceId) },
+    { success: true, data: automation, ...(await overlapsOf(automation.id, workspaceId)) },
     { status: 201 }
   );
 }
@@ -814,7 +815,7 @@ export async function PATCH(request: NextRequest) {
   });
   await deleteMediaFiles(removedMediaKeys);
 
-  return NextResponse.json({ success: true, data: updated, conflicts: await conflictsOf(updated.id, workspaceId) });
+  return NextResponse.json({ success: true, data: updated, ...(await overlapsOf(updated.id, workspaceId)) });
 }
 
 export async function DELETE(request: NextRequest) {

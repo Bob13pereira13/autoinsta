@@ -1,6 +1,8 @@
 /**
- * Saving through the API on a real Postgres: the response lists the conflicts
- * with other active automations (never blocking the save), and texts that
+ * Saving through the API on a real Postgres: the response lists, apart, the
+ * conflicts with other active automations (one of the two stops answering: a
+ * warning) and the splits (each answers its part: information), never
+ * blocking the save; and texts that
  * would not go out whole are refused (1000 bytes of plain text, 640
  * characters above a button, 20 per button label, no stray {link}).
  */
@@ -64,6 +66,7 @@ describe.skipIf(!databaseUrl)("saving: conflicts and Instagram's limits", () => 
     await state.db.workspace.create({ data: { id: "w1", name: "W", ownerId: "u1" } });
     await state.db.instagramAccount.create({ data: { id: "acc1", workspaceId: "w1", instagramId: "ig1", username: "loja", accessToken: "enc" } });
     await state.db.instagramAccount.create({ data: { id: "acc2", workspaceId: "w1", instagramId: "ig2", username: "outra", accessToken: "enc" } });
+    await state.db.instagramAccount.create({ data: { id: "acc3", workspaceId: "w1", instagramId: "ig3", username: "terceira", accessToken: "enc" } });
   }, 60_000);
 
   afterAll(async () => {
@@ -80,12 +83,14 @@ describe.skipIf(!databaseUrl)("saving: conflicts and Instagram's limits", () => 
       const first = await save(comments({ name: "Catálogo" }));
       expect(first.status).toBe(201);
       expect(first.json.conflicts).toEqual([]);
+      expect(first.json.splits).toEqual([]);
 
       const second = await save(comments({ name: "Catálogo 2", keywords: ["link"] }));
       expect(second.status).toBe(201);
       expect(second.json.conflicts).toEqual([
-        expect.objectContaining({ other: { id: first.json.data.id, name: "Catálogo" }, winner: "other", reason: "older", keyword: "link", where: "allPosts", never: true }),
+        expect.objectContaining({ kind: "conflict", other: { id: first.json.data.id, name: "Catálogo" }, winner: "other", reason: "older", keyword: "link", where: "allPosts", never: true }),
       ]);
+      expect(second.json.splits).toEqual([]);
 
       // Changing the keyword clears it; a paused save lists nothing.
       const changed = await save({ keywords: ["PRECO"] }, `?id=${second.json.data.id}`, "PATCH");
@@ -95,14 +100,33 @@ describe.skipIf(!databaseUrl)("saving: conflicts and Instagram's limits", () => 
       expect(paused.json.conflicts).toEqual([]);
     });
 
-    it("a keyword automation wins over one without; other accounts never conflict", async () => {
+    it("one with a keyword and one without: information on both sides, not a conflict; other accounts never meet", async () => {
       const any = await save(comments({ name: "Qualquer", keywords: [], matchAnyWord: true, instagramAccountId: "acc2" }));
-      const keyword = await save(comments({ name: "Com palavra", keywords: ["cupom"], instagramAccountId: "acc2" }));
-      expect(keyword.json.conflicts).toEqual([
-        expect.objectContaining({ other: { id: any.json.data.id, name: "Qualquer" }, winner: "this", reason: "keyword", never: false }),
+      const keyword = await save(comments({ name: "Com palavra", keywords: ["cupom", "acesso"], instagramAccountId: "acc2" }));
+      expect(keyword.json.conflicts).toEqual([]);
+      expect(keyword.json.splits).toEqual([
+        expect.objectContaining({ kind: "split", other: { id: any.json.data.id, name: "Qualquer" }, winner: "this", reason: "keyword", keywords: ["cupom", "acesso"], never: false }),
       ]);
-      // acc1's automations are not listed for acc2.
-      expect(keyword.json.conflicts).toHaveLength(1);
+      // Saving the other one tells the same from its side. acc1's automations are not listed for acc2.
+      const again = await save({ name: "Qualquer" }, `?id=${any.json.data.id}`, "PATCH");
+      expect(again.json.conflicts).toEqual([]);
+      expect(again.json.splits).toEqual([expect.objectContaining({ kind: "split", other: { id: keyword.json.data.id, name: "Com palavra" }, winner: "other" })]);
+    });
+
+    it("one on specific posts and one on all posts: information on both sides", async () => {
+      const all = await save(comments({ name: "Todas", keywords: [], matchAnyWord: true, instagramAccountId: "acc3" }));
+      const specific = await save(comments({ name: "Lançamento", keywords: [], matchAnyWord: true, matchAnyPost: false, postIds: ["p1"], instagramAccountId: "acc3" }));
+      expect(specific.status).toBe(201);
+      expect(specific.json.conflicts).toEqual([]);
+      expect(specific.json.splits).toEqual([expect.objectContaining({ kind: "split", reason: "specific", winner: "this", winnerScope: "posts" })]);
+      const again = await save({ name: "Todas" }, `?id=${all.json.data.id}`, "PATCH");
+      expect(again.json.conflicts).toEqual([]);
+      expect(again.json.splits).toEqual([expect.objectContaining({ kind: "split", other: { id: specific.json.data.id, name: "Lançamento" }, winner: "other" })]);
+
+      // A second one on all posts without keyword: now a conflict with “Todas”, still a split with “Lançamento”.
+      const twin = await save(comments({ name: "Todas 2", keywords: [], matchAnyWord: true, instagramAccountId: "acc3" }));
+      expect(twin.json.conflicts).toEqual([expect.objectContaining({ kind: "conflict", other: { id: all.json.data.id, name: "Todas" }, reason: "older" })]);
+      expect(twin.json.splits).toEqual([expect.objectContaining({ kind: "split", other: { id: specific.json.data.id, name: "Lançamento" } })]);
     });
   });
 
