@@ -11,6 +11,7 @@ import { brand, type Processor } from "@/config/brand";
 import { createI18n } from "@/lib/i18n";
 import { legalPath, type LegalLocale } from "@/lib/legal/paths";
 import { PERMISSION_PURPOSE, requestedPermissions } from "@/lib/meta/permissions";
+import { isUnifiedLogin } from "@/lib/env";
 import { QUEUE_RETENTION, RETENTION_DAYS } from "@/lib/privacy/retention";
 
 const legal = brand.legal;
@@ -32,6 +33,12 @@ function Permissions({ locale }: { locale: LegalLocale }) {
             <td>{t(PERMISSION_PURPOSE[permission])}</td>
           </tr>
         ))}
+        {isUnifiedLogin() && (
+          <tr>
+            <td>public_profile</td>
+            <td>{t("Part of every Facebook login. This app does not read your Facebook profile.")}</td>
+          </tr>
+        )}
       </tbody>
     </table>
   );
@@ -130,8 +137,8 @@ function PrivacyPt() {
 
         <h3>3.2 Dados da conta do Instagram conectada (dados da Meta)</h3>
         <p>
-          A conexão é feita exclusivamente pelo login oficial do Instagram.{" "}
-          <strong>Nunca pedimos nem armazenamos a senha do Instagram.</strong> Pedimos apenas as permissões
+          A conexão é feita exclusivamente pelo login oficial da Meta.{" "}
+          <strong>Nunca pedimos nem armazenamos a senha do Instagram ou do Facebook.</strong> Pedimos apenas as permissões
           abaixo, e você pode revogá-las a qualquer momento:
         </p>
         <Permissions locale="pt-BR" />
@@ -139,7 +146,7 @@ function PrivacyPt() {
         <ul>
           <li>ID da conta profissional do Instagram, nome de usuário e nome;</li>
           <li>
-            o identificador técnico do login (o ID com escopo do app que o login do Instagram devolve), usado apenas para
+            identificadores técnicos do login (o ID com escopo do app e o ID do usuário do token), usados apenas para
             atender os pedidos de exclusão e de desautorização enviados pela Meta;
           </li>
           <li>o token de acesso, criptografado com AES-256-GCM, e a data de expiração dele, quando houver;</li>
@@ -407,8 +414,8 @@ function PrivacyPt() {
             pausa as respostas e não apaga nada.
           </li>
           <li>
-            <strong>Pelo Instagram:</strong> remova o {brand.name} nas configurações do Instagram (Configurações →
-            Permissões de apps e sites). A Meta nos envia um pedido de
+            <strong>Pela Meta:</strong> remova o {brand.name} nas configurações do Facebook (Configurações → Integrações
+            empresariais) ou do Instagram (Configurações → Permissões de apps e sites). A Meta nos envia um pedido de
             exclusão, apagamos automaticamente os mesmos dados e você recebe um código para acompanhar o pedido em{" "}
             <Link href={legalPath("dataDeletion", "pt-BR")}>{legalPath("dataDeletion", "pt-BR")}</Link>.
           </li>
@@ -538,8 +545,8 @@ function PrivacyEn() {
 
         <h3>3.2 Data of the connected Instagram account (Meta data)</h3>
         <p>
-          The connection is made only through Instagram’s official login.{" "}
-          <strong>We never ask for or store your Instagram password.</strong> We ask only for the permissions
+          The connection is made only through Meta’s official login.{" "}
+          <strong>We never ask for or store your Instagram or Facebook password.</strong> We ask only for the permissions
           below, and you can revoke them at any time:
         </p>
         <Permissions locale="en" />
@@ -547,8 +554,8 @@ function PrivacyEn() {
         <ul>
           <li>the Instagram professional account ID, username and name;</li>
           <li>
-            the technical login identifier (the app-scoped ID that Instagram’s login returns), used only to handle the data
-            deletion and deauthorization requests Meta sends;
+            technical login identifiers (the app-scoped ID and the token’s user ID), used only to handle the data deletion and
+            deauthorization requests Meta sends;
           </li>
           <li>the access token, encrypted with AES-256-GCM, and its expiry date, if it has one;</li>
           <li>whether the account’s notifications (webhooks) are active and whether its automations are on;</li>
@@ -804,8 +811,8 @@ function PrivacyEn() {
             pauses the replies and deletes nothing.
           </li>
           <li>
-            <strong>Through Instagram:</strong> remove {brand.name} in your Instagram settings (Settings → Apps and
-            websites). Meta sends us a deletion request, we delete the same data
+            <strong>Through Meta:</strong> remove {brand.name} in your Facebook settings (Settings → Business integrations) or
+            Instagram settings (Settings → Apps and websites). Meta sends us a deletion request, we delete the same data
             automatically, and you get a code to follow the request at{" "}
             <Link href={legalPath("dataDeletion", "en")}>{legalPath("dataDeletion", "en")}</Link>.
           </li>

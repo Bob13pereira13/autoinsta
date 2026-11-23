@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
 
   if (!verifyWebhookSignature(rawBytes, signature)) {
     // Record the attempt so a signature mismatch is visible rather than a
-    // silent 401. This is the common symptom of INSTAGRAM_APP_SECRET (or
-    // FACEBOOK_APP_SECRET) holding another app's secret.
+    // silent 401. This is the common symptom of FACEBOOK_APP_SECRET being
+    // set to the wrong app's secret for the webhook's signing key.
     await prisma.operationalEvent
       .create({
         data: {

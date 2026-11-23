@@ -45,9 +45,8 @@ const receipts = () => state.db.webhookReceipt.findMany({ orderBy: { createdAt: 
 
 describe.skipIf(!databaseUrl)("webhook receipts", () => {
   beforeAll(async () => {
-    // Instagram's login: webhooks signed with the Instagram app secret.
-    vi.stubEnv("INSTAGRAM_APP_SECRET", SECRET);
-    vi.stubEnv("FACEBOOK_APP_SECRET", "");
+    vi.stubEnv("FACEBOOK_APP_SECRET", SECRET);
+    vi.stubEnv("INSTAGRAM_APP_SECRET", "");
     sql = new Client({ connectionString: databaseUrl });
     await sql.connect();
     await sql.query(`CREATE SCHEMA "${schema}"`);
@@ -60,7 +59,7 @@ describe.skipIf(!databaseUrl)("webhook receipts", () => {
     await state.db.user.create({ data: { id: "u1", email: "dono@primus.test" } });
     await state.db.workspace.create({ data: { id: "w1", name: "Primus", ownerId: "u1" } });
     await state.db.instagramAccount.create({
-      data: { workspaceId: "w1", instagramId: IG, username: "primus3d_", accessToken: "enc", metaLogin: "INSTAGRAM", instagramScopedId: "IGSCOPED1" },
+      data: { workspaceId: "w1", instagramId: IG, username: "primus3d_", accessToken: "enc", metaLogin: "UNIFIED", instagramScopedId: "IGSCOPED1" },
     });
   }, 60_000);
 

@@ -53,8 +53,9 @@ export async function refreshExpiringTokens(
     where: {
       accessToken: { not: "" },
       provider: "META",
-      // Accounts connected through the old Facebook (Unified) login have no
-      // Instagram token to renew; they must connect again with Instagram.
+      // Unified login tokens (business system user tokens) cannot be renewed
+      // with ig_refresh_token; they are usually configured never to expire,
+      // and one that does expire needs the client to connect again.
       metaLogin: "INSTAGRAM",
       tokenInvalidAt: null,
       tokenExpiresAt: { not: null, lte: refreshCutoff(now) },

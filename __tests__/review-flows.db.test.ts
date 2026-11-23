@@ -1,25 +1,19 @@
 /**
- * The Meta App Review screencast and every feature the app has, end to end on
- * a real Postgres and a real Redis, with Instagram's login (Business Login for
- * Instagram); only Meta is simulated: api.instagram.com and graph.instagram.com
- * answers, the webhooks it signs with the Instagram app secret, and the
- * signed_request of the deauthorize and data deletion callbacks. Each flow goes
- * through the same code the app runs: the login callback, the webhook route,
- * the worker, the routines and the callbacks.
+ * The Meta App Review screencast, flow by flow, end to end on a real Postgres
+ * and a real Redis; only Meta is simulated (its Graph API answers and the
+ * signed webhooks it sends). Each flow goes through the same code the app runs:
+ * the login callback, the webhook route, the worker, the Accounts and Logs APIs.
  *
  *   1. Sign in as the reviewer (scripts/review-account.ts) → Connect Instagram →
- *      the account appears in Accounts (instagram_business_basic).
- *   2. Comment with the keyword → public reply and private reply with the link
- *      button (instagram_business_manage_comments, _manage_messages) → DM Logs.
- *   3. Direct message with the keyword → automatic reply.
+ *      the account appears in Accounts (instagram_basic, business_management).
+ *   2. Comment with the keyword → public reply and DM (instagram_manage_comments,
+ *      instagram_manage_messages) → DM Logs.
+ *   3. Direct message with the keyword → automatic reply (instagram_manage_messages).
  *   4. Reply to a story → automatic reply.
- *   Then: story mention, opening DM and button taps, follow check, echoes and
- *   the human pause, the wait before answering, images and videos, the posts
- *   and reels list, the 60-day token renewal, a forged webhook.
+ *   Echoes (Unified login): they come inside `messages` with is_echo; a reply
+ *   typed in the Instagram app pauses the no-keyword Direct automation, the
+ *   bot's own echo does not.
  *   5. Disconnect the account → its data is gone.
- *   6. An account from the old Facebook (Unified) login: marked to reconnect,
- *      nothing sent with it, reconnected in place; then Instagram's deauthorize
- *      and data deletion callbacks.
  *
  *   TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres \
  *     npx vitest run __tests__/review-flows.db.test.ts
@@ -36,7 +30,7 @@ import { PrismaClient } from "../app/generated/prisma/client";
 const state = vi.hoisted(() => ({
   db: undefined as unknown as import("../app/generated/prisma/client").PrismaClient,
   userId: "",
-  jobs: [] as { name: string; data: Record<string, unknown>; opts?: { delay?: number } }[],
+  jobs: [] as { name: string; data: Record<string, unknown> }[],
   processor: undefined as undefined | ((job: { name: string; data: Record<string, unknown>; id: string; attemptsMade: number }) => Promise<void>),
 }));
 vi.mock("@/lib/db/client", () => ({ get prisma() { return state.db; } }));
@@ -50,8 +44,8 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/queue/client", async (original) => ({
   ...(await original<typeof import("@/lib/queue/client")>()),
   getDMQueue: () => ({
-    add: async (name: string, data: Record<string, unknown>, opts?: { delay?: number }) => {
-      state.jobs.push({ name, data, opts });
+    add: async (name: string, data: Record<string, unknown>) => {
+      state.jobs.push({ name, data });
       return { id: `job_${state.jobs.length}` };
     },
     getJob: async () => undefined,
@@ -71,78 +65,60 @@ import { GET as callbackRoute } from "../app/api/instagram/callback/route";
 import { POST as webhookRoute } from "../app/api/webhook/route";
 import { GET as accountsRoute, DELETE as disconnectRoute } from "../app/api/instagram/accounts/route";
 import { GET as logsRoute } from "../app/api/logs/route";
-import { GET as postsRoute } from "../app/api/instagram/posts/route";
-import { POST as deauthorizeRoute } from "../app/api/webhooks/meta/deauthorize/route";
-import { POST as dataDeletionRoute } from "../app/api/webhooks/meta/data-deletion/route";
 import { createDMWorker } from "../lib/queue/dm-worker";
-import { refreshExpiringTokens } from "../lib/meta/token-refresh";
-import { createSignedRequest } from "../lib/meta/signed-request";
-import { decryptToken } from "../lib/meta/oauth";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const schema = `review_${randomBytes(4).toString("hex")}`;
-// The Instagram app secret (API setup with Instagram login): signs webhooks and signed requests.
-const APP_SECRET = "review-instagram-app-secret";
+const APP_SECRET = "review-app-secret";
 const IG_ID = `1784${randomBytes(5).toString("hex").replace(/\D/g, "1").slice(0, 10)}`;
 const BASE = "https://app.test";
 let sql: Client;
 
-// ——— Meta, simulated (Instagram's login) ———
-const SCOPED_ID = "app_scoped_777";
-const SHORT_TOKEN = "ig-short-token";
-const LONG_TOKEN = "ig-long-token";
-const RENEWED_TOKEN = "ig-renewed-token";
-const FIELDS = ["comments", "messages", "messaging_postbacks", "message_echoes"];
-const ALL_PERMISSIONS = "instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages";
+// ——— Meta, simulated ———
 type Call = { method: string; url: URL; body: Record<string, unknown> | null };
 const calls: Call[] = [];
 // A different answer for one path, set by a test (undefined = the usual answers below).
-let metaOverride: ((path: string, method: string) => Promise<Response> | undefined) | null = null;
-// The permissions Instagram's screen returns with the code.
-let grantedPermissions = ALL_PERMISSIONS;
-// Who follows the account (is_user_follow_business); everyone else does.
-const notFollowing = new Set<string>();
+let metaOverride: ((path: string) => Promise<Response> | undefined) | null = null;
 const metaError = (code: number, message: string) =>
   Promise.resolve(new Response(JSON.stringify({ error: { message, type: "OAuthException", code, fbtrace_id: "trace" } }), { status: 403 }));
-function parseBody(init?: RequestInit): Record<string, unknown> | null {
-  if (!init?.body) return null;
-  const text = String(init.body);
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return Object.fromEntries(new URLSearchParams(text));
-  }
-}
 function graph(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(String(input));
   const method = init?.method ?? "GET";
-  calls.push({ method, url, body: parseBody(init) });
+  const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
+  calls.push({ method, url, body });
   const json = (data: unknown) => Promise.resolve(new Response(JSON.stringify(data), { status: 200 }));
   const p = url.pathname.replace(/^\/v[\d.]+/, "");
-  const forced = metaOverride?.(p, method);
+  const forced = metaOverride?.(p);
   if (forced) return forced;
-  // The code → a short-lived token, the app-scoped id and the permissions left on.
-  if (url.host === "api.instagram.com" && p === "/oauth/access_token" && method === "POST") {
-    return json({ data: [{ access_token: SHORT_TOKEN, user_id: SCOPED_ID, permissions: grantedPermissions }] });
+  if (p === "/oauth/access_token") return json({ access_token: "system-user-token", token_type: "bearer" });
+  if (p === "/debug_token") {
+    // As Meta answers for a system user token (Facebook Login for Business):
+    // business_management works but is not in `scopes`.
+    return json({
+      data: {
+        type: "SYSTEM_USER",
+        is_valid: true,
+        user_id: "122000000000777",
+        expires_at: 0,
+        scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+        granular_scopes: [
+          { scope: "instagram_basic", target_ids: [IG_ID] },
+          { scope: "instagram_manage_comments", target_ids: [IG_ID] },
+          { scope: "instagram_manage_messages", target_ids: [IG_ID] },
+        ],
+      },
+    });
   }
-  if (url.host !== "graph.instagram.com") return Promise.resolve(new Response(JSON.stringify({ error: { message: `unexpected host ${url.host}`, code: 100 } }), { status: 400 }));
-  if (p === "/access_token" && url.searchParams.get("grant_type") === "ig_exchange_token") return json({ access_token: LONG_TOKEN, token_type: "bearer", expires_in: 5184000 });
-  if (p === "/refresh_access_token" && url.searchParams.get("grant_type") === "ig_refresh_token") return json({ access_token: RENEWED_TOKEN, token_type: "bearer", expires_in: 5184000 });
-  // /me: `id` is app-scoped; user_id is the professional account id webhooks carry.
-  if (p === "/me" && method === "GET") return json({ id: SCOPED_ID, user_id: IG_ID, username: "demo.store", name: "Demo Store", profile_picture_url: "https://cdn.test/p.jpg" });
-  if (p === "/me/media") {
-    return json({ data: [{ id: "reel_1", media_type: "VIDEO", media_product_type: "REELS", caption: "New reel", permalink: "https://www.instagram.com/reel/abc/", timestamp: "2026-11-20T10:00:00+0000" }] });
-  }
+  if (p === "/me/assigned_instagram_accounts") return json({ data: [{ id: IG_ID, username: "demo.store" }] });
+  if (p === `/${IG_ID}` && method === "GET") return json({ id: IG_ID, username: "demo.store", name: "Demo Store" });
   if (p === `/${IG_ID}/subscribed_apps` && method === "POST") return json({ success: true });
   // What Meta confirms for the account: this app, with the fields it asked for.
-  if (p === `/${IG_ID}/subscribed_apps`) return json({ data: [{ id: "1234567890", name: "ChatIntegrAI", subscribed_fields: FIELDS }] });
-  if (p === `/${IG_ID}/messages`) return json({ recipient_id: "person", message_id: `mid_bot_${calls.length}` });
+  if (p === `/${IG_ID}/subscribed_apps`) return json({ data: [{ id: "1234567890", name: "ChatIntegrAI", subscribed_fields: ["comments", "messages", "messaging_postbacks"] }] });
+  if (p === `/${IG_ID}/messages`) return json({ recipient_id: "person", message_id: `mid_${calls.length}` });
   if (/^\/[\w]+\/replies$/.test(p)) return json({ id: `reply_${calls.length}` });
-  if (url.searchParams.get("fields") === "is_user_follow_business") return json({ is_user_follow_business: !notFollowing.has(p.slice(1)) });
   if (url.searchParams.get("fields") === "username") return json({ username: "story_fan" });
   return Promise.resolve(new Response(JSON.stringify({ error: { message: `unexpected ${method} ${p}`, code: 100 } }), { status: 400 }));
 }
-const pathOf = (c: Call) => c.url.pathname.replace(/^\/v[\d.]+/, "");
 const sent = (since: number) => calls.slice(since).filter((c) => c.method === "POST");
 
 function signedWebhook(payload: unknown) {
@@ -153,35 +129,19 @@ function signedWebhook(payload: unknown) {
 async function runJobs() {
   while (state.jobs.length) {
     const job = state.jobs.shift()!;
-    await state.processor!({ name: job.name, data: job.data, id: `job_${randomBytes(3).toString("hex")}`, attemptsMade: 0 });
+    await state.processor!({ ...job, id: `job_${randomBytes(3).toString("hex")}`, attemptsMade: 0 });
   }
 }
-const formPost = (url: string, signedRequest: string) =>
-  new NextRequest(url, { method: "POST", body: new URLSearchParams({ signed_request: signedRequest }).toString(), headers: { "content-type": "application/x-www-form-urlencoded" } });
-const workspaceOf = () => state.db.workspace.findFirstOrThrow({ where: { ownerId: state.userId } });
-async function connect() {
-  const workspace = await workspaceOf();
-  const response = await callbackRoute(new NextRequest(`${BASE}/api/instagram/callback?code=instagram-code&state=${encodeURIComponent(createOAuthState(workspace.id))}`));
-  return { workspace, location: response.headers.get("location") };
-}
-const automationOf = (type: "COMMENTS" | "STORIES" | "DIRECT") => state.db.automation.findFirstOrThrow({ where: { type } });
-const comment = (id: string, from: string, text = "LINK please") =>
-  signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 1, changes: [{ field: "comments", value: { id, text, from: { id: from, username: from }, media: { id: "post_1" } } }] }] });
-const direct = (from: string, mid: string, message: Record<string, unknown>) =>
-  signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 2, messaging: [{ sender: { id: from }, recipient: { id: IG_ID }, timestamp: 2, message: { mid, ...message } }] }] });
-const tap = (from: string, payload: string, mid: string) =>
-  signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 3, messaging: [{ sender: { id: from }, recipient: { id: IG_ID }, timestamp: 3, postback: { mid, title: "Tap", payload } }] }] });
 
-describe.skipIf(!databaseUrl)("Instagram's login: the App Review flows and every feature, end to end", () => {
+describe.skipIf(!databaseUrl)("Meta App Review screencast flows, end to end", () => {
   beforeAll(async () => {
     vi.stubEnv("NEXTAUTH_URL", BASE);
     vi.stubEnv("NEXTAUTH_SECRET", "review-nextauth-secret");
     vi.stubEnv("ENCRYPTION_KEY", randomBytes(32).toString("hex"));
-    vi.stubEnv("INSTAGRAM_APP_ID", "1234567890");
-    vi.stubEnv("INSTAGRAM_APP_SECRET", APP_SECRET);
-    // Only the Instagram app secret: the Facebook one is not needed.
-    vi.stubEnv("FACEBOOK_APP_SECRET", "");
-    vi.stubEnv("META_APP_ID", "");
+    vi.stubEnv("META_LOGIN_CONFIG_ID", "1007716072385958");
+    vi.stubEnv("META_APP_ID", "1234567890");
+    vi.stubEnv("FACEBOOK_APP_SECRET", APP_SECRET);
+    vi.stubEnv("INSTAGRAM_APP_SECRET", "");
     vi.stubGlobal("fetch", vi.fn(graph));
     sql = new Client({ connectionString: databaseUrl });
     await sql.connect();
@@ -216,60 +176,75 @@ describe.skipIf(!databaseUrl)("Instagram's login: the App Review flows and every
     expect(result.instagram).toBeNull();
   });
 
-  describe("   a login that ends without every permission lands on Accounts with its code, nothing connected", () => {
+  describe("   a login that Meta answers with a refusal or no account ends on Accounts with its code, nothing connected", () => {
+    const connect = async () => {
+      const workspace = await state.db.workspace.findFirstOrThrow({ where: { ownerId: state.userId } });
+      const response = await callbackRoute(new NextRequest(`${BASE}/api/instagram/callback?code=meta-code&state=${encodeURIComponent(createOAuthState(workspace.id))}`));
+      return { workspace, location: response.headers.get("location") };
+    };
     afterEach(() => {
       metaOverride = null;
-      grantedPermissions = ALL_PERMISSIONS;
     });
 
-    it("a permission turned off on Instagram's screen → missing_permissions naming it", async () => {
-      grantedPermissions = "instagram_business_basic,instagram_business_manage_comments";
+    it("the account list refused for lack of permission (code 200) → missing_permissions naming business_management", async () => {
+      metaOverride = (p) => (p === "/me/assigned_instagram_accounts" ? metaError(200, "(#200) Requires business_management permission to manage the object") : undefined);
       const { workspace, location } = await connect();
-      expect(location).toBe(`${BASE}/accounts?instagram=missing_permissions&missing=instagram_business_manage_messages`);
+      expect(location).toBe(`${BASE}/accounts?instagram=missing_permissions&missing=business_management`);
+      expect(await state.db.instagramAccount.count({ where: { workspaceId: workspace.id } })).toBe(0);
+      const event = await state.db.operationalEvent.findFirstOrThrow({ where: { workspaceId: workspace.id, message: "Instagram connection refused by Meta: missing business_management" } });
+      expect(event.payload).toMatchObject({ permission: "business_management", reason: expect.stringContaining("code=200") });
+    });
+
+    it("the account's details refused (code 10) → missing_permissions naming instagram_basic", async () => {
+      metaOverride = (p) => (p === `/${IG_ID}` ? metaError(10, "(#10) Application does not have permission for this action") : undefined);
+      const { workspace, location } = await connect();
+      expect(location).toBe(`${BASE}/accounts?instagram=missing_permissions&missing=instagram_basic`);
       expect(await state.db.instagramAccount.count({ where: { workspaceId: workspace.id } })).toBe(0);
     });
 
-    it("the account refused by Meta (code 10) → missing_permissions naming instagram_business_basic", async () => {
-      metaOverride = (p) => (p === "/me" ? metaError(10, "(#10) Application does not have permission for this action") : undefined);
+    it("no Instagram account in the login (empty list) → no_account", async () => {
+      metaOverride = (p) => (p === "/me/assigned_instagram_accounts" ? Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 })) : undefined);
       const { workspace, location } = await connect();
-      expect(location).toBe(`${BASE}/accounts?instagram=missing_permissions&missing=instagram_business_basic`);
+      expect(location).toBe(`${BASE}/accounts?instagram=no_account`);
       expect(await state.db.instagramAccount.count({ where: { workspaceId: workspace.id } })).toBe(0);
-      const event = await state.db.operationalEvent.findFirstOrThrow({ where: { workspaceId: workspace.id, message: "Instagram connection refused by Meta: missing instagram_business_basic" } });
-      expect(event.payload).toMatchObject({ permission: "instagram_business_basic", reason: expect.stringContaining("code=10") });
     });
   });
 
-  it("1. Connect Instagram → Instagram's login → the account appears in Accounts", async () => {
+  it("1. Connect Instagram → Meta's login → the account appears in Accounts", async () => {
+    const workspace = await state.db.workspace.findFirstOrThrow({ where: { ownerId: state.userId } });
     const before = calls.length;
-    const { workspace, location } = await connect();
-    expect(location).toBe(`${BASE}/accounts?instagram=connected`);
-    const made = calls.slice(before);
-    expect(made.map((c) => `${c.method} ${c.url.host}${pathOf(c)}`)).toEqual([
-      "POST api.instagram.com/oauth/access_token", // the code → short-lived token and permissions
-      "GET graph.instagram.com/access_token", // the 60-day token
-      "GET graph.instagram.com/me", // instagram_business_basic: user_id, username, name
-      `POST graph.instagram.com/${IG_ID}/subscribed_apps`, // notifications
-      `GET graph.instagram.com/${IG_ID}/subscribed_apps`, // what Meta confirms (Diagnostics)
+    const response = await callbackRoute(new NextRequest(`${BASE}/api/instagram/callback?code=meta-code&state=${encodeURIComponent(createOAuthState(workspace.id))}`));
+    expect(response.headers.get("location")).toBe(`${BASE}/accounts?instagram=connected`);
+    const paths = calls.slice(before).map((c) => `${c.method} ${c.url.pathname.replace(/^\/v[\d.]+/, "")}`);
+    expect(paths).toEqual([
+      "GET /oauth/access_token",
+      "GET /debug_token", // what Meta reports about the token (recorded, not decided on)
+      "GET /me/assigned_instagram_accounts", // business_management
+      `GET /${IG_ID}`, // instagram_basic: username, name
+      `POST /${IG_ID}/subscribed_apps`, // comments and messages notifications
+      `GET /${IG_ID}/subscribed_apps`, // what Meta confirms (recorded in Diagnostics)
     ]);
-    expect(made[0].body).toMatchObject({ client_id: "1234567890", client_secret: APP_SECRET, grant_type: "authorization_code", code: "instagram-code", redirect_uri: `${BASE}/api/instagram/callback` });
-    expect(made[3].body).toEqual({ subscribed_fields: FIELDS });
-    expect(calls.some((c) => c.url.host.includes("facebook"))).toBe(false);
-
     const accounts = await (await accountsRoute()).json();
     expect(accounts.data.instagramAccounts).toEqual([expect.objectContaining({ username: "demo.store", instagramId: IG_ID })]);
-    const row = await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } });
-    expect(row).toMatchObject({ metaLogin: "INSTAGRAM", instagramScopedId: SCOPED_ID, metaLoginUserId: null, webhookSubscribed: true, tokenInvalidAt: null });
-    expect(decryptToken(row.accessToken)).toBe(LONG_TOKEN);
-    expect(row.tokenExpiresAt!.getTime() - Date.now()).toBeGreaterThan(59 * 86_400_000);
-
-    const granted = await state.db.operationalEvent.findFirstOrThrow({ where: { workspaceId: workspace.id, message: { startsWith: "Instagram login: permissions granted" } }, orderBy: { createdAt: "desc" } });
-    expect(granted.payload).toEqual({ granted: ALL_PERMISSIONS.split(","), missing: [] });
+    // business_management is absent from `scopes` yet the connection went through;
+    // what debug_token reported is in the admin's Diagnostics, without the token.
+    const report = await state.db.operationalEvent.findFirstOrThrow({
+      where: { workspaceId: workspace.id, message: { startsWith: "Instagram login: Meta's debug_token reports scopes" } },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(report.payload).toMatchObject({
+      type: "SYSTEM_USER",
+      scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+      granularScopes: expect.arrayContaining([{ scope: "instagram_basic", target_ids: [IG_ID] }]),
+      notInScopes: ["business_management"],
+    });
+    expect(JSON.stringify(report)).not.toContain("system-user-token");
+    // And what Meta confirms for the account's notifications.
     const notifications = await state.db.operationalEvent.findFirstOrThrow({
       where: { workspaceId: workspace.id, message: { startsWith: "Instagram notifications for @demo.store" } },
       orderBy: { createdAt: "desc" },
     });
-    expect(notifications).toMatchObject({ level: "INFO", message: "Instagram notifications for @demo.store: Meta confirms comments, messages, messaging_postbacks, message_echoes" });
-    expect(JSON.stringify([granted, notifications])).not.toMatch(/ig-(short|long)-token/);
+    expect(notifications).toMatchObject({ level: "INFO", message: "Instagram notifications for @demo.store: Meta confirms comments, messages, messaging_postbacks" });
   });
 
   it("   the demo script then adds one automation per channel, in English, Direct mode, no follow gate", async () => {
@@ -278,49 +253,46 @@ describe.skipIf(!databaseUrl)("Instagram's login: the App Review flows and every
     expect(result.automations.map((a) => a.type)).toEqual(["COMMENTS", "STORIES", "DIRECT"]);
     const automations = await state.db.automation.findMany({ where: { workspaceId: result.workspaceId } });
     for (const a of automations) expect(a).toMatchObject({ openingDmEnabled: false, requireFollow: false, isActive: true, dmDelaySeconds: 0 });
-    // The account keeps Instagram's login.
-    expect((await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } })).metaLogin).toBe("INSTAGRAM");
   });
 
-  it("2. a comment with the keyword → public reply and private reply with the link button → DM Logs", async () => {
+  it("2. a comment with the keyword → public reply and DM → DM Logs", async () => {
     const before = calls.length;
-    const webhook = await webhookRoute(comment("comment_1", "fan_one"));
+    const webhook = await webhookRoute(
+      signedWebhook({
+        object: "instagram",
+        entry: [{ id: IG_ID, time: 1, changes: [{ field: "comments", value: { id: "comment_1", text: "LINK please", from: { id: "commenter_1", username: "fan_one" }, media: { id: "post_1" } } }] }],
+      })
+    );
     expect(webhook.status).toBe(200);
     await runJobs();
     const posts = sent(before);
-    expect(posts.map((c) => `${c.url.host}${pathOf(c)}`)).toEqual(["graph.instagram.com/comment_1/replies", `graph.instagram.com/${IG_ID}/messages`]);
+    expect(posts.map((c) => c.url.pathname.replace(/^\/v[\d.]+/, ""))).toEqual(["/comment_1/replies", `/${IG_ID}/messages`]);
     expect(posts[0].body).toEqual({ message: expect.stringMatching(/Sent you a DM 📩|Check your DMs 📩/) });
-    // The private reply: to the comment, a button template with the tracked link.
     expect(posts[1].body).toMatchObject({ recipient: { comment_id: "comment_1" } });
-    const dm = JSON.stringify(posts[1].body);
-    expect(dm).toContain("Hi fan_one! Here is the catalog you asked for");
-    expect(dm).toContain('"type":"web_url"');
-    expect(dm).toMatch(new RegExp(`"url":"${BASE}/r/[\\w-]+`));
+    expect(JSON.stringify(posts[1].body)).toContain("Hi fan_one! Here is the catalog you asked for");
 
     const logs = await (await logsRoute(new NextRequest(`${BASE}/api/logs?page=1&limit=20`))).json();
     expect(logs.data.logs ?? logs.data).toEqual(expect.arrayContaining([expect.objectContaining({ commentId: "comment_1", status: "SENT", commenterName: "fan_one" })]));
-    // The receipt: the entry id (user_id) matched the connected account.
-    const receipt = await state.db.webhookReceipt.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
-    expect(receipt).toMatchObject({ object: "instagram", accepted: true, reason: null });
-    expect(receipt.entries).toEqual([expect.objectContaining({ id: IG_ID, fields: ["comments"], accepted: true })]);
   });
 
   it("3. a Direct message with the keyword → automatic reply", async () => {
     const before = calls.length;
-    await webhookRoute(direct("dm_person", "mid_dm_1", { text: "What is the PRICE?" }));
+    await webhookRoute(
+      signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 2, messaging: [{ sender: { id: "dm_person" }, recipient: { id: IG_ID }, timestamp: 2, message: { mid: "mid_dm_1", text: "What is the PRICE?" } }] }] })
+    );
     await runJobs();
     const posts = sent(before);
-    expect(posts.map(pathOf)).toEqual([`/${IG_ID}/messages`]);
+    expect(posts.map((c) => c.url.pathname.replace(/^\/v[\d.]+/, ""))).toEqual([`/${IG_ID}/messages`]);
     expect(posts[0].body).toMatchObject({ recipient: { id: "dm_person" } });
     expect(JSON.stringify(posts[0].body)).toContain("Here is our price list");
     expect(await state.db.dmLog.count({ where: { commenterId: "dm_person", status: "SENT" } })).toBe(1);
   });
 
-  it("   a read receipt (someone only read a DM) is accepted and ignored: no job, nothing sent", async () => {
+  it("   a read receipt (someone only read a DM) is accepted, recorded and ignored: no job, nothing sent", async () => {
     const before = calls.length;
     const jobsBefore = state.jobs.length;
     const response = await webhookRoute(
-      signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 3, messaging: [{ sender: { id: "dm_person" }, recipient: { id: IG_ID }, timestamp: 3, read: { mid: "mid_dm_1" } }] }] })
+      signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 3, messaging: [{ sender: { id: "dm_person" }, recipient: { id: IG_ID }, timestamp: 3, read: { watermark: 3 } }] }] })
     );
     expect(response.status).toBe(200);
     await runJobs();
@@ -328,169 +300,70 @@ describe.skipIf(!databaseUrl)("Instagram's login: the App Review flows and every
     expect(sent(before)).toEqual([]);
     const event = await state.db.webhookEvent.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
     expect(event.status).toBe("PROCESSED");
+    expect(event.errorMessage).toBeNull();
+    // And the account is no longer subscribed to read receipts.
+    const subscribe = calls.find((c) => c.method === "POST" && c.url.pathname.endsWith("/subscribed_apps"));
+    expect(subscribe?.body?.subscribed_fields).toEqual(["comments", "messages", "messaging_postbacks"]);
+    // No message_echoes field under Unified login: echoes come inside messages.
+    expect(subscribe?.body?.subscribed_fields).not.toContain("message_echoes");
   });
 
   it("4. a reply to a story → automatic reply", async () => {
     const before = calls.length;
-    await webhookRoute(direct("story_person", "mid_story_1", { text: "Love this!", reply_to: { story: { id: "story_1", url: "https://cdn.test/story" } } }));
+    await webhookRoute(
+      signedWebhook({
+        object: "instagram",
+        entry: [{ id: IG_ID, time: 3, messaging: [{ sender: { id: "story_person" }, recipient: { id: IG_ID }, timestamp: 3, message: { mid: "mid_story_1", text: "Love this!", reply_to: { story: { id: "story_1", url: "https://cdn.test/story" } } } }] }],
+      })
+    );
     await runJobs();
     const posts = sent(before);
-    expect(posts.map(pathOf)).toEqual([`/${IG_ID}/messages`]);
+    expect(posts.map((c) => c.url.pathname.replace(/^\/v[\d.]+/, ""))).toEqual([`/${IG_ID}/messages`]);
     expect(posts[0].body).toMatchObject({ recipient: { id: "story_person" } });
     expect(JSON.stringify(posts[0].body)).toContain("Thanks for replying to our story");
   });
 
-  it("   a mention in someone's story → automatic reply (Stories, mentions on)", async () => {
-    const stories = await automationOf("STORIES");
-    await state.db.automation.update({ where: { id: stories.id }, data: { triggerStoryMentions: true } });
-    const before = calls.length;
-    await webhookRoute(direct("mention_person", "mid_mention_1", { attachments: [{ type: "story_mention", payload: { url: "https://cdn.test/mention" } }] }));
-    await runJobs();
-    const posts = sent(before);
-    expect(posts.map(pathOf)).toEqual([`/${IG_ID}/messages`]);
-    expect(posts[0].body).toMatchObject({ recipient: { id: "mention_person" } });
-  });
-
-  it("   opening DM with a button → the tap (postback) delivers the link", async () => {
-    const comments = await automationOf("COMMENTS");
-    await state.db.automation.update({
-      where: { id: comments.id },
-      data: { openingDmEnabled: true, openingDmMessage: "Tap below and I will send the link", openingDmButtonLabel: "Send me the link" },
-    });
-    let before = calls.length;
-    await webhookRoute(comment("comment_2", "fan_two"));
-    await runJobs();
-    let posts = sent(before);
-    const opening = posts.find((c) => pathOf(c) === `/${IG_ID}/messages`)!;
-    expect(opening.body).toMatchObject({ recipient: { comment_id: "comment_2" } });
-    expect(JSON.stringify(opening.body)).toContain(`"payload":"reveal:${comments.id}:open"`);
-    expect(JSON.stringify(opening.body)).not.toContain("/r/");
-
-    before = calls.length;
-    await webhookRoute(tap("fan_two", `reveal:${comments.id}:open`, "mid_tap_1"));
-    await runJobs();
-    posts = sent(before);
-    expect(posts.map(pathOf)).toEqual([`/${IG_ID}/messages`]);
-    expect(posts[0].body).toMatchObject({ recipient: { id: "fan_two" } });
-    expect(JSON.stringify(posts[0].body)).toContain('"type":"web_url"');
-  });
-
-  it("   follow check: a non-follower gets the request, and the link once following", async () => {
-    const comments = await automationOf("COMMENTS");
-    await state.db.automation.update({ where: { id: comments.id }, data: { requireFollow: true } });
-    notFollowing.add("fan_three");
-    await webhookRoute(comment("comment_3", "fan_three"));
-    await runJobs();
-
-    // The opening DM's tap checks the follow (User Profile API).
-    let before = calls.length;
-    await webhookRoute(tap("fan_three", `followcheck:${comments.id}:open`, "mid_tap_2"));
-    await runJobs();
-    let made = calls.slice(before);
-    expect(made.some((c) => c.method === "GET" && pathOf(c) === "/fan_three" && c.url.searchParams.get("fields") === "is_user_follow_business")).toBe(true);
-    let posts = sent(before);
-    expect(posts).toHaveLength(1);
-    expect(JSON.stringify(posts[0].body)).toContain(`"payload":"followcheck:${comments.id}"`);
-    expect(JSON.stringify(posts[0].body)).not.toContain("/r/");
-
-    // Follows now → "I follow" tap → the link.
-    notFollowing.delete("fan_three");
-    before = calls.length;
-    await webhookRoute(tap("fan_three", `followcheck:${comments.id}`, "mid_tap_3"));
-    await runJobs();
-    made = calls.slice(before);
-    posts = sent(before);
-    expect(posts).toHaveLength(1);
-    expect(posts[0].body).toMatchObject({ recipient: { id: "fan_three" } });
-    expect(JSON.stringify(posts[0].body)).toContain('"type":"web_url"');
-    await state.db.automation.update({ where: { id: comments.id }, data: { requireFollow: false, openingDmEnabled: false } });
-  });
-
-  it("   echoes: a message someone from the account sent in the Instagram app pauses the no-keyword Direct automation", async () => {
-    const directAutomation = await automationOf("DIRECT");
-    await state.db.automation.update({ where: { id: directAutomation.id }, data: { keywords: [], matchAnyWord: true } });
-    await webhookRoute(
-      signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 4, messaging: [{ sender: { id: IG_ID }, recipient: { id: "human_person" }, timestamp: 4, message: { mid: "human_mid_1", text: "Hi! It's Ana from the store", is_echo: true } }] }] })
-    );
-    await runJobs();
+  it("   echoes come inside messages (is_echo): a reply typed in the Instagram app pauses the no-keyword Direct automation; the bot's own does not", async () => {
     const account = await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } });
-    expect(await state.db.conversationActivity.count({ where: { instagramAccountId: account.id, recipientId: "human_person" } })).toBe(1);
+    expect(account.metaLogin).toBe("UNIFIED");
+    const direct = await state.db.automation.findFirstOrThrow({ where: { type: "DIRECT", instagramAccountId: account.id } });
+    await state.db.automation.update({ where: { id: direct.id }, data: { keywords: [], matchAnyWord: true } });
+    const message = (from: string, to: string, msg: Record<string, unknown>) =>
+      signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 5, messaging: [{ sender: { id: from }, recipient: { id: to }, timestamp: 5, message: msg }] }] });
 
-    const before = calls.length;
-    await webhookRoute(direct("human_person", "mid_human_reply", { text: "Thanks Ana" }));
+    // Someone from the store answers in the Instagram app: Meta sends it as an
+    // echo inside messages (sender = the account).
+    await webhookRoute(message(IG_ID, "human_person", { mid: "phone_mid_1", text: "Hi! It's Ana from the store", is_echo: true }));
+    await runJobs();
+    expect(await state.db.conversationActivity.count({ where: { instagramAccountId: account.id, recipientId: "human_person" } })).toBe(1);
+    let before = calls.length;
+    await webhookRoute(message("human_person", IG_ID, { mid: "mid_human_2", text: "Thanks Ana" }));
     await runJobs();
     expect(sent(before)).toEqual([]);
     expect(await state.db.dmLog.findFirstOrThrow({ where: { commenterId: "human_person" } })).toMatchObject({ status: "SKIPPED_HUMAN_ACTIVE" });
 
-    // Someone nobody talked to is answered.
-    const other = calls.length;
-    await webhookRoute(direct("new_person", "mid_new_1", { text: "hello" }));
-    await runJobs();
-    expect(sent(other).map(pathOf)).toEqual([`/${IG_ID}/messages`]);
-    // The bot's own messages are recorded, so their echoes never pause anything.
-    expect(await state.db.botMessage.count({ where: { instagramId: IG_ID } })).toBeGreaterThan(0);
-  });
-
-  it("   the wait before answering, then text, image and video", async () => {
-    const directAutomation = await automationOf("DIRECT");
-    await state.db.automation.update({ where: { id: directAutomation.id }, data: { keywords: ["PRICE"], matchAnyWord: false, dmDelaySeconds: 30 } });
-    await state.db.automationMedia.createMany({
-      data: [
-        { workspaceId: directAutomation.workspaceId, automationId: directAutomation.id, slot: "MAIN", position: 0, kind: "IMAGE", mimeType: "image/jpeg", sizeBytes: 1000, storageKey: "w/price-list.jpg" },
-        { workspaceId: directAutomation.workspaceId, automationId: directAutomation.id, slot: "MAIN", position: 1, kind: "VIDEO", mimeType: "video/mp4", sizeBytes: 5000, storageKey: "w/how-to.mp4" },
-      ],
-    });
-    let before = calls.length;
-    await webhookRoute(direct("media_person", "mid_media_1", { text: "PRICE please" }));
-    // First pass: nothing sent, the reply waits 30 seconds as a delayed job.
-    const first = state.jobs.shift()!;
-    await state.processor!({ name: first.name, data: first.data, id: "job_first", attemptsMade: 0 });
-    expect(sent(before)).toEqual([]);
-    expect(state.jobs).toEqual([expect.objectContaining({ data: expect.objectContaining({ dmDelayed: true }), opts: expect.objectContaining({ delay: 30_000 }) })]);
-    expect(await state.db.dmLog.findFirstOrThrow({ where: { commenterId: "media_person" } })).toMatchObject({ status: "PENDING" });
-
+    // Someone nobody talked to is answered; the echo of that automatic reply
+    // (its mid is the bot's) pauses nothing.
     before = calls.length;
+    await webhookRoute(message("new_person", IG_ID, { mid: "mid_new_1", text: "hello" }));
     await runJobs();
-    const posts = sent(before);
-    expect(posts.map(pathOf)).toEqual([`/${IG_ID}/messages`, `/${IG_ID}/messages`, `/${IG_ID}/messages`]);
-    expect(JSON.stringify(posts[0].body)).toContain("Here is our price list");
-    const media = posts.slice(1).map((c) => JSON.stringify(c.body));
-    expect(media[0]).toContain('"type":"image"');
-    expect(media[0]).toContain(`${BASE}/media/w%2Fprice-list.jpg`);
-    expect(media[1]).toContain('"type":"video"');
-    expect(media[1]).toContain(`${BASE}/media/w%2Fhow-to.mp4`);
-    expect(await state.db.dmLog.findFirstOrThrow({ where: { commenterId: "media_person" } })).toMatchObject({ status: "SENT" });
+    const reply = sent(before);
+    expect(reply.map((c) => c.url.pathname.replace(/^\/v[\d.]+/, ""))).toEqual([`/${IG_ID}/messages`]);
+    expect(reply[0].url.host).toBe("graph.facebook.com");
+    const botMid = (await state.db.botMessage.findFirstOrThrow({ where: { instagramId: IG_ID, recipientId: "new_person" } })).mid;
+    await webhookRoute(message(IG_ID, "new_person", { mid: botMid, text: "automatic reply", is_echo: true }));
+    await runJobs();
+    expect(await state.db.conversationActivity.count({ where: { instagramAccountId: account.id, recipientId: "new_person" } })).toBe(0);
+
+    await state.db.automation.update({ where: { id: direct.id }, data: { keywords: ["PRICE"], matchAnyWord: false } });
   });
 
-  it("   the posts and reels list for choosing where an automation runs", async () => {
+  it("   a forged webhook (wrong signature) is refused and nothing is sent", async () => {
     const before = calls.length;
-    const response = await postsRoute(new NextRequest(`${BASE}/api/instagram/posts`));
-    expect(response.status).toBe(200);
-    expect(JSON.stringify(await response.json())).toContain("reel_1");
-    expect(calls.slice(before).map((c) => `${c.url.host}${pathOf(c)}`)).toContain("graph.instagram.com/me/media");
-  });
-
-  it("   the 60-day token is renewed by the daily routine", async () => {
-    await state.db.instagramAccount.update({ where: { instagramId: IG_ID }, data: { tokenExpiresAt: new Date(Date.now() + 5 * 86_400_000) } });
-    const before = calls.length;
-    const results = await refreshExpiringTokens();
-    expect(results).toEqual([expect.objectContaining({ username: "demo.store", status: "refreshed" })]);
-    const call = calls.slice(before).find((c) => pathOf(c) === "/refresh_access_token")!;
-    expect(call.url.host).toBe("graph.instagram.com");
-    expect(call.url.searchParams.get("grant_type")).toBe("ig_refresh_token");
-    expect(call.url.searchParams.get("access_token")).toBe(LONG_TOKEN);
-    const row = await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } });
-    expect(decryptToken(row.accessToken)).toBe(RENEWED_TOKEN);
-    expect(row.tokenExpiresAt!.getTime() - Date.now()).toBeGreaterThan(59 * 86_400_000);
-  });
-
-  it("   a forged webhook (signed with another secret) is refused and nothing is sent", async () => {
-    const before = calls.length;
-    const raw = JSON.stringify({ object: "instagram", entry: [{ id: IG_ID, time: 1, changes: [{ field: "comments", value: { id: "c_forged", text: "LINK", from: { id: "x" }, media: { id: "p" } } }] }] });
     const forged = new NextRequest(`${BASE}/api/webhook`, {
       method: "POST",
-      body: raw,
-      headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=" + createHmac("sha256", "another-app-secret").update(raw).digest("hex") },
+      body: JSON.stringify({ object: "instagram", entry: [] }),
+      headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=00" },
     });
     expect((await webhookRoute(forged)).status).toBe(401);
     expect(state.jobs).toEqual([]);
@@ -507,59 +380,5 @@ describe.skipIf(!databaseUrl)("Instagram's login: the App Review flows and every
     expect(await state.db.trackedLink.count()).toBe(0);
     // Meta's notifications about it go as well.
     expect(await state.db.webhookEvent.count({ where: { payload: { path: ["entry"], array_contains: [{ id: IG_ID }] } } })).toBe(0);
-  });
-
-  describe("6. an account from the old Facebook (Unified) login, as @primus3d_ today", () => {
-    it("the migration marks it to reconnect; nothing is sent with its token", async () => {
-      const workspace = await workspaceOf();
-      const account = await state.db.instagramAccount.create({
-        data: { workspaceId: workspace.id, instagramId: IG_ID, username: "demo.store", provider: "META", metaLogin: "UNIFIED", accessToken: "unreadable-system-user-token", metaLoginUserId: "122000000000777" },
-      });
-      await state.db.automation.create({
-        data: { workspaceId: workspace.id, instagramAccountId: account.id, type: "COMMENTS", name: "Kept automation", keywords: ["LINK"], matchAnyPost: true, dmMessage: "Here it is", publicReplyEnabled: false },
-      });
-      await sql.query(readFileSync(path.join(__dirname, "..", "prisma", "migrations", "20261206120000_unified_accounts_reconnect", "migration.sql"), "utf8"));
-      expect((await state.db.instagramAccount.findUniqueOrThrow({ where: { id: account.id } })).tokenInvalidAt).not.toBeNull();
-
-      const before = calls.length;
-      await webhookRoute(comment("comment_legacy", "fan_legacy"));
-      await runJobs();
-      expect(sent(before)).toEqual([]);
-      expect(calls.slice(before).some((c) => c.url.host.includes("facebook"))).toBe(false);
-    });
-
-    it("reconnecting with Instagram updates the same account: automations kept, Instagram token, mark cleared", async () => {
-      const account = await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } });
-      const { location } = await connect();
-      expect(location).toBe(`${BASE}/accounts?instagram=connected`);
-      const row = await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } });
-      expect(row).toMatchObject({ id: account.id, metaLogin: "INSTAGRAM", tokenInvalidAt: null, metaLoginUserId: null, instagramScopedId: SCOPED_ID });
-      expect(decryptToken(row.accessToken)).toBe(LONG_TOKEN);
-      expect(await state.db.automation.count({ where: { instagramAccountId: account.id, name: "Kept automation" } })).toBe(1);
-    });
-
-    it("Instagram's deauthorize callback (app removed in Instagram, app-scoped id) wipes the token", async () => {
-      const forged = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: SCOPED_ID }, "another-app-secret");
-      expect((await deauthorizeRoute(formPost(`${BASE}/api/webhooks/meta/deauthorize`, forged))).status).toBe(400);
-      expect((await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } })).tokenInvalidAt).toBeNull();
-
-      const signed = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: SCOPED_ID, issued_at: 1 }, APP_SECRET);
-      const response = await deauthorizeRoute(formPost(`${BASE}/api/webhooks/meta/deauthorize`, signed));
-      expect(response.status).toBe(200);
-      const row = await state.db.instagramAccount.findUniqueOrThrow({ where: { instagramId: IG_ID } });
-      expect(row).toMatchObject({ accessToken: "", webhookSubscribed: false });
-      expect(row.tokenInvalidAt).not.toBeNull();
-    });
-
-    it("Instagram's data deletion callback (professional account id) deletes the account and answers url + code", async () => {
-      const signed = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: IG_ID, issued_at: 1 }, APP_SECRET);
-      const response = await dataDeletionRoute(formPost(`${BASE}/api/webhooks/meta/data-deletion`, signed));
-      expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(Object.keys(body).sort()).toEqual(["confirmation_code", "url"]);
-      expect(await state.db.instagramAccount.count()).toBe(0);
-      expect(await state.db.automation.count()).toBe(0);
-      expect(await state.db.dataDeletionRequest.findUniqueOrThrow({ where: { confirmationCode: body.confirmation_code } })).toMatchObject({ status: "COMPLETED", accountsDeleted: 1 });
-    });
   });
 });

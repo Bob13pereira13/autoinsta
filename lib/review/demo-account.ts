@@ -20,20 +20,11 @@ export interface ReviewAccountOptions {
   /** Write a few sample entries to DM Logs (default true). */
   sampleLogs?: boolean;
   /**
-   * Connect the Instagram test account from a token (an Instagram User
-   * token from Instagram's login, as the app's own login gives). `id` is the
-   * professional account id (`user_id`), `scopedId` the app-scoped `id`.
-   * Without it, an account already connected to the workspace is kept.
+   * Connect the Instagram test account from a token (a Facebook Login for
+   * Business token, as the app's own login gives). Without it, an account
+   * already connected to the workspace is kept.
    */
-  instagram?: {
-    id: string;
-    scopedId?: string | null;
-    username: string;
-    name?: string | null;
-    encryptedToken: string;
-    tokenExpiresAt?: Date | null;
-    webhookSubscribed: boolean;
-  };
+  instagram?: { id: string; username: string; name?: string | null; encryptedToken: string; webhookSubscribed: boolean };
 }
 
 export interface ReviewAccountResult {
@@ -120,11 +111,9 @@ export async function resetReviewAccount(db: PrismaClient, options: ReviewAccoun
       name: options.instagram.name ?? null,
       accessToken: options.instagram.encryptedToken,
       tokenInvalidAt: null,
-      tokenExpiresAt: options.instagram.tokenExpiresAt ?? null,
+      tokenExpiresAt: null,
       webhookSubscribed: options.instagram.webhookSubscribed,
-      metaLogin: "INSTAGRAM" as const,
-      instagramScopedId: options.instagram.scopedId ?? null,
-      metaLoginUserId: null,
+      metaLogin: "UNIFIED" as const,
       automationsEnabled: true,
     };
     account = elsewhere

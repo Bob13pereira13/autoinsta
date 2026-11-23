@@ -31,20 +31,21 @@ describe("environment helpers", () => {
     expect(getMetaGraphApiVersion()).toBe("v26.0");
   });
 
-  it("asks only for Instagram's login variables (the old Facebook login's are never required)", () => {
+  it("asks for the variables of the login new connections will use", () => {
     vi.stubEnv("ENCRYPTION_KEY", "a".repeat(64));
     vi.stubEnv("NEXTAUTH_SECRET", "secret");
     vi.stubEnv("INSTAGRAM_APP_ID", "ig");
     vi.stubEnv("INSTAGRAM_APP_SECRET", "ig-secret");
     vi.stubEnv("META_APP_ID", "");
     vi.stubEnv("FACEBOOK_APP_SECRET", "");
-    vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
-    vi.stubEnv("META_UNIFIED_LOGIN_URL", "https://www.facebook.com/v25.0/dialog/oauth?client_id=1&config_id=2");
+    vi.stubEnv("META_LOGIN_CONFIG_ID", "");
     expect(getMissingInstagramOAuthEnv()).toEqual([]);
 
-    vi.stubEnv("INSTAGRAM_APP_ID", "");
-    vi.stubEnv("INSTAGRAM_APP_SECRET", "");
-    expect(getMissingInstagramOAuthEnv()).toEqual(["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"]);
+    vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+    expect(getMissingInstagramOAuthEnv()).toEqual([
+      "META_APP_ID",
+      "FACEBOOK_APP_SECRET",
+    ]);
   });
 });
 

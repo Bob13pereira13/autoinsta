@@ -7,7 +7,6 @@ vi.mock("@/lib/meta/oauth", () => ({
 }));
 import {
   createInstagramContext,
-  ReconnectRequiredError,
   sendPrivateReplyWithButton,
   sendDirectMessageWithLinkButton,
   getRecentMediaComments,
@@ -55,23 +54,25 @@ describe("Instagram provider boundary", () => {
       select: { apiKey: true },
     });
   });
-  it("an account connected with Instagram's login gets its decrypted token", async () => {
+  it.each([
+    ["INSTAGRAM", false],
+    ["UNIFIED", true],
+  ] as const)("carries a %s account's login into its Meta context", async (metaLogin, unifiedLogin) => {
     expect(
       await createInstagramContext({
         provider: "META",
-        metaLogin: "INSTAGRAM",
+        metaLogin,
         workspaceId: "workspace",
         zernioAccountId: null,
         instagramId: "ig1",
         accessToken: "token",
       })
-    ).toEqual({ provider: "META", accessToken: "decrypted:token", instagramId: "ig1" });
-  });
-  it("an account from the old Facebook (Unified) login is refused: it must connect again with Instagram", async () => {
-    const account = { provider: "META", metaLogin: "UNIFIED", workspaceId: "workspace", zernioAccountId: null, instagramId: "ig1", accessToken: "token" } as const;
-    await expect(createInstagramContext(account)).rejects.toBeInstanceOf(ReconnectRequiredError);
-    // Never sent to Meta: no call at all.
-    expect(fetchMock).not.toHaveBeenCalled();
+    ).toEqual({
+      provider: "META",
+      accessToken: "decrypted:token",
+      instagramId: "ig1",
+      unifiedLogin,
+    });
   });
   it("sends postback private replies using Zernio button contracts", async () => {
     respond({ messageId: "mid" });
@@ -144,7 +145,9 @@ describe("Instagram provider boundary", () => {
     provider: "META",
     accessToken: "meta",
     instagramId: "ig1",
+    unifiedLogin: false,
   } as const;
+  const unifiedLogin = { ...instagramLogin, unifiedLogin: true } as const;
 
   describe("a comment's state before a delayed reply", () => {
     const check = () => getCommentState({ context: instagramLogin, commentId: "c1", accountInstagramId: "store" });
@@ -187,9 +190,8 @@ describe("Instagram provider boundary", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("graph.instagram.com/v");
     expect(fetchMock.mock.calls[0][0]).toContain("/me/media");
   });
-  it("stays on graph.instagram.com even with the old Unified login variables still set", async () => {
+  it("keeps Instagram Login accounts on graph.instagram.com when Unified login is configured", async () => {
     vi.stubEnv("META_LOGIN_CONFIG_ID", "cfg");
-    vi.stubEnv("META_UNIFIED_LOGIN_URL", "https://www.facebook.com/v25.0/dialog/oauth?client_id=1&config_id=2");
     respond({ data: [{ id: "media" }] });
     await getUserMedia({ context: instagramLogin, limit: 3 });
     respond({ success: true });
@@ -205,6 +207,27 @@ describe("Instagram provider boundary", () => {
       /^https:\/\/graph\.instagram\.com\/v[\d.]+\/ig1\/messages$/
     );
     vi.unstubAllEnvs();
+  });
+  it("addresses Unified login accounts by ID on graph.facebook.com", async () => {
+    respond({ data: [{ id: "media" }] });
+    await getUserMedia({ context: unifiedLogin, limit: 3 });
+    respond({ success: true });
+    await sendPrivateReply({
+      context: unifiedLogin,
+      instagramAccountId: "ig1",
+      commentId: "comment",
+      message: "hi",
+    });
+    respond({ is_user_follow_business: true });
+    await getUserFollowStatus({ context: unifiedLogin, recipientId: "person" });
+    expect(fetchMock.mock.calls[0][0]).toContain("graph.facebook.com/v");
+    expect(fetchMock.mock.calls[0][0]).toContain("/ig1/media");
+    expect(fetchMock.mock.calls[1][0]).toMatch(
+      /^https:\/\/graph\.facebook\.com\/v[\d.]+\/ig1\/messages$/
+    );
+    expect(fetchMock.mock.calls[2][0]).toMatch(
+      /^https:\/\/graph\.facebook\.com\/v[\d.]+\/person\?/
+    );
   });
   it.each([
     [429, RateLimitError],

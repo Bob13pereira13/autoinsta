@@ -4,14 +4,18 @@
  * Diagnostics. Run on every connection and from the admin's "Check
  * notifications" button.
  *
- * With an Instagram User token (Instagram API with Instagram Login) the
- * subscription is POST /me/subscribed_apps on graph.instagram.com. Which
- * fields arrive is also decided per app, in the App Dashboard ("API setup
- * with Instagram login" → Configure webhooks): an account receives every
- * field selected for the app. The record says which fields Meta confirms for
- * the account, to rule out the subscription itself.
+ * With a Unified login token (Business Integration System User Access Token)
+ * Meta documents the subscription as POST /{instagram-account-id}/subscribed_apps
+ * on graph.facebook.com with that token; no Facebook Page is needed. Which
+ * fields arrive is decided per app, in the App Dashboard: an account receives
+ * every field selected for the app. So when comments arrive and messages do
+ * not, the account is subscribed and the cause is elsewhere (the fields
+ * selected on the "API setup with Unified login" tab, the app's mode, or
+ * another app owning the conversations); the record says which fields Meta
+ * confirms for the account, to rule out the subscription itself.
  */
 import { prisma } from "@/lib/db/client";
+import { getMetaAppId } from "@/lib/env";
 import {
   getInstagramAccountSubscriptions,
   subscribeInstagramAccountToWebhooks,
@@ -64,9 +68,9 @@ export async function subscribeAndCheckWebhooks(input: {
   let apps: Array<{ id: string | null; name: string | null; fields: string[] }> = [];
   try {
     apps = await getInstagramAccountSubscriptions(instagramId, auth);
-    const appIds = [process.env.INSTAGRAM_APP_ID, process.env.META_APP_ID].filter(Boolean);
+    const appId = getMetaAppId();
     // This app's entry: by id when Meta gives it, else the only entry there is.
-    const mine = apps.find((app) => app.id && appIds.includes(app.id)) ?? (apps.length === 1 ? apps[0] : undefined);
+    const mine = apps.find((app) => appId && app.id === appId) ?? (apps.length === 1 && !apps[0].id ? apps[0] : undefined);
     confirmedFields = mine ? mine.fields : [];
   } catch (error) {
     checkError = message(error);

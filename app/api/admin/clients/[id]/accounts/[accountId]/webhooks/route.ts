@@ -22,8 +22,6 @@ export async function POST(_request: Request, { params }: Params) {
     });
     if (!account) throw new AdminError("Instagram account not found", 404);
     if (account.provider !== "META" || !account.accessToken) throw new AdminError("This account does not use Meta's official login");
-    // Connected through the Facebook (Unified) login, which the app no longer uses.
-    if (account.metaLogin === "UNIFIED") throw new AdminError("The account's access could not be read. Reconnect the account.");
     let accessToken: string;
     try {
       accessToken = decryptToken(account.accessToken);
@@ -33,7 +31,7 @@ export async function POST(_request: Request, { params }: Params) {
     const check = await subscribeAndCheckWebhooks({
       instagramId: account.instagramId,
       username: account.username,
-      auth: { accessToken },
+      auth: { accessToken, unifiedLogin: account.metaLogin === "UNIFIED" },
       workspaceId: id,
     });
     await prisma.instagramAccount.update({ where: { id: account.id }, data: { webhookSubscribed: check.subscribed === true } });

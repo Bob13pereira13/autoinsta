@@ -45,9 +45,8 @@ O nome, o logotipo, as cores e os dados legais da marca ficam em **[`config/bran
 - **Login por e-mail e senha** (além do link mágico), com **cadastro público em /cadastro** (confirmação
   de e-mail obrigatória; a aprovação manual é opcional na área de gestão). Você também pode criar clientes
   pela área de gestão ou por script, e eles definem a senha pelo e-mail.
-- **Somente API oficial da Meta**: sem Zernio; só o **login do Instagram** (Business Login for Instagram,
-  chamadas em `graph.instagram.com`, token de 60 dias renovado pela rotina diária). Sem Facebook, Página
-  ou portfólio empresarial.
+- **Somente API oficial da Meta**: sem Zernio; **Login unificado** (Facebook Login for Business, token de
+  usuário do sistema) ou Login do Instagram para apps antigos.
 - **Conformidade com a Meta e a LGPD**: `/privacidade`, `/termos`, `/exclusao-dados`, callback de
   exclusão de dados (`signed_request`) e de desautorização, retenção automática de dados.
 - **Segurança**: tokens criptografados (AES-256-GCM), assinatura `X-Hub-Signature-256` verificada sobre o

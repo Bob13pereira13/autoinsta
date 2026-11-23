@@ -42,7 +42,7 @@ async function main() {
   const email = typeof flags.email === "string" ? flags.email : "";
   const password = typeof flags.password === "string" ? flags.password : "";
   if (!email || !password) {
-    console.error("Usage: npm run review-account -- --email <e-mail> --password <password> [--instagram-token <token>] [--link <url>] [--no-sample-logs]");
+    console.error("Usage: npm run review-account -- --email <e-mail> --password <password> [--instagram-id <id> --instagram-token <token>] [--link <url>] [--no-sample-logs]");
     process.exit(1);
   }
 
@@ -58,30 +58,16 @@ async function main() {
   }
 
   let instagram: Parameters<typeof resetReviewAccount>[1]["instagram"];
-  if (typeof flags["instagram-token"] === "string") {
-    // An Instagram User token (App Dashboard → Instagram → API setup with
-    // Instagram login → Generate token): valid 60 days, renewed by the
-    // token refresh cron like any connected account.
+  if (typeof flags["instagram-token"] === "string" && typeof flags["instagram-id"] === "string") {
     const { getUserInfo } = await import("@/lib/meta/client");
     const { encryptToken } = await import("@/lib/meta/oauth");
-    const auth = { accessToken: flags["instagram-token"] };
-    const info = await getUserInfo(auth);
-    // Webhooks name the account by its professional id (user_id), not the
-    // app-scoped `id`.
-    const instagramId = info.user_id ?? info.id;
+    const auth = { accessToken: flags["instagram-token"], unifiedLogin: true };
+    const info = await getUserInfo(auth, flags["instagram-id"]);
     const { subscribeAndCheckWebhooks } = await import("@/lib/instagram/webhook-check");
-    const check = await subscribeAndCheckWebhooks({ instagramId, username: info.username, auth, workspaceId: null });
+    const check = await subscribeAndCheckWebhooks({ instagramId: info.id, username: info.username, auth, workspaceId: null });
     const webhookSubscribed = check.subscribed === true;
     if (!check.ok) console.warn("Instagram notifications not fully confirmed by Meta (see /admin → Diagnostics):", check.subscribeError ?? check.checkError ?? `missing ${check.missing.join(", ")}`);
-    instagram = {
-      id: instagramId,
-      scopedId: info.id !== instagramId ? info.id : null,
-      username: info.username,
-      name: info.name ?? null,
-      encryptedToken: encryptToken(auth.accessToken),
-      tokenExpiresAt: new Date(Date.now() + 60 * 24 * 3600_000),
-      webhookSubscribed,
-    };
+    instagram = { id: info.id, username: info.username, name: info.name ?? null, encryptedToken: encryptToken(auth.accessToken), webhookSubscribed };
   }
 
   const result = await resetReviewAccount(prisma, {

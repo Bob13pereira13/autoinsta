@@ -2,15 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { effectiveAccountLimit, getDefaultAccountLimit } from "@/lib/account-limit";
-import { getBaseUrl } from "@/lib/env";
+import { getBaseUrl, isUnifiedLogin, requireMetaAppId, requireSecret } from "@/lib/env";
 import { canConnectInstagramAccount } from "@/lib/instagram-accounts";
-import { getLongLivedToken, getUserInfo } from "@/lib/meta/client";
+import {
+  getAssignedInstagramAccounts,
+  getLongLivedToken,
+  getUnifiedTokenInfo,
+  getUserInfo,
+  NoInstagramAccountError,
+  type UnifiedTokenInfo,
+} from "@/lib/meta/client";
 import {
   encryptToken,
   exchangeCodeForToken,
   verifyOAuthState,
 } from "@/lib/meta/oauth";
-import { missingPermissions, normalizeGranted } from "@/lib/meta/permissions";
+import { missingPermissions } from "@/lib/meta/permissions";
 import { MissingPermissionError, requiring } from "@/lib/meta/permission-errors";
 import { subscribeAndCheckWebhooks } from "@/lib/instagram/webhook-check";
 import { canManageWorkspace } from "@/lib/workspace-access";
@@ -20,9 +27,9 @@ import { canManageWorkspace } from "@/lib/workspace-access";
  * code the page explains (components/instagram-connect-notice.tsx), and the
  * person can try again from there; nothing here answers with an error page.
  *   denied              the person cancelled the login
- *   missing_permissions a permission was turned off on Instagram's screen (the
- *                       granted list says so), or Meta refused an essential call
- *                       for lack of one (code 10 or 200–299); &missing= names it
+ *   missing_permissions Meta refused an essential call for lack of a permission
+ *                       (code 10 or 200–299; &missing= names that call's permission)
+ *   no_account          no Instagram professional account came with the login
  *   invalid             the login link was missing or older than 10 minutes
  *   forbidden           not allowed to connect accounts in this workspace
  *   limit               the client's account limit (&max=, &connected=)
@@ -79,81 +86,123 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
 
   try {
     const redirectUri = `${baseUrl}/api/instagram/callback`;
-    // Business Login for Instagram: the code gives a short-lived token, the
-    // app-scoped user id and the permissions the person left on.
-    const { accessToken: codeToken, permissions } = await exchangeCodeForToken(code, redirectUri);
-    const granted = normalizeGranted(permissions);
-    const missing = missingPermissions(granted);
-    await recordGrantedPermissions(state.workspaceId, granted, missing);
-    // A permission turned off on Instagram's screen: nothing is connected and
-    // the Accounts tab says which one and how to try again.
-    if (missing.length) {
-      return back(`instagram=missing_permissions&missing=${encodeURIComponent(missing.join(","))}`);
-    }
+    const unifiedLogin = isUnifiedLogin();
+    const { accessToken: codeToken } = await exchangeCodeForToken(
+      code,
+      redirectUri
+    );
 
-    // Swap for a 60-day token (renewed by the daily routine).
-    const longLived = await getLongLivedToken(codeToken);
-    const accessToken = longLived.accessToken;
-    const tokenExpiresAt = new Date(Date.now() + longLived.expiresIn * 1000);
-    const auth = { accessToken };
-    const metaLogin = "INSTAGRAM";
-
-    // One login, one Instagram professional account (me).
-    const userInfo = await requiring("instagram_business_basic", () => getUserInfo(auth));
-    // Webhooks and the messaging API key off the professional account ID
-    // (user_id: the `id` Meta puts in every webhook for this account), not
-    // the app-scoped `id` of /me. Stored as instagramId so webhooks and the
-    // receipts match the account. Fall back to id if user_id is ever absent.
-    const instagramId = userInfo.user_id ?? userInfo.id;
-    const connection = await canConnectInstagramAccount({
-      workspaceId: state.workspaceId,
-      instagramId,
-    });
-    if (!connection.allowed) return back("instagram=already_connected");
-    // A new account beyond the client's limit is refused (reconnecting one it
-    // already has is always allowed).
-    const alreadyHere = await prisma.instagramAccount.count({ where: { instagramId, workspaceId: state.workspaceId } });
-    if (!alreadyHere && accountLimit !== null) {
-      const current = await prisma.instagramAccount.count({ where: { workspaceId: state.workspaceId } });
-      if (current >= accountLimit) return back(`instagram=limit&max=${accountLimit}&connected=0`);
-    }
-
-    // Turn notifications on, ask Meta what it confirms for the account and
-    // record both in the admin's Diagnostics (lib/instagram/webhook-check.ts).
-    // Without the subscription Meta sends no comments or messages, so the
-    // Accounts tab also shows it on the account.
-    const check = await subscribeAndCheckWebhooks({ instagramId, username: userInfo.username, auth, workspaceId: state.workspaceId });
-    const webhookSubscribed = check.subscribed === true;
-
-    const data = {
-      username: userInfo.username,
-      name: userInfo.name,
-      accessToken: encryptToken(accessToken),
-      tokenExpiresAt,
-      tokenInvalidAt: null,
-      webhookSubscribed,
-      // An account connected before through the Facebook (Unified) login
-      // moves to this login's token and host, automations kept.
-      metaLogin,
-      // Kept for Meta's data deletion / deauthorize callbacks, which may
-      // identify the user by the app-scoped id rather than the professional
-      // account id.
-      instagramScopedId: userInfo.id === instagramId ? null : userInfo.id,
-      metaLoginUserId: null,
-    } as const;
-    const existing = await prisma.instagramAccount.findUnique({ where: { instagramId } });
-    if (existing) {
-      const updated = await prisma.instagramAccount.updateMany({
-        where: { id: existing.id, workspaceId: state.workspaceId, provider: "META" },
-        data,
-      });
-      if (!updated.count) return back("instagram=already_connected");
+    let accessToken: string;
+    let tokenExpiresAt: Date | null;
+    let accountIds: (string | undefined)[];
+    let metaLoginUserId: string | null = null;
+    if (unifiedLogin) {
+      // The code already yields the final token. Its lifetime comes from the
+      // login configuration, so read it rather than assume one; failing to
+      // read it only costs the expiry date shown in Settings.
+      accessToken = codeToken;
+      let tokenInfo: UnifiedTokenInfo | null = null;
+      let tokenInfoFailure: string | null = null;
+      try {
+        tokenInfo = await getUnifiedTokenInfo(accessToken, requireMetaAppId(), requireSecret("FACEBOOK_APP_SECRET"));
+      } catch (detailsError) {
+        console.warn("[Instagram Callback] Token details unknown:", detailsError);
+        tokenInfoFailure = detailsError instanceof Error ? detailsError.message.slice(0, 300) : "Unknown error";
+      }
+      // What Meta says about the token, for the admin's Diagnostics. Nothing is
+      // decided on its `scopes`: a system user token can leave out a
+      // permission that works (business_management). The calls below are the test.
+      await recordTokenReport(state.workspaceId, tokenInfo, tokenInfoFailure);
+      tokenExpiresAt = tokenInfo?.expiresAt ?? null;
+      metaLoginUserId = tokenInfo?.userId ?? null;
+      // One Unified login can grant several Instagram accounts; connect each.
+      // Empty list → no_account; refused for lack of permission → missing_permissions.
+      accountIds = (await requiring("business_management", () => getAssignedInstagramAccounts(accessToken))).map(
+        (account) => account.id
+      );
     } else {
-      await prisma.instagramAccount.create({ data: { ...data, workspaceId: state.workspaceId, instagramId, provider: "META" } });
+      // Instagram Login, unchanged: swap for a 60-day token, one account (me).
+      const longLived = await getLongLivedToken(codeToken);
+      accessToken = longLived.accessToken;
+      tokenExpiresAt = new Date(Date.now() + longLived.expiresIn * 1000);
+      accountIds = [undefined];
     }
 
-    return back(webhookSubscribed ? "instagram=connected" : "instagram=connected&webhooks=off");
+    const auth = { accessToken, unifiedLogin };
+    const metaLogin = unifiedLogin ? "UNIFIED" : "INSTAGRAM";
+    const encryptedToken = encryptToken(accessToken);
+    let connected = 0;
+    let webhooksOff = false;
+    // A new account beyond the client's limit is skipped (reconnecting one
+    // it already has is always allowed).
+    let limited = false;
+
+    for (const accountId of accountIds) {
+      const userInfo = await requiring(unifiedLogin ? "instagram_basic" : "instagram_business_basic", () => getUserInfo(auth, accountId));
+      // Webhooks and the messaging API key off the professional account ID
+      // (user_id), not the app-scoped `id`. Store user_id so comment webhooks
+      // can be matched back to this account. Fall back to id if user_id is
+      // ever absent.
+      const instagramId = userInfo.user_id ?? userInfo.id;
+      const connection = await canConnectInstagramAccount({
+        workspaceId: state.workspaceId,
+        instagramId,
+      });
+      if (!connection.allowed) continue;
+      const alreadyHere = await prisma.instagramAccount.count({ where: { instagramId, workspaceId: state.workspaceId } });
+      if (!alreadyHere && accountLimit !== null) {
+        const current = await prisma.instagramAccount.count({ where: { workspaceId: state.workspaceId } });
+        if (current >= accountLimit) {
+          limited = true;
+          continue;
+        }
+      }
+
+      // Turn notifications on, ask Meta what it confirms for the account and
+      // record both in the admin's Diagnostics (lib/instagram/webhook-check.ts).
+      // Without the subscription Meta sends no comments or messages, so the
+      // Accounts tab also shows it on the account.
+      const check = await subscribeAndCheckWebhooks({ instagramId, username: userInfo.username, auth, workspaceId: state.workspaceId });
+      const webhookSubscribed = check.subscribed === true;
+      if (!webhookSubscribed) webhooksOff = true;
+
+      const data = {
+        username: userInfo.username,
+        name: userInfo.name,
+        accessToken: encryptedToken,
+        tokenExpiresAt,
+        tokenInvalidAt: null,
+        webhookSubscribed,
+        // Reconnecting an Instagram Login account through Unified login (or
+        // back) moves it to the new token's host.
+        metaLogin,
+        // Kept for Meta's data deletion / deauthorize callbacks, which may
+        // identify the user by another id than the professional account id.
+        instagramScopedId: userInfo.id === instagramId ? null : userInfo.id,
+        metaLoginUserId,
+      } as const;
+      const existing = await prisma.instagramAccount.findUnique({ where: { instagramId } });
+      if (existing) {
+        const updated = await prisma.instagramAccount.updateMany({
+          where: { id: existing.id, workspaceId: state.workspaceId, provider: 'META' }, data,
+        });
+        if (!updated.count) continue;
+      } else {
+        await prisma.instagramAccount.create({ data: { ...data, workspaceId: state.workspaceId, instagramId, provider: 'META' } });
+      }
+      connected++;
+    }
+
+    if (limited) {
+      return back(`instagram=limit&max=${accountLimit}&connected=${connected}`);
+    }
+    if (!connected) {
+      return back("instagram=already_connected");
+    }
+
+    return back(webhooksOff ? "instagram=connected&webhooks=off" : "instagram=connected");
   } catch (err) {
+    if (err instanceof NoInstagramAccountError) return back("instagram=no_account");
     if (err instanceof MissingPermissionError) {
       // Meta's own answer to an essential call: the Accounts tab names the
       // permission; Meta's text goes to the admin's Diagnostics.
@@ -191,20 +240,30 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
 }
 
 /**
- * Records, on every connection, the permissions the person left on in
- * Instagram's screen (from the token exchange) and which requested ones are
- * missing. Shown in the admin's Diagnostics. Never the token.
+ * Records, on every Unified login, what Meta's debug_token reported about the
+ * token: type, validity, expiry, scopes and granular_scopes, and which
+ * requested permissions its scopes leave out. Never the token. Shown in the
+ * admin's Diagnostics (Operational Event Timeline).
  */
-async function recordGrantedPermissions(workspaceId: string, granted: string[], missing: string[]) {
+async function recordTokenReport(workspaceId: string, info: UnifiedTokenInfo | null, failure: string | null) {
+  const report = info?.report;
   await prisma.operationalEvent
     .create({
-      data: {
-        source: "SYSTEM",
-        level: missing.length ? "WARNING" : "INFO",
-        workspaceId,
-        message: `Instagram login: permissions granted: ${granted.join(", ") || "(none reported)"}`,
-        payload: { granted, missing },
-      },
+      data: report
+        ? {
+            source: "SYSTEM",
+            level: "INFO",
+            workspaceId,
+            message: `Instagram login: Meta's debug_token reports scopes: ${report.scopes.join(", ") || "(none)"}`,
+            payload: { ...report, notInScopes: missingPermissions(report.scopes) },
+          }
+        : {
+            source: "SYSTEM",
+            level: "WARNING",
+            workspaceId,
+            message: "Instagram login: Meta's debug_token could not be read",
+            payload: { reason: failure ?? "Unknown error" },
+          },
     })
     .catch(() => {});
 }

@@ -46,9 +46,7 @@ function callback() {
 }
 const urls = () => fetchMock.mock.calls.map(([url]) => String(url));
 // Meta's answer to GET /{ig-id}/subscribed_apps after the subscription.
-const FIELDS = ["comments", "messages", "messaging_postbacks", "message_echoes"];
-const CONFIRMED = { data: [{ id: "app", name: "App", subscribed_fields: FIELDS }] };
-const ALL_PERMISSIONS = ["instagram_business_basic", "instagram_business_manage_comments", "instagram_business_manage_messages"];
+const CONFIRMED = { data: [{ id: "app", name: "App", subscribed_fields: ["comments", "messages", "messaging_postbacks"] }] };
 // Instagram ids already connected to the workspace (simulated).
 let workspaceAccounts: string[] = [];
 
@@ -75,218 +73,289 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
-/**
- * Instagram's login as Meta answers it: the code → a short-lived token, the
- * app-scoped id and the permissions left on; then the 60-day token, /me (the
- * professional account id in user_id), the webhook subscription and Meta's
- * confirmation of it.
- */
-function instagramLogin({
-  id = "ig1",
-  username = "shop",
-  scopedId = "app-scoped",
-  permissions = ALL_PERMISSIONS as string[],
-}: { id?: string; username?: string; scopedId?: string; permissions?: string[] } = {}) {
-  mockExchange.mockResolvedValue({ accessToken: "short", userId: scopedId, permissions });
-  respond({ access_token: "long", token_type: "bearer", expires_in: 5184000 });
-  respond({ id: scopedId, user_id: id, username, name: "Shop" });
-  respond({ success: true });
-  respond(CONFIRMED);
-}
-
-describe("Instagram OAuth callback (Business Login for Instagram)", () => {
-  beforeEach(() => {
-    vi.stubEnv("INSTAGRAM_APP_ID", "app");
+describe("Instagram OAuth callback", () => {
+  it("connects through Instagram Login exactly as before when Unified login is not configured", async () => {
     vi.stubEnv("INSTAGRAM_APP_SECRET", "ig-secret");
-  });
-
-  it("connects: 60-day token, the professional account id (user_id), notifications on, all on graph.instagram.com", async () => {
-    instagramLogin();
-    const before = Date.now();
+    mockExchange.mockResolvedValue({ accessToken: "short", userId: "1" });
+    respond({ access_token: "long", expires_in: 5184000 });
+    respond({ id: "app-scoped", user_id: "ig1", username: "shop" });
+    respond({ success: true });
+    respond(CONFIRMED);
 
     const response = await callback();
 
-    expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
-    expect(urls()).toHaveLength(4);
-    expect(urls().every((url) => url.startsWith("https://graph.instagram.com/"))).toBe(true);
-    const exchange = new URL(urls()[0]);
-    expect(exchange.pathname).toMatch(/^\/v[\d.]+\/access_token$/);
-    expect(exchange.searchParams.get("grant_type")).toBe("ig_exchange_token");
-    expect(exchange.searchParams.get("client_secret")).toBe("ig-secret");
-    expect(exchange.searchParams.get("access_token")).toBe("short");
-    const me = new URL(urls()[1]);
-    expect(me.pathname).toMatch(/^\/v[\d.]+\/me$/);
-    expect(me.searchParams.get("fields")).toContain("user_id");
-    // Subscribed by the professional account id, with the 60-day token.
+    expect(response.headers.get("location")).toBe(
+      "https://app.test/accounts?instagram=connected"
+    );
+    expect(urls()[0]).toMatch(/^https:\/\/graph\.instagram\.com\/v[\d.]+\/access_token\?/);
+    expect(urls()[1]).toMatch(/^https:\/\/graph\.instagram\.com\/v[\d.]+\/me\?/);
     expect(urls()[2]).toMatch(/^https:\/\/graph\.instagram\.com\/v[\d.]+\/ig1\/subscribed_apps$/);
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body).subscribed_fields).toEqual(FIELDS);
-    expect(fetchMock.mock.calls[2][1].headers).toMatchObject({ Authorization: "Bearer long" });
-    expect(urls()[3]).toMatch(/\/ig1\/subscribed_apps\?access_token=long$/);
-
-    const { data } = mockPrisma.instagramAccount.create.mock.calls[0][0];
-    expect(data).toMatchObject({
-      workspaceId: "workspace",
-      provider: "META",
-      metaLogin: "INSTAGRAM",
-      // What webhooks carry as entry.id: receipts and the account filter match it.
-      instagramId: "ig1",
-      // The app-scoped id from /me, kept for the deauthorize and data deletion callbacks.
-      instagramScopedId: "app-scoped",
-      metaLoginUserId: null,
-      username: "shop",
-      name: "Shop",
-      accessToken: "enc:long",
-      webhookSubscribed: true,
-      tokenInvalidAt: null,
+    expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        instagramId: "ig1",
+        accessToken: "enc:long",
+        metaLogin: "INSTAGRAM",
+        tokenExpiresAt: expect.any(Date),
+      }),
     });
-    // 60 days from now, renewed by the daily routine.
-    expect(data.tokenExpiresAt.getTime()).toBeGreaterThanOrEqual(before + 5184000_000 - 1000);
-    expect(data.tokenExpiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 5184000_000);
   });
 
-  it("Meta without user_id: the id of /me is used", async () => {
-    mockExchange.mockResolvedValue({ accessToken: "short", userId: "ig9", permissions: ALL_PERMISSIONS });
-    respond({ access_token: "long", expires_in: 5184000 });
-    respond({ id: "ig9", username: "nine" });
+  it("connects every account a Unified login granted, on graph.facebook.com", async () => {
+    vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+    vi.stubEnv("META_APP_ID", "app");
+    vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+    mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+    respond({ data: { expires_at: 0, user_id: "122000000000001" } });
+    respond({ data: [{ id: "ig1" }, { id: "ig2" }] });
+    respond({ id: "ig1", username: "one" });
     respond({ success: true });
     respond(CONFIRMED);
-    expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+    respond({ id: "ig2", username: "two" });
+    respond({ success: true });
+    respond(CONFIRMED);
+
+    const response = await callback();
+
+    expect(response.headers.get("location")).toBe(
+      "https://app.test/accounts?instagram=connected"
+    );
+    expect(urls().every((url) => url.startsWith("https://graph.facebook.com/"))).toBe(true);
+    expect(urls()[0]).toContain("/debug_token?");
+    expect(urls()[0]).toContain("access_token=app%7Csecret");
+    expect(urls()[1]).toContain("/me/assigned_instagram_accounts?");
+    expect(urls()[2]).toContain("/ig1?");
+    expect(urls()[2]).not.toContain("user_id");
+    expect(urls()[3]).toMatch(/\/ig1\/subscribed_apps$/);
+    // Then Meta is asked what it confirms for the account.
+    expect(urls()[4]).toMatch(/\/ig1\/subscribed_apps\?access_token=suat$/);
+    expect(urls()[5]).toContain("/ig2?");
+    expect(mockPrisma.instagramAccount.create).toHaveBeenCalledTimes(2);
     expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ instagramId: "ig9", instagramScopedId: null }),
+      data: expect.objectContaining({
+        instagramId: "ig2",
+        username: "two",
+        accessToken: "enc:suat",
+        metaLogin: "UNIFIED",
+        // A token that never expires stores no expiry.
+        tokenExpiresAt: null,
+        webhookSubscribed: true,
+        // Kept for Meta's data deletion / deauthorize callbacks.
+        metaLoginUserId: "122000000000001",
+        instagramScopedId: null,
+        tokenInvalidAt: null,
+      }),
     });
   });
 
-  it("an account from the old Facebook (Unified) login reconnects in place: same row and automations, Instagram token", async () => {
-    mockPrisma.instagramAccount.findUnique.mockResolvedValue({ id: "row", workspaceId: "workspace", provider: "META", metaLogin: "UNIFIED" });
+  it("moves an existing Instagram Login account to Unified login when it reconnects", async () => {
+    vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+    vi.stubEnv("META_APP_ID", "app");
+    vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+    mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+    mockPrisma.instagramAccount.findUnique.mockResolvedValue({ id: "row" });
     mockPrisma.instagramAccount.updateMany.mockResolvedValue({ count: 1 });
-    workspaceAccounts = ["ig1"];
-    instagramLogin();
+    respond({ data: { expires_at: 1_900_000_000 } });
+    respond({ data: [{ id: "ig1" }] });
+    respond({ id: "ig1", username: "one" });
+    respond({ success: true });
+    respond(CONFIRMED);
 
-    expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+    await callback();
 
-    expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
     expect(mockPrisma.instagramAccount.updateMany).toHaveBeenCalledWith({
       where: { id: "row", workspaceId: "workspace", provider: "META" },
       data: expect.objectContaining({
-        metaLogin: "INSTAGRAM",
-        accessToken: "enc:long",
-        tokenExpiresAt: expect.any(Date),
-        // The "reconnect" mark set by the migration is cleared.
-        tokenInvalidAt: null,
-        webhookSubscribed: true,
-        instagramScopedId: "app-scoped",
-        metaLoginUserId: null,
+        metaLogin: "UNIFIED",
+        accessToken: "enc:suat",
+        tokenExpiresAt: new Date(1_900_000_000 * 1000),
       }),
     });
   });
 
   describe("every way the login can end lands on Accounts with a code it explains (never an error page)", () => {
+    const unified = () => {
+      vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+      vi.stubEnv("META_APP_ID", "app");
+      vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+      mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+    };
     const location = (response: Response) => response.headers.get("location");
-    const events = () => mockPrisma.operationalEvent.create.mock.calls.map(([arg]) => arg.data);
-    const metaError = (code: number, message = "(#200) Permissions error") =>
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message, type: "OAuthException", code, fbtrace_id: "trace" } }), { status: 403 }));
 
-    it("cancel on Instagram's screen → denied, nothing asked of Meta", async () => {
+    it("cancel on Meta's dialog → denied, nothing asked of Meta", async () => {
       const response = await GET(new NextRequest("https://app.test/api/instagram/callback?error=access_denied&error_reason=user_denied&state=s"));
       expect(location(response)).toBe("https://app.test/accounts?instagram=denied");
       expect(mockExchange).not.toHaveBeenCalled();
-      expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("a permission turned off on Instagram's screen → missing_permissions naming it; nothing connected, nothing else asked", async () => {
-      mockExchange.mockResolvedValue({ accessToken: "short", userId: "1", permissions: ["instagram_business_basic", "instagram_business_manage_comments"] });
-      expect(location(await callback())).toBe("https://app.test/accounts?instagram=missing_permissions&missing=instagram_business_manage_messages");
-      expect(fetchMock).not.toHaveBeenCalled();
+    const metaError = (code: number, message = "(#200) Permissions error") =>
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message, type: "OAuthException", code, fbtrace_id: "trace" } }), { status: 403 }));
+    const events = () => mockPrisma.operationalEvent.create.mock.calls.map(([arg]) => arg.data);
+
+    it("scopes without business_management but the calls work → connected (system user token, as before)", async () => {
+      unified();
+      // What a system user token's debug_token can report: business_management absent.
+      respond({
+        data: {
+          type: "SYSTEM_USER",
+          is_valid: true,
+          expires_at: 0,
+          user_id: "1",
+          scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+          granular_scopes: [
+            { scope: "instagram_basic", target_ids: ["ig1"] },
+            { scope: "instagram_manage_comments", target_ids: ["ig1"] },
+          ],
+        },
+      });
+      respond({ data: [{ id: "ig1" }] }); // assigned_instagram_accounts works (business_management)
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+    respond(CONFIRMED);
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+      expect(urls().some((url) => url.includes("assigned_instagram_accounts"))).toBe(true);
+      expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({ data: expect.objectContaining({ instagramId: "ig1" }) });
+      // What debug_token reported goes to the admin's Diagnostics, without the token.
+      const report = events().find((e) => e.message.startsWith("Instagram login: Meta's debug_token reports scopes"));
+      expect(report).toMatchObject({
+        source: "SYSTEM",
+        level: "INFO",
+        workspaceId: "workspace",
+        message: "Instagram login: Meta's debug_token reports scopes: instagram_basic, instagram_manage_comments, instagram_manage_messages, public_profile",
+        payload: {
+          type: "SYSTEM_USER",
+          isValid: true,
+          scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+          granularScopes: [
+            { scope: "instagram_basic", target_ids: ["ig1"] },
+            { scope: "instagram_manage_comments", target_ids: ["ig1"] },
+          ],
+          notInScopes: ["business_management"],
+        },
+      });
+      expect(JSON.stringify(events())).not.toContain("suat");
+    });
+
+    it("debug_token unreadable → the connection goes on; the failure is in Diagnostics", async () => {
+      unified();
+      metaError(190, "Invalid OAuth access token");
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+    respond(CONFIRMED);
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+      expect(events()).toContainEqual(expect.objectContaining({ level: "WARNING", message: "Instagram login: Meta's debug_token could not be read" }));
+    });
+
+    it("the account list refused for lack of permission → missing_permissions naming business_management; nothing connected", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1", scopes: ["instagram_basic"] } });
+      metaError(200, "(#200) Requires business_management permission to manage the object");
+      const response = await callback();
+      expect(location(response)).toBe("https://app.test/accounts?instagram=missing_permissions&missing=business_management");
       expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
       expect(events()).toContainEqual(
         expect.objectContaining({
-          level: "WARNING",
-          message: expect.stringContaining("instagram_business_basic, instagram_business_manage_comments"),
-          payload: { granted: ["instagram_business_basic", "instagram_business_manage_comments"], missing: ["instagram_business_manage_messages"] },
+          level: "ERROR",
+          message: "Instagram connection refused by Meta: missing business_management",
+          payload: { permission: "business_management", reason: expect.stringContaining("code=200") },
         })
       );
     });
 
-    it("the permissions under their old names (business_basic…) count as granted", async () => {
-      instagramLogin({ permissions: ["business_basic", "business_manage_comments", "business_manage_messages"] });
-      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
-    });
-
-    it("Meta does not list the permissions → not held against the person; connected", async () => {
-      instagramLogin({ permissions: [] });
-      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
-    });
-
-    it("the account refused for lack of permission (code 10, or any 2xx code) → missing_permissions naming instagram_business_basic", async () => {
-      for (const code of [10, 200, 299]) {
+    it("the account's details refused (code 10, or any 2xx code) → missing_permissions naming instagram_basic", async () => {
+      for (const code of [10, 230, 299]) {
         fetchMock.mockReset();
         mockPrisma.instagramAccount.create.mockClear();
-        mockExchange.mockResolvedValue({ accessToken: "short", userId: "1", permissions: ALL_PERMISSIONS });
-        respond({ access_token: "long", expires_in: 5184000 });
+        unified();
+        respond({ data: { expires_at: 0, user_id: "1" } });
+        respond({ data: [{ id: "ig1" }] });
         metaError(code, "(#10) Application does not have permission for this action");
-        expect(location(await callback()), String(code)).toBe("https://app.test/accounts?instagram=missing_permissions&missing=instagram_business_basic");
+        expect(location(await callback()), String(code)).toBe("https://app.test/accounts?instagram=missing_permissions&missing=instagram_basic");
         expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
       }
-      expect(events()).toContainEqual(
-        expect.objectContaining({ level: "ERROR", message: "Instagram connection refused by Meta: missing instagram_business_basic" })
-      );
     });
 
     it("another Meta error in an essential call (e.g. code 100) is not called a permission → failed", async () => {
-      mockExchange.mockResolvedValue({ accessToken: "short", userId: "1", permissions: ALL_PERMISSIONS });
-      respond({ access_token: "long", expires_in: 5184000 });
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
       metaError(100, "Unsupported get request");
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=failed");
     });
 
-    it("Meta refuses the webhook subscription → connected, with the warning that automations cannot answer yet", async () => {
-      mockExchange.mockResolvedValue({ accessToken: "short", userId: "1", permissions: ALL_PERMISSIONS });
+    it("Instagram Login: the account refused for lack of permission → missing_permissions naming instagram_business_basic", async () => {
+      vi.stubEnv("INSTAGRAM_APP_SECRET", "ig-secret");
+      mockExchange.mockResolvedValue({ accessToken: "short", userId: "1" });
       respond({ access_token: "long", expires_in: 5184000 });
-      respond({ id: "app-scoped", user_id: "ig1", username: "one" });
-      metaError(200, "(#200) Permissions error");
+      metaError(10, "(#10) Application does not have permission for this action");
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=missing_permissions&missing=instagram_business_basic");
+    });
+
+    it("all permissions granted → connected", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1", scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "business_management", "public_profile"] } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+    respond(CONFIRMED);
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+    });
+
+    it("Meta refuses the webhook subscription → connected, with the warning that automations cannot answer yet", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "(#200) Permissions error", code: 200 } }), { status: 403 }));
       respond({ data: [] });
       const response = await callback();
       expect(location(response)).toBe("https://app.test/accounts?instagram=connected&webhooks=off");
       expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({ data: expect.objectContaining({ webhookSubscribed: false }) });
-      expect(events()).toContainEqual(
-        expect.objectContaining({
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
           level: "ERROR",
           message: "Instagram notifications for @one: subscription failed",
           payload: expect.objectContaining({ subscribeError: expect.stringContaining("Permissions error"), confirmedFields: [] }),
-        })
-      );
+        }),
+      });
     });
 
     it("subscribed, and Meta's confirmation recorded in Diagnostics: every field, or the ones missing", async () => {
-      instagramLogin({ username: "one" });
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+      respond(CONFIRMED);
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
-      expect(events()).toContainEqual(
-        expect.objectContaining({
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
           level: "INFO",
-          message: "Instagram notifications for @one: Meta confirms comments, messages, messaging_postbacks, message_echoes",
-          payload: expect.objectContaining({ instagramId: "ig1", requestedFields: FIELDS, missing: [] }),
-        })
-      );
+          message: "Instagram notifications for @one: Meta confirms comments, messages, messaging_postbacks",
+          payload: expect.objectContaining({ instagramId: "ig1", requestedFields: ["comments", "messages", "messaging_postbacks"], missing: [] }),
+        }),
+      });
 
       // Meta lists this app with comments only: the record says what is missing.
       fetchMock.mockReset();
       mockPrisma.operationalEvent.create.mockClear();
-      mockExchange.mockResolvedValue({ accessToken: "short", userId: "1", permissions: ALL_PERMISSIONS });
-      respond({ access_token: "long", expires_in: 5184000 });
-      respond({ id: "app-scoped", user_id: "ig1", username: "one" });
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
       respond({ success: true });
       respond({ data: [{ id: "other-app", subscribed_fields: ["messages"] }, { id: "app", subscribed_fields: ["comments"] }] });
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
-      expect(events()).toContainEqual(
-        expect.objectContaining({
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
           level: "WARNING",
-          message: "Instagram notifications for @one: Meta does not confirm messages, messaging_postbacks, message_echoes",
-          payload: expect.objectContaining({ confirmedFields: ["comments"], missing: ["messages", "messaging_postbacks", "message_echoes"] }),
-        })
-      );
+          message: "Instagram notifications for @one: Meta does not confirm messages, messaging_postbacks",
+          payload: expect.objectContaining({ confirmedFields: ["comments"], missing: ["messages", "messaging_postbacks"] }),
+        }),
+      });
     });
 
     it("a failure anywhere (Meta down, database error) → failed, Meta's text kept for the admin only", async () => {
+      unified();
       mockExchange.mockRejectedValue(new Error("Token exchange failed: Invalid verification code format."));
       const response = await callback();
       expect(location(response)).toBe("https://app.test/accounts?instagram=failed");
@@ -296,21 +365,43 @@ describe("Instagram OAuth callback (Business Login for Instagram)", () => {
       mockPrisma.workspaceMember.findFirst.mockRejectedValue(new Error("database is down"));
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=failed");
     });
+  });
 
-    it("the account belongs to another workspace → already_connected", async () => {
-      const { canConnectInstagramAccount } = await import("@/lib/instagram-accounts");
-      vi.mocked(canConnectInstagramAccount).mockResolvedValueOnce({ allowed: false } as never);
-      instagramLogin();
-      expect(location(await callback())).toBe("https://app.test/accounts?instagram=already_connected");
-      expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
-    });
+  it("explains a Unified login that granted no Instagram account", async () => {
+    vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+    vi.stubEnv("META_APP_ID", "app");
+    vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+    mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+    respond({ data: { expires_at: 0, scopes: ["instagram_basic", "public_profile"] } });
+    respond({ data: [] });
+
+    const response = await callback();
+
+    // A code the Accounts tab explains (professional account linked to a
+    // Page, select it on the login screen), never Meta's raw text.
+    expect(response.headers.get("location")).toMatch(/\/accounts\?instagram=no_account$/);
+    expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
   });
 
   describe("account limit", () => {
+    function unified(accountIds: string[]) {
+      vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+      vi.stubEnv("META_APP_ID", "app");
+      vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+      mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+      respond({ data: { expires_at: 0, user_id: "122000000000001" } });
+      respond({ data: accountIds.map((id) => ({ id })) });
+      for (const id of accountIds) {
+        respond({ id, username: id });
+        respond({ success: true });
+    respond(CONFIRMED);
+      }
+    }
+
     it("blocks a new account beyond the limit and says how many the plan allows", async () => {
       mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 1 });
       workspaceAccounts = ["ig_existing"];
-      instagramLogin({ id: "ig_new" });
+      unified(["ig_new"]);
       const response = await callback();
       expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=1&connected=0");
       expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
@@ -318,26 +409,32 @@ describe("Instagram OAuth callback (Business Login for Instagram)", () => {
       expect(urls().some((url) => url.includes("/ig_new/subscribed_apps"))).toBe(false);
     });
 
-    it("connects below the limit, and without a limit", async () => {
+    it("connects up to the limit and reports the rest", async () => {
       mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 2 });
       workspaceAccounts = ["ig_existing"];
-      instagramLogin({ id: "ig_a" });
-      expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+      unified(["ig_a", "ig_b"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=2&connected=1");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a"]);
+    });
 
-      fetchMock.mockReset();
+    it("without a limit (follows a 'no limit' default) connects every account granted at once", async () => {
       mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: null });
-      instagramLogin({ id: "ig_b" });
-      expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
-      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a", "ig_b"]);
+      workspaceAccounts = ["ig_existing"];
+      unified(["ig_a", "ig_b", "ig_c"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a", "ig_b", "ig_c"]);
     });
 
     it("a numeric platform default blocks a client that follows the default", async () => {
       mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: null });
-      mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 1 });
+      mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 2 });
       workspaceAccounts = ["ig_existing"];
-      instagramLogin({ id: "ig_a" });
-      expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=1&connected=0");
-      expect(workspaceAccounts).toEqual(["ig_existing"]);
+      unified(["ig_a", "ig_b"]);
+      const response = await callback();
+      expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=2&connected=1");
+      expect(workspaceAccounts).toEqual(["ig_existing", "ig_a"]);
     });
 
     it("the client's own limit wins over the platform default (both ways)", async () => {
@@ -345,13 +442,13 @@ describe("Instagram OAuth callback (Business Login for Instagram)", () => {
       mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 1 });
       mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 5 });
       workspaceAccounts = ["ig_existing"];
-      instagramLogin({ id: "ig_a" });
+      unified(["ig_a"]);
       expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=limit&max=1&connected=0");
       // Own 3 over a default of 1: allowed.
       fetchMock.mockReset();
       mockPrisma.workspace.findUnique.mockResolvedValue({ status: "ACTIVE", instagramAccountLimit: 3 });
       mockPrisma.platformSettings.findUnique.mockResolvedValue({ defaultInstagramAccountLimit: 1 });
-      instagramLogin({ id: "ig_b" });
+      unified(["ig_b"]);
       expect((await callback()).headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
       expect(workspaceAccounts).toEqual(["ig_existing", "ig_b"]);
     });
@@ -361,7 +458,7 @@ describe("Instagram OAuth callback (Business Login for Instagram)", () => {
       workspaceAccounts = ["ig_existing"];
       mockPrisma.instagramAccount.findUnique.mockResolvedValue({ id: "row", workspaceId: "workspace", provider: "META" });
       mockPrisma.instagramAccount.updateMany.mockResolvedValue({ count: 1 });
-      instagramLogin({ id: "ig_existing" });
+      unified(["ig_existing"]);
       const response = await callback();
       expect(response.headers.get("location")).toBe("https://app.test/accounts?instagram=connected");
       expect(mockPrisma.instagramAccount.updateMany).toHaveBeenCalled();

@@ -50,7 +50,7 @@ const trust: { title: StaticMessageKey; body: StaticMessageKey }[] = [
   },
   {
     title: "You are in control",
-    body: "Disconnect Instagram whenever you want, and its data is deleted. Deletion requests made through Instagram are processed automatically.",
+    body: "Disconnect Instagram whenever you want, and its data is deleted. Deletion requests made through Facebook or Instagram are processed automatically.",
   },
 ];
 

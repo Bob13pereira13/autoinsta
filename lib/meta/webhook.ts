@@ -14,10 +14,10 @@ export function verifyWebhookSignature(
 ): boolean {
   if (!signature) return false;
 
-  // Instagram's login: the Instagram app secret (API setup with Instagram
-  // login). Meta's webhook guide names the app secret of App settings →
-  // Basic (FACEBOOK_APP_SECRET); both belong to the same app, so a signature
-  // that matches either is accepted.
+  // Instagram-Login apps sign webhooks with the Instagram app secret, while
+  // Facebook-Login apps use the Facebook app secret. Both belong to the same
+  // app, so accept a signature that matches either — this avoids a config
+  // guess about which key Meta uses for a given app type.
   const secrets = getAppSecrets();
 
   if (secrets.length === 0) {
@@ -294,7 +294,9 @@ export function parseMessageEvents(
 }
 
 /**
- * Messages the connected account sent. Instagram reports them all with
+ * Messages the connected account sent. They arrive with the `messages` field
+ * (entry.messaging[].message.is_echo; there is no separate echo field to
+ * subscribe under Unified login). Instagram reports them all with
  * is_echo and no reliable way to tell the app that sent them, so the worker
  * compares the mid with the ones the automations sent (BotMessage): any other
  * echo was written by a person.
