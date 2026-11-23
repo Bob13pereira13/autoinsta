@@ -47,7 +47,7 @@ export default async function AdminDiagnosticsPage({ searchParams }: { searchPar
     <div className="space-y-6">
       <PageHeader
         title={t("Production Diagnostics")}
-        description={t("Health, queues, webhook failures, billing events, and worker alerts.")}
+        description={t("Health, queues, webhook failures, operational events and worker alerts.")}
         actions={
           <ButtonLink href={here} icon="refresh" prefetch={false}>
             {t("Refresh")}

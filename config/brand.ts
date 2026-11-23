@@ -18,6 +18,12 @@
 
 export const PLACEHOLDER = "[PREENCHER]";
 
+/** A company that processes data for us, and the country of its servers (ISO 3166-1 alpha-2). */
+export interface Processor {
+  name: string;
+  country: string;
+}
+
 export const brand = {
   /** Nome exibido na interface, nos e-mails e no título das páginas. */
   name: "ChatIntegrAI",
@@ -114,17 +120,18 @@ export const brand = {
 
   /**
    * Quem trata dados por nós (operadores, LGPD art. 39). Aparecem na Política
-   * de Privacidade, seção "Compartilhamento", e nas respostas de tratamento de
-   * dados do Meta App Review. Nome da empresa e país onde os dados ficam.
+   * de Privacidade, seção "Compartilhamento", nos dois idiomas, e nas
+   * respostas de tratamento de dados do Meta App Review. `name`: a empresa;
+   * `country`: onde ficam os servidores, em código ISO de 2 letras ("US",
+   * "BR", "DE"); a política escreve o nome do país no idioma da página.
+   * Enquanto um deles for null, a política descreve sem nomear e o
+   * Diagnóstico mostra a pendência.
    */
   processors: {
-    /**
-     * Hospedagem do app, do banco e da fila. Ex.: "Hetzner Online GmbH
-     * (Alemanha)". Enquanto for null, a política descreve sem nomear.
-     */
-    hosting: null as string | null,
-    /** Envio de e-mails transacionais. Ex.: "Resend, Inc. (Estados Unidos)". */
-    email: null as string | null,
+    /** Hospedagem do app, do banco e da fila (VPS com Coolify). */
+    hosting: { name: "Hostinger", country: "US" } as Processor | null,
+    /** Envio de e-mails transacionais: confirmação de cadastro, recuperação de senha, convites. */
+    email: { name: "Resend, Inc.", country: "US" } as Processor | null,
   },
 } as const;
 

@@ -279,15 +279,16 @@ Depois da aprovação, desative a conta: `npm run user -- disable reviewer@SEU_D
 Marquei com **[CONFIRMAR]** o que só você sabe.
 
 **Data processors / service providers with access to Platform Data:** Yes.
-- Hosting of the application, database and queue: **[CONFIRMAR: empresa e país]** (o mesmo de
-  `processors.hosting`).
-- E-mail delivery: **[CONFIRMAR]**. O provedor de e-mail recebe só o e-mail e o nome dos clientes, nunca
-  dados da Meta; se o formulário perguntar só por quem acessa *Platform Data*, ele não entra.
+- Hosting of the application, database and queue: **Hostinger**, VPS in the **United States**
+  (`processors.hosting`).
+- E-mail delivery: **Resend, Inc.** (United States) (`processors.email`). O provedor de e-mail recebe só o
+  e-mail e o nome dos clientes, nunca dados da Meta; se o formulário perguntar só por quem acessa
+  *Platform Data*, ele não entra.
 - Cloudflare Turnstile: não recebe dados da Meta (só o IP de quem se cadastra).
 
 **Responsible entity:** {razão social de `config/brand.ts`}, CNPJ {cnpj}, Brazil.
 
-**Country where Platform Data is stored:** **[CONFIRMAR: país do servidor]**.
+**Country where Platform Data is stored:** United States (Hostinger VPS).
 
 **Requests from public authorities in the past 12 months:** No. **[CONFIRMAR]**
 

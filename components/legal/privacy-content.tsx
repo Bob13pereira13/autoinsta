@@ -7,7 +7,7 @@
  * say the same things.
  */
 import Link from "next/link";
-import { brand } from "@/config/brand";
+import { brand, type Processor } from "@/config/brand";
 import { createI18n } from "@/lib/i18n";
 import { legalPath, type LegalLocale } from "@/lib/legal/paths";
 import { PERMISSION_PURPOSE, requestedPermissions } from "@/lib/meta/permissions";
@@ -42,6 +42,12 @@ function Permissions({ locale }: { locale: LegalLocale }) {
       </tbody>
     </table>
   );
+}
+
+/** “Hostinger (servidores: Estados Unidos)” / “Hostinger (servers: United States)”. */
+export function processorText(processor: Processor, locale: LegalLocale): string {
+  const country = new Intl.DisplayNames([locale], { type: "region" }).of(processor.country.toUpperCase()) ?? processor.country;
+  return locale === "en" ? `${processor.name} (servers: ${country})` : `${processor.name} (servidores: ${country})`;
 }
 
 export function PrivacyContent({ locale }: { locale: LegalLocale }) {
@@ -235,11 +241,11 @@ function PrivacyPt() {
           </li>
           <li>
             <strong>Hospedagem</strong> da aplicação, do banco de dados e da fila de processamento:{" "}
-            {p.hosting ?? "o provedor de servidores em nuvem que contratamos"}.
+            {p.hosting ? processorText(p.hosting, "pt-BR") : "o provedor de servidores em nuvem que contratamos"}.
           </li>
           <li>
             <strong>Envio de e-mails</strong> transacionais (confirmação de cadastro, senha, convites):{" "}
-            {p.email ?? "o provedor de e-mail que contratamos"}.
+            {p.email ? processorText(p.email, "pt-BR") : "o provedor de e-mail que contratamos"}.
           </li>
           <li>
             <strong>Cloudflare, Inc.</strong>, apenas na verificação anti-robô (Turnstile) do formulário de cadastro.
@@ -603,11 +609,11 @@ function PrivacyEn() {
           </li>
           <li>
             <strong>Hosting</strong> of the application, database and processing queue:{" "}
-            {p.hosting ?? "the cloud server provider we contract"}.
+            {p.hosting ? processorText(p.hosting, "en") : "the cloud server provider we contract"}.
           </li>
           <li>
             <strong>E-mail delivery</strong> of transactional e-mails (sign-up confirmation, password, invitations):{" "}
-            {p.email ?? "the e-mail provider we contract"}.
+            {p.email ? processorText(p.email, "en") : "the e-mail provider we contract"}.
           </li>
           <li>
             <strong>Cloudflare, Inc.</strong>, only for the anti-bot check (Turnstile) on the sign-up form.

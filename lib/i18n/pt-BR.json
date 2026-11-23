@@ -98,7 +98,6 @@
   "Fri": "Sex",
   "Generated": "Gerado em",
   "Go Live": "Ativar",
-  "Health, queues, webhook failures, billing events, and worker alerts.": "Saúde, filas, falhas de webhook, eventos de cobrança e alertas do worker.",
   "Healthy": "Saudável",
   "Hello, {name}!": "Olá, {name}!",
   "Hey there! I'm so happy you're here 😊": "Oi! Que bom que você está aqui 😊",
@@ -952,5 +951,6 @@
   "Shares comments with “{name}”": "Divide os comentários com “{name}”",
   "Shares comments with {count} automations": "Divide os comentários com {count} automações",
   "Heads-up: another active automation catches the same comments or messages, and one of the two stops answering them.": "Atenção: outra automação ativa pega os mesmos comentários ou mensagens, e uma das duas deixa de responder.",
-  "Details": "Detalhes"
+  "Details": "Detalhes",
+  "Health, queues, webhook failures, operational events and worker alerts.": "Saúde, filas, falhas de webhook, eventos operacionais e alertas do worker."
 }
