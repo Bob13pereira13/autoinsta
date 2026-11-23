@@ -44,10 +44,27 @@ function Permissions({ locale }: { locale: LegalLocale }) {
   );
 }
 
-/** “Hostinger (servidores: Estados Unidos)” / “Hostinger (servers: United States)”. */
+/** The country's name in the page's language (“Estados Unidos” / “United States”). */
+function countryName(code: string, locale: LegalLocale): string {
+  return new Intl.DisplayNames([locale], { type: "region" }).of(code.toUpperCase()) ?? code;
+}
+
+/** “Hostinger (servidores: Boston, Estados Unidos)” / “Hostinger (servers: Boston, United States)”. */
 export function processorText(processor: Processor, locale: LegalLocale): string {
-  const country = new Intl.DisplayNames([locale], { type: "region" }).of(processor.country.toUpperCase()) ?? processor.country;
-  return locale === "en" ? `${processor.name} (servers: ${country})` : `${processor.name} (servidores: ${country})`;
+  const where = [processor.city, countryName(processor.country, locale)].filter(Boolean).join(", ");
+  return locale === "en" ? `${processor.name} (servers: ${where})` : `${processor.name} (servidores: ${where})`;
+}
+
+// Countries whose name takes an article (“nos Estados Unidos”, “in the United States”).
+const PT_IN: Record<string, string> = { US: "nos", BR: "no", GB: "no", NL: "nos", DE: "na", FR: "na", LT: "na", IN: "na", FI: "na" };
+const EN_THE = new Set(["US", "GB", "NL"]);
+
+/** “nos Estados Unidos” / “in the United States”. */
+export function inCountry(code: string, locale: LegalLocale): string {
+  const upper = code.toUpperCase();
+  const name = countryName(upper, locale);
+  if (locale === "en") return EN_THE.has(upper) ? `in the ${name}` : `in ${name}`;
+  return `${PT_IN[upper] ?? "em"} ${name}`;
 }
 
 export function PrivacyContent({ locale }: { locale: LegalLocale }) {
@@ -180,10 +197,10 @@ function PrivacyPt() {
           <li>As notificações (webhooks) enviadas pela Meta, com a assinatura verificada, como recebidas.</li>
           <li>
             Os eventos na fila de processamento (comentário ou mensagem a responder), até serem processados e pelos prazos
-            da seção 7.
+            da seção 8.
           </li>
           <li>Registros operacionais e de erro necessários para manter o serviço funcionando.</li>
-          <li>Cookies estritamente necessários (seção 10).</li>
+          <li>Cookies estritamente necessários (seção 11).</li>
         </ul>
       </section>
 
@@ -240,27 +257,59 @@ function PrivacyPt() {
             enviar uma mensagem).
           </li>
           <li>
-            <strong>Hospedagem</strong> da aplicação, do banco de dados e da fila de processamento:{" "}
+            <strong>Hospedagem</strong> (servidor VPS) da aplicação, do banco de dados e da fila de processamento:{" "}
             {p.hosting ? processorText(p.hosting, "pt-BR") : "o provedor de servidores em nuvem que contratamos"}.
           </li>
           <li>
-            <strong>Envio de e-mails</strong> transacionais (confirmação de cadastro, senha, convites):{" "}
-            {p.email ? processorText(p.email, "pt-BR") : "o provedor de e-mail que contratamos"}.
+            <strong>Envio de e-mails</strong> transacionais (confirmação de cadastro, recuperação de senha, convites e avisos
+            da conta): {p.email ? processorText(p.email, "pt-BR") : "o provedor de e-mail que contratamos"}.
           </li>
           <li>
-            <strong>Cloudflare, Inc.</strong>, apenas na verificação anti-robô (Turnstile) do formulário de cadastro.
+            <strong>Proteção contra robôs</strong> no formulário de cadastro (Turnstile):{" "}
+            {p.antiBot ? processorText(p.antiBot, "pt-BR") : "o provedor de verificação anti-robô que contratamos"}.
           </li>
           <li>Autoridades públicas, quando houver obrigação legal ou ordem judicial válida.</li>
         </ul>
         <p>
-          Esses fornecedores atuam sob contrato, com obrigações de confidencialidade e segurança. Quando armazenam dados
-          fora do Brasil, a transferência internacional segue o art. 33 da LGPD, com cláusulas contratuais e garantias
-          adequadas.
+          Esses fornecedores atuam sob contrato, com obrigações de confidencialidade e segurança. Onde os dados ficam e como
+          é feita a transferência internacional está na seção 7.
         </p>
       </section>
 
       <section>
-        <h2>7. Por quanto tempo guardamos os dados</h2>
+        <h2>7. Onde os dados ficam e transferência internacional</h2>
+        <p>
+          Os dados tratados pela plataforma (cadastro dos clientes, dados das contas do Instagram conectadas e de quem
+          interage com elas, imagens e vídeos enviados e registros) ficam em servidores{" "}
+          {p.hosting ? `${inCountry(p.hosting.country, "pt-BR")}: ${processorText(p.hosting, "pt-BR")}` : "do provedor de nuvem que contratamos"}.
+          Os e-mails transacionais passam por {p.email ? processorText(p.email, "pt-BR") : "o provedor de e-mail que contratamos"} e
+          a verificação anti-robô do cadastro, por{" "}
+          {p.antiBot ? processorText(p.antiBot, "pt-BR") : "o provedor de verificação anti-robô que contratamos"}.
+        </p>
+        <p>
+          Por isso há <strong>transferência internacional de dados pessoais</strong> para fora do Brasil, feita conforme o{" "}
+          <strong>art. 33 da LGPD</strong>:
+        </p>
+        <ul>
+          <li>
+            <strong>execução do contrato</strong> (art. 33, IX, combinado com o art. 7º, V): a transferência é necessária
+            para prestar o serviço contratado pelo cliente, que funciona nesses servidores;
+          </li>
+          <li>
+            <strong>garantias contratuais</strong> (art. 33, II): nos contratos e termos de tratamento de dados que mantemos
+            com esses fornecedores, eles se comprometem com confidencialidade, segurança e o cumprimento da legislação de
+            proteção de dados.
+          </li>
+        </ul>
+        <p>
+          Até a data desta política, não há decisão da ANPD que reconheça nível de proteção de dados adequado nesse país
+          (art. 33, I). Os direitos da seção 9 e as medidas de segurança da seção 12 valem do mesmo modo para os dados
+          guardados fora do Brasil.
+        </p>
+      </section>
+
+      <section>
+        <h2>8. Por quanto tempo guardamos os dados</h2>
         <table data-policy-retention>
           <thead>
             <tr>
@@ -342,7 +391,7 @@ function PrivacyPt() {
       </section>
 
       <section>
-        <h2>8. Seus direitos</h2>
+        <h2>9. Seus direitos</h2>
         <p>
           Nos termos do art. 18 da LGPD, você pode pedir: confirmação da existência de tratamento; acesso aos dados;
           correção; anonimização, bloqueio ou eliminação de dados desnecessários; portabilidade; eliminação; informação
@@ -356,7 +405,7 @@ function PrivacyPt() {
       </section>
 
       <section>
-        <h2>9. Como excluir seus dados</h2>
+        <h2>10. Como excluir seus dados</h2>
         <ul>
           <li>
             <strong>No painel:</strong> na aba Contas, clique na lixeira ao lado da conta do Instagram. A conta, o token, as
@@ -379,7 +428,7 @@ function PrivacyPt() {
       </section>
 
       <section>
-        <h2>10. Cookies</h2>
+        <h2>11. Cookies</h2>
         <p>
           Usamos apenas cookies estritamente necessários: o de sessão, que mantém você conectado; o de idioma da interface;
           e o de tema (claro ou escuro). Não usamos cookies de publicidade nem de análise de terceiros.
@@ -387,7 +436,7 @@ function PrivacyPt() {
       </section>
 
       <section>
-        <h2>11. Segurança</h2>
+        <h2>12. Segurança</h2>
         <ul>
           <li>Tráfego protegido por HTTPS.</li>
           <li>Tokens do Instagram criptografados em repouso com AES-256-GCM.</li>
@@ -402,12 +451,12 @@ function PrivacyPt() {
       </section>
 
       <section>
-        <h2>12. Crianças e adolescentes</h2>
+        <h2>13. Crianças e adolescentes</h2>
         <p>O serviço é destinado a empresas e profissionais maiores de 18 anos.</p>
       </section>
 
       <section>
-        <h2>13. Alterações desta política</h2>
+        <h2>14. Alterações desta política</h2>
         <p>
           Podemos atualizar esta política. A data da última atualização aparece no topo da página, e mudanças relevantes são
           comunicadas aos clientes por e-mail ou pelo painel.
@@ -415,7 +464,7 @@ function PrivacyPt() {
       </section>
 
       <section>
-        <h2>14. Contato</h2>
+        <h2>15. Contato</h2>
         <p>
           {legal.companyName}, CNPJ {legal.cnpj}, {legal.address}
           <br />
@@ -554,9 +603,9 @@ function PrivacyEn() {
         <h3>3.5 Technical data</h3>
         <ul>
           <li>The notifications (webhooks) Meta sends, with their signature verified, as received.</li>
-          <li>Events in the processing queue (a comment or message to answer), until processed and for the periods in section 7.</li>
+          <li>Events in the processing queue (a comment or message to answer), until processed and for the periods in section 8.</li>
           <li>Operational and error logs needed to keep the service running.</li>
-          <li>Strictly necessary cookies (section 10).</li>
+          <li>Strictly necessary cookies (section 11).</li>
         </ul>
       </section>
 
@@ -608,26 +657,58 @@ function PrivacyEn() {
             send a message).
           </li>
           <li>
-            <strong>Hosting</strong> of the application, database and processing queue:{" "}
+            <strong>Hosting</strong> (VPS server) of the application, database and processing queue:{" "}
             {p.hosting ? processorText(p.hosting, "en") : "the cloud server provider we contract"}.
           </li>
           <li>
-            <strong>E-mail delivery</strong> of transactional e-mails (sign-up confirmation, password, invitations):{" "}
-            {p.email ? processorText(p.email, "en") : "the e-mail provider we contract"}.
+            <strong>E-mail delivery</strong> of transactional e-mails (sign-up confirmation, password recovery, invitations and
+            account notices): {p.email ? processorText(p.email, "en") : "the e-mail provider we contract"}.
           </li>
           <li>
-            <strong>Cloudflare, Inc.</strong>, only for the anti-bot check (Turnstile) on the sign-up form.
+            <strong>Bot protection</strong> on the sign-up form (Turnstile):{" "}
+            {p.antiBot ? processorText(p.antiBot, "en") : "the anti-bot check provider we contract"}.
           </li>
           <li>Public authorities, when there is a legal obligation or a valid court order.</li>
         </ul>
         <p>
-          These providers work under contract, with confidentiality and security obligations. When they store data outside
-          Brazil, the international transfer follows art. 33 of the LGPD, with contractual clauses and adequate safeguards.
+          These providers work under contract, with confidentiality and security obligations. Where the data is stored, and
+          how the international transfer is made, is in section 7.
         </p>
       </section>
 
       <section>
-        <h2>7. How long we keep data</h2>
+        <h2>7. Where data is stored, and international transfer</h2>
+        <p>
+          The data the platform processes (customer accounts, data of the connected Instagram accounts and of the people who
+          interact with them, uploaded images and videos, and logs) is stored on servers{" "}
+          {p.hosting ? `${inCountry(p.hosting.country, "en")}: ${processorText(p.hosting, "en")}` : "of the cloud provider we contract"}.
+          Transactional e-mails go through {p.email ? processorText(p.email, "en") : "the e-mail provider we contract"}, and
+          the sign-up anti-bot check through{" "}
+          {p.antiBot ? processorText(p.antiBot, "en") : "the anti-bot check provider we contract"}.
+        </p>
+        <p>
+          This means an <strong>international transfer of personal data</strong> out of Brazil, made under{" "}
+          <strong>art. 33 of the LGPD</strong>:
+        </p>
+        <ul>
+          <li>
+            <strong>performance of the contract</strong> (art. 33, IX, with art. 7, V): the transfer is necessary to provide
+            the service the customer contracted, which runs on these servers;
+          </li>
+          <li>
+            <strong>contractual safeguards</strong> (art. 33, II): in the contracts and data processing terms we keep with
+            these providers, they commit to confidentiality, security and compliance with data protection law.
+          </li>
+        </ul>
+        <p>
+          As of the date of this policy, there is no ANPD decision recognizing an adequate level of data protection in that
+          country (art. 33, I). The rights in section 9 and the security measures in section 12 apply equally to data stored
+          outside Brazil.
+        </p>
+      </section>
+
+      <section>
+        <h2>8. How long we keep data</h2>
         <table data-policy-retention>
           <thead>
             <tr>
@@ -707,7 +788,7 @@ function PrivacyEn() {
       </section>
 
       <section>
-        <h2>8. Your rights</h2>
+        <h2>9. Your rights</h2>
         <p>
           Under art. 18 of the LGPD you may request: confirmation that we process your data; access; correction;
           anonymization, blocking or deletion of unnecessary data; portability; deletion; information about who we share
@@ -721,7 +802,7 @@ function PrivacyEn() {
       </section>
 
       <section>
-        <h2>9. How to delete your data</h2>
+        <h2>10. How to delete your data</h2>
         <ul>
           <li>
             <strong>In the dashboard:</strong> in Accounts, click the trash icon next to the Instagram account. The account,
@@ -744,7 +825,7 @@ function PrivacyEn() {
       </section>
 
       <section>
-        <h2>10. Cookies</h2>
+        <h2>11. Cookies</h2>
         <p>
           We use only strictly necessary cookies: the session cookie, which keeps you signed in; the interface language
           cookie; and the theme cookie (light or dark). We use no advertising or third-party analytics cookies.
@@ -752,7 +833,7 @@ function PrivacyEn() {
       </section>
 
       <section>
-        <h2>11. Security</h2>
+        <h2>12. Security</h2>
         <ul>
           <li>Traffic protected by HTTPS.</li>
           <li>Instagram tokens encrypted at rest with AES-256-GCM.</li>
@@ -767,12 +848,12 @@ function PrivacyEn() {
       </section>
 
       <section>
-        <h2>12. Children and teenagers</h2>
+        <h2>13. Children and teenagers</h2>
         <p>The service is for businesses and professionals aged 18 or over.</p>
       </section>
 
       <section>
-        <h2>13. Changes to this policy</h2>
+        <h2>14. Changes to this policy</h2>
         <p>
           We may update this policy. The date of the last update is shown at the top of the page, and relevant changes are
           announced to customers by e-mail or in the dashboard.
@@ -780,7 +861,7 @@ function PrivacyEn() {
       </section>
 
       <section>
-        <h2>14. Contact</h2>
+        <h2>15. Contact</h2>
         <p>
           {legal.companyName}, CNPJ {legal.cnpj}, {legal.address}, Brazil
           <br />

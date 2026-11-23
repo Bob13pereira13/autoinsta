@@ -2,6 +2,8 @@ import DefaultLimitForm from "@/components/admin/default-limit-form";
 import { formatDate, formatMoney } from "@/components/admin/format";
 import PriceForm from "@/components/admin/price-form";
 import SignupApprovalForm from "@/components/admin/signup-approval-form";
+import TestEmailForm from "@/components/admin/test-email-form";
+import { getAdminEmail } from "@/lib/admin/auth";
 import { getDefaultAccountLimit } from "@/lib/account-limit";
 import { getPlatformPriceCents, listSettingsAudit } from "@/lib/admin/clients";
 import { getI18n } from "@/lib/i18n/server";
@@ -11,11 +13,12 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminSettingsPage() {
   const { t, locale } = await getI18n();
-  const [cents, limit, requireApproval, history] = await Promise.all([
+  const [cents, limit, requireApproval, history, adminEmail] = await Promise.all([
     getPlatformPriceCents(),
     getDefaultAccountLimit(),
     getRequireSignupApproval(),
     listSettingsAudit(),
+    getAdminEmail(),
   ]);
 
   const actionLabel: Record<string, string> = {
@@ -45,6 +48,11 @@ export default async function AdminSettingsPage() {
         <h2 id="price-settings" className="title-section">{t("Price and limits")}</h2>
         <PriceForm cents={cents} />
         <DefaultLimitForm limit={limit} />
+      </section>
+
+      <section className="space-y-3" aria-labelledby="email-settings">
+        <h2 id="email-settings" className="title-section">{t("E-mail")}</h2>
+        <TestEmailForm adminEmail={adminEmail ?? ""} />
       </section>
 
       <section className="card p-5" aria-labelledby="settings-history">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import BrandMark from "@/components/brand-mark";
 import SiteFooter from "@/components/site-footer";
+import DocumentLang from "@/components/legal/document-lang";
 import { legalLastUpdatedLabel } from "@/config/brand";
 import { createI18n } from "@/lib/i18n";
 import { LEGAL_PATHS, type LegalLocale, type LegalPage } from "@/lib/legal/paths";
@@ -23,6 +24,7 @@ export default function LegalShell({ page, locale, title, description, children 
   const other: LegalLocale = locale === "en" ? "pt-BR" : "en";
   return (
     <div lang={locale} className="min-h-screen text-foreground">
+      <DocumentLang lang={locale} />
       <header className="border-b border-sidebar-border bg-sidebar backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-2">
           <BrandMark />

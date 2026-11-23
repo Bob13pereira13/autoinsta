@@ -915,7 +915,7 @@
   "Read your Instagram account's name, username and profile picture, and list your posts and reels so you can choose where each automation runs.": "Ler o nome, o nome de usuário e a foto de perfil da sua conta do Instagram, e listar os seus posts e reels para você escolher onde cada automação funciona.",
   "Receive the comments on your posts and reels to find your keywords, and post the public reply you set up.": "Receber os comentários dos seus posts e reels para encontrar as palavras-chave, e publicar a resposta pública que você configurou.",
   "Send the automatic DM to people who commented a keyword, replied to your story or messaged you, and receive their messages and button taps.": "Enviar a DM automática para quem comentou uma palavra-chave, respondeu ao seu story ou mandou mensagem, e receber as mensagens e os toques em botões dessas pessoas.",
-  "Find the Instagram account you select for this app in your business portfolio during the login. Nothing else in the portfolio is read or changed.": "Encontrar no seu portfólio empresarial a conta do Instagram que você seleciona para este app durante o login. Nada mais do portfólio é lido ou alterado.",
+  "Lets you choose, on Meta's login screen, the business and the Instagram account you connect to this app. Nothing in your business portfolio is read or changed.": "Permite escolher, na tela de login da Meta, a empresa e a conta do Instagram que você conecta a este app. Nada do seu portfólio empresarial é lido ou alterado.",
   "The password needs at least 8 characters.": "A senha precisa ter pelo menos 8 caracteres.",
   "The password can have at most 128 characters.": "A senha pode ter no máximo 128 caracteres.",
   "Choose a less predictable password.": "Escolha uma senha menos previsível.",
@@ -952,5 +952,13 @@
   "Shares comments with {count} automations": "Divide os comentários com {count} automações",
   "Heads-up: another active automation catches the same comments or messages, and one of the two stops answering them.": "Atenção: outra automação ativa pega os mesmos comentários ou mensagens, e uma das duas deixa de responder.",
   "Details": "Detalhes",
-  "Health, queues, webhook failures, operational events and worker alerts.": "Saúde, filas, falhas de webhook, eventos operacionais e alertas do worker."
+  "Health, queues, webhook failures, operational events and worker alerts.": "Saúde, filas, falhas de webhook, eventos operacionais e alertas do worker.",
+  "Sends a message through the same provider as the sign-up, password and notice e-mails, and shows what the provider answered.": "Envia uma mensagem pelo mesmo provedor dos e-mails de cadastro, senha e avisos, e mostra o que o provedor respondeu.",
+  "Send to": "Enviar para",
+  "Send test e-mail": "Enviar e-mail de teste",
+  "The provider accepted the e-mail to {to}. Check the inbox (and the spam folder).": "O provedor aceitou o e-mail para {to}. Confira a caixa de entrada (e o spam).",
+  "Provider: {provider}": "Provedor: {provider}",
+  "Sender: {from}": "Remetente: {from}",
+  "Not sent": "Não enviado",
+  "The provider refused or could not take the e-mail to {to}. Its answer:": "O provedor recusou ou não conseguiu receber o e-mail para {to}. A resposta dele:"
 }

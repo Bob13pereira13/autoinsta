@@ -798,12 +798,11 @@ describe("DM Worker — Full Pipeline", () => {
     expect(mockSendPrivateReplyWithLinkButton).not.toHaveBeenCalled();
   });
 
-  it("should deliver the next DM from a read fallback when no button tap has sent it yet", async () => {
+  it("drops a read fallback left in the queue by an older version: nothing sent, nothing logged", async () => {
+    // Sending after someone only read a DM is gone; such jobs may still be
+    // waiting in Redis right after the deploy.
     mockPrisma.automation.findMany.mockResolvedValue([]);
-    mockPrisma.automation.findFirst.mockResolvedValue({
-      ...mockAutomation,
-      trackedLinks: [],
-    });
+    mockPrisma.automation.findFirst.mockResolvedValue({ ...mockAutomation, trackedLinks: [] });
 
     const processor = getProcessor();
     await processor(
@@ -815,150 +814,9 @@ describe("DM Worker — Full Pipeline", () => {
       })
     );
 
-    expect(mockPrisma.dmLog.findUnique).toHaveBeenCalledWith({
-      where: {
-        automationId_commentId: {
-          automationId: "auto_789",
-          commentId: "reveal:commenter_999",
-        },
-      },
-    });
-    expect(mockSendDirectMessage).toHaveBeenCalledWith(
-      META_AUTH,
-      "ig_456",
-      "commenter_999",
-      "Hey commenter_user! Here is the link: https://example.com"
-    );
-  });
-
-  it("should not deliver a read fallback when the button tap already sent the reveal", async () => {
-    mockPrisma.automation.findMany.mockResolvedValue([]);
-    mockPrisma.automation.findFirst.mockResolvedValue({
-      ...mockAutomation,
-      trackedLinks: [],
-    });
-    mockPrisma.dmLog.findUnique.mockResolvedValue({
-      id: "existing_reveal",
-      status: "SENT",
-    });
-
-    const processor = getProcessor();
-    await processor(
-      createMockPostbackJob({
-        instagramAccountId: "ig_456",
-        userId: "commenter_999",
-        payload: "reveal:auto_789",
-        fallback: true,
-      })
-    );
-
+    expect(mockPrisma.automation.findFirst).not.toHaveBeenCalled();
     expect(mockSendDirectMessage).not.toHaveBeenCalled();
-    expect(mockReserveWorkspaceDMSend).not.toHaveBeenCalled();
-  });
-
-  it("should not let a read fallback bypass the follow gate", async () => {
-    mockPrisma.automation.findMany.mockResolvedValue([]);
-    mockPrisma.automation.findFirst.mockResolvedValue({
-      ...mockAutomation,
-      requireFollow: true,
-      trackedLinks: [],
-    });
-    mockGetUserFollowStatus.mockResolvedValue(false); // still not following
-
-    const processor = getProcessor();
-    await processor(
-      createMockPostbackJob({
-        instagramAccountId: "ig_456",
-        userId: "commenter_999",
-        payload: "reveal:auto_789",
-        fallback: true,
-      })
-    );
-
-    // Non-follower on a read fallback: no link, and no re-prompt spam either.
-    expect(mockSendDirectMessage).not.toHaveBeenCalled();
-    expect(mockSendDirectMessageWithButton).not.toHaveBeenCalled();
-    expect(mockReserveWorkspaceDMSend).not.toHaveBeenCalled();
-  });
-
-  it("should not let a read fallback through when follow status is unverifiable", async () => {
-    mockPrisma.automation.findMany.mockResolvedValue([]);
-    mockPrisma.automation.findFirst.mockResolvedValue({
-      ...mockAutomation,
-      requireFollow: true,
-      trackedLinks: [],
-    });
-    // Instagram answers "User consent is required" until the person taps a
-    // button, which is exactly the case of someone who only read the DM.
-    mockGetUserFollowStatus.mockResolvedValue(null);
-
-    const processor = getProcessor();
-    await processor(
-      createMockPostbackJob({
-        instagramAccountId: "ig_456",
-        userId: "commenter_999",
-        payload: "reveal:auto_789",
-        fallback: true,
-      })
-    );
-
-    expect(mockSendDirectMessage).not.toHaveBeenCalled();
-    expect(mockSendDirectMessageWithButton).not.toHaveBeenCalled();
-  });
-
-  it("should deliver a follow-gated read fallback once the user follows", async () => {
-    mockPrisma.automation.findMany.mockResolvedValue([]);
-    mockPrisma.automation.findFirst.mockResolvedValue({
-      ...mockAutomation,
-      requireFollow: true,
-      trackedLinks: [],
-    });
-    mockGetUserFollowStatus.mockResolvedValue(true);
-
-    const processor = getProcessor();
-    await processor(
-      createMockPostbackJob({
-        instagramAccountId: "ig_456",
-        userId: "commenter_999",
-        payload: "reveal:auto_789",
-        fallback: true,
-      })
-    );
-
-    expect(mockSendDirectMessage).toHaveBeenCalledWith(
-      META_AUTH,
-      "ig_456",
-      "commenter_999",
-      "Hey commenter_user! Here is the link: https://example.com"
-    );
-  });
-
-  it("should not log a failure when a read fallback hits a closed messaging window", async () => {
-    mockPrisma.automation.findMany.mockResolvedValue([]);
-    mockPrisma.automation.findFirst.mockResolvedValue({
-      ...mockAutomation,
-      trackedLinks: [],
-    });
-    mockSendDirectMessage.mockRejectedValue(
-      new MetaApiError(10, undefined, undefined, "This message is sent outside of allowed window.")
-    );
-
-    const processor = getProcessor();
-    // The window cannot reopen on its own, so this must not throw (no retries)
-    // and must not leave a FAILED row the user can do nothing about.
-    await expect(
-      processor(
-        createMockPostbackJob({
-          instagramAccountId: "ig_456",
-          userId: "commenter_999",
-          payload: "reveal:auto_789",
-          fallback: true,
-        })
-      )
-    ).resolves.toBeUndefined();
-
     expect(mockPrisma.dmLog.upsert).not.toHaveBeenCalled();
-    expect(mockReleaseWorkspaceDMReservation).toHaveBeenCalled();
   });
 
   it("should still log a failure for a real button tap that fails", async () => {

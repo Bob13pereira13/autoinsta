@@ -8,9 +8,10 @@
  * with keyword LINK, Stories replies, Direct with keyword PRICE), in "Direct"
  * mode without "Require follow", plus a few sample entries in DM Logs.
  *
- * The test Instagram account: connect it once through the app (sign in as the
- * reviewer, Accounts, Connect Instagram) and run this again; it is kept and its
- * automations are recreated. Or pass a token to connect it from here:
+ * For App Review the reviewer account stays without Instagram (the screencast
+ * shows the full flow in the owner's own workspace). If an Instagram account is
+ * connected to it, it is kept and its automations are recreated. Or pass a
+ * token to connect one from here:
  *
  *   npm run review-account -- --email ... --password ... \
  *     --instagram-id 1784... --instagram-token EAA...
@@ -86,7 +87,9 @@ async function main() {
     for (const automation of result.automations) console.log(`  automation: ${automation.name} (${automation.type})`);
     console.log(`Sample log entries: ${result.sampleLogs}`);
   } else {
-    console.log("No Instagram account connected yet: sign in as the reviewer, Accounts → Connect Instagram, then run this again.");
+    // As intended for App Review: the reviewer sees the dashboard and the
+    // connection screen; the full flow with a real account is in the screencast.
+    console.log("No Instagram account connected (as intended for App Review: the test login shows the dashboard and the connection screen).");
   }
   await prisma.$disconnect();
 }

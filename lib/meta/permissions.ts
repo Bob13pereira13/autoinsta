@@ -46,7 +46,7 @@ export const PERMISSION_PURPOSE = {
   instagram_business_manage_messages:
     "Send the automatic DM to people who commented a keyword, replied to your story or messaged you, and receive their messages and button taps.",
   business_management:
-    "Find the Instagram account you select for this app in your business portfolio during the login. Nothing else in the portfolio is read or changed.",
+    "Lets you choose, on Meta's login screen, the business and the Instagram account you connect to this app. Nothing in your business portfolio is read or changed.",
 } as const satisfies Record<MetaPermission, string>;
 
 /** The permissions the current login setup asks for. */

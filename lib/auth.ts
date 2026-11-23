@@ -44,7 +44,7 @@ class ClientDisabled extends CredentialsSignin {
 }
 
 async function sendMagicLink({ identifier, url }: { identifier: string; url: string }) {
-  await sendEmail({ to: identifier, ...magicLinkEmail(url) });
+  await sendEmail({ kind: "magic_link", to: identifier, ...magicLinkEmail(url) });
 }
 
 export const authConfig = {

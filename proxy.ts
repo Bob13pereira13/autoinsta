@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { LEGAL_LOCALE_HEADER, legalPageLocale } from "@/lib/legal/paths";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -47,6 +48,15 @@ function hasSessionCookie(request: NextRequest): boolean {
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // Public legal pages: no sign-in, ever. The proxy only tells the root layout
+  // the page's language, for <html lang> (it cannot see the address itself).
+  const legalLocale = legalPageLocale(pathname);
+  if (legalLocale) {
+    const headers = new Headers(request.headers);
+    headers.set(LEGAL_LOCALE_HEADER, legalLocale);
+    return NextResponse.next({ request: { headers } });
+  }
+
   // Admin area: a signed-in non-admin gets 403 here, before the page or API
   // runs. Every admin page and API checks again on the server (lib/admin/auth.ts),
   // against the database-validated session.
@@ -75,9 +85,16 @@ export async function proxy(request: NextRequest) {
 }
 
 // Must be literal values: Next.js analyzes the matcher at build time. Keep in
-// sync with PROTECTED_PREFIXES.
+// sync with PROTECTED_PREFIXES, plus the legal pages (lib/legal/paths.ts),
+// which only get their language marked.
 export const config = {
   matcher: [
+    "/privacidade",
+    "/privacy",
+    "/termos",
+    "/terms",
+    "/exclusao-dados",
+    "/data-deletion",
     "/dashboard",
     "/dashboard/:path*",
     "/campaigns",

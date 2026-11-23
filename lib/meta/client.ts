@@ -824,10 +824,11 @@ export async function refreshLongLivedToken(
 
 /**
  * Account-level webhook fields. Besides comments and DMs the app handles
- * button taps (follow gate, opening DM) and read receipts (the opening-DM
- * fallback), which Meta delivers as separate fields.
+ * button taps (follow gate, opening DM), which Meta delivers as a separate
+ * field. Read receipts (messaging_seen) are not subscribed: nothing is sent
+ * because someone read a message; any that still arrive are ignored.
  */
-export const WEBHOOK_FIELDS = ["comments", "messages", "messaging_postbacks", "messaging_seen"] as const;
+export const WEBHOOK_FIELDS = ["comments", "messages", "messaging_postbacks"] as const;
 const MINIMAL_WEBHOOK_FIELDS = ["comments", "messages"] as const;
 
 export async function subscribeInstagramAccountToWebhooks(

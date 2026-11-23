@@ -52,6 +52,11 @@ export interface ProcessPostbackJob {
   userId: string;
   payload: string;
   mid?: string;
+  /**
+   * Set on the "read fallback" jobs older versions queued when someone read
+   * an opening DM without tapping it. Nothing is sent for a read any more:
+   * such a job still in the queue is dropped.
+   */
   fallback?: boolean;
   // Set on the delayed second pass of a follow-gate check. Instagram does not
   // report a brand-new follow immediately, so the first `false` is re-checked

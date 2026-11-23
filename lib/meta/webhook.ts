@@ -98,6 +98,7 @@ interface WebhookEntry {
     sender?: { id?: string };
     recipient?: { id?: string };
     postback?: { mid?: string; title?: string; payload?: string };
+    // Read receipt (messaging_seen): not subscribed any more; ignored if it arrives.
     read?: { watermark?: number; seq?: number };
     message?: {
       mid?: string;
@@ -143,12 +144,6 @@ export interface WebhookPostbackEvent {
   userId: string;
   payload: string;
   mid?: string;
-}
-
-export interface WebhookReadEvent {
-  instagramAccountId: string;
-  userId: string;
-  watermark?: number;
 }
 
 interface WebhookPayload {
@@ -316,37 +311,6 @@ export function parseEchoEvents(payload: WebhookPayload): WebhookEchoEvent[] {
       const recipientId = messaging.recipient?.id;
       if (!accountId || !recipientId || recipientId === accountId) continue;
       events.push({ instagramAccountId: accountId, recipientId, messageId: message.mid });
-    }
-  }
-
-  return events;
-}
-
-/**
- * Parse Instagram DM read receipts. When a user reads an opening DM but does
- * not tap its button, the webhook route uses this to schedule the reveal after
- * a short grace period.
- */
-export function parseReadEvents(payload: WebhookPayload): WebhookReadEvent[] {
-  const events: WebhookReadEvent[] = [];
-
-  if (payload.object !== "instagram") return events;
-
-  for (const entry of payload.entry ?? []) {
-    for (const messaging of entry.messaging ?? []) {
-      if (!messaging.read) continue;
-
-      const userId = messaging.sender?.id;
-      const accountId = entry.id ?? messaging.recipient?.id;
-
-      if (!userId || !accountId) continue;
-      if (userId === accountId) continue;
-
-      events.push({
-        instagramAccountId: accountId,
-        userId,
-        watermark: messaging.read.watermark,
-      });
     }
   }
 

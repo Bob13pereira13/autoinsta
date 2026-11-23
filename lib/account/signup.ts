@@ -55,9 +55,16 @@ export type SignupResult =
   | { ok: true }
   | { ok: false; status: number; error: string; field?: string };
 
-async function sendConfirmation(userId: string, email: string, name: string | null, locale: string | null, needsReview: boolean) {
+async function sendConfirmation(
+  userId: string,
+  email: string,
+  name: string | null,
+  locale: string | null,
+  needsReview: boolean,
+  kind: "signup_confirmation" | "signup_confirmation_resend" = "signup_confirmation"
+) {
   const url = authTokenUrl(await createAuthToken(userId, "VERIFY_EMAIL"), "VERIFY_EMAIL");
-  await sendEmail({ to: email, ...verifyEmailMessage(url, name, locale, needsReview) });
+  await sendEmail({ kind, to: email, ...verifyEmailMessage(url, name, locale, needsReview) });
 }
 
 /** The self sign-up workspace this user owns, if any. */
@@ -119,9 +126,9 @@ export async function registerSignup(body: unknown, context: { ip: string | null
         if (existing.emailVerified) {
           const login = new URL("/login", getBaseUrl()).toString();
           const reset = new URL("/esqueci-senha", getBaseUrl()).toString();
-          await sendEmail({ to: email, ...alreadyRegisteredMessage(login, reset, existing.locale ?? locale) });
+          await sendEmail({ kind: "already_registered", to: email, ...alreadyRegisteredMessage(login, reset, existing.locale ?? locale) });
         } else {
-          await sendConfirmation(existing.id, email, existing.name, existing.locale ?? locale, await signupNeedsReview(existing.id));
+          await sendConfirmation(existing.id, email, existing.name, existing.locale ?? locale, await signupNeedsReview(existing.id), "signup_confirmation_resend");
         }
       } catch (err) {
         console.error("[signup] Could not e-mail an existing address:", (err as Error).message);
@@ -195,7 +202,7 @@ export async function resendConfirmation(rawEmail: unknown, context: { ip: strin
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, emailVerified: true, locale: true } });
   if (user && !user.emailVerified) {
     try {
-      await sendConfirmation(user.id, email, user.name, user.locale, await signupNeedsReview(user.id));
+      await sendConfirmation(user.id, email, user.name, user.locale, await signupNeedsReview(user.id), "signup_confirmation_resend");
     } catch (err) {
       console.error("[signup] Could not resend the confirmation:", (err as Error).message);
     }
@@ -263,7 +270,7 @@ export async function activateConfirmedSignup(userId: string): Promise<boolean> 
 
   if (activated && user.email) {
     try {
-      await sendEmail({ to: user.email, ...accountReadyMessage(new URL("/login", getBaseUrl()).toString(), user.name, user.locale) });
+      await sendEmail({ kind: "account_ready", to: user.email, ...accountReadyMessage(new URL("/login", getBaseUrl()).toString(), user.name, user.locale) });
     } catch (err) {
       console.error("[signup] Could not send the welcome e-mail:", (err as Error).message);
     }
@@ -293,5 +300,9 @@ export async function notifyAdminsOfSignup(userId: string): Promise<void> {
     url,
     ws.status === "ACTIVE"
   );
-  for (const to of admins) await sendEmail({ to, ...message });
+  // Each admin on its own: one address failing does not keep the others from
+  // hearing about the sign-up (each failure is in Diagnostics).
+  const results = await Promise.allSettled(admins.map((to) => sendEmail({ kind: "admin_new_signup", to, ...message })));
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failed.length === admins.length) throw failed[0].reason;
 }

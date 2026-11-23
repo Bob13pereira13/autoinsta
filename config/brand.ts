@@ -18,10 +18,12 @@
 
 export const PLACEHOLDER = "[PREENCHER]";
 
-/** A company that processes data for us, and the country of its servers (ISO 3166-1 alpha-2). */
+/** A company that processes data for us, and where its servers are (country: ISO 3166-1 alpha-2). */
 export interface Processor {
   name: string;
   country: string;
+  /** Optional: the city of the servers, shown before the country. */
+  city?: string;
 }
 
 export const brand = {
@@ -104,7 +106,7 @@ export const brand = {
     /** CNPJ no formato 00.000.000/0000-00. */
     cnpj: "33.926.069/0001-08",
     /** Endereço completo da sede. */
-    address: "São Paulo/SP",
+    address: "Rua Pedro Álvares Cabral, 77, Pequeno Coração, Itaquaquecetuba/SP, CEP 08579-510",
     /** Nome do encarregado pelo tratamento de dados pessoais (DPO). */
     dpoName: "Bruno Fernandes",
     /** E-mail do encarregado — canal oficial para pedidos de titulares. */
@@ -120,18 +122,21 @@ export const brand = {
 
   /**
    * Quem trata dados por nós (operadores, LGPD art. 39). Aparecem na Política
-   * de Privacidade, seção "Compartilhamento", nos dois idiomas, e nas
-   * respostas de tratamento de dados do Meta App Review. `name`: a empresa;
-   * `country`: onde ficam os servidores, em código ISO de 2 letras ("US",
-   * "BR", "DE"); a política escreve o nome do país no idioma da página.
+   * de Privacidade, seções "Compartilhamento" e "Onde os dados ficam e
+   * transferência internacional", nos dois idiomas, e nas respostas de
+   * tratamento de dados do Meta App Review. `name`: a empresa; `country`:
+   * onde ficam os servidores, em código ISO de 2 letras ("US", "BR", "DE");
+   * `city`, opcional. A política escreve o nome do país no idioma da página.
    * Enquanto um deles for null, a política descreve sem nomear e o
    * Diagnóstico mostra a pendência.
    */
   processors: {
     /** Hospedagem do app, do banco e da fila (VPS com Coolify). */
-    hosting: { name: "Hostinger", country: "US" } as Processor | null,
-    /** Envio de e-mails transacionais: confirmação de cadastro, recuperação de senha, convites. */
+    hosting: { name: "Hostinger", country: "US", city: "Boston" } as Processor | null,
+    /** Envio de e-mails transacionais: confirmação de cadastro, recuperação de senha, convites e avisos. */
     email: { name: "Resend, Inc.", country: "US" } as Processor | null,
+    /** Proteção contra robôs no formulário de cadastro (Cloudflare Turnstile). */
+    antiBot: { name: "Cloudflare, Inc.", country: "US" } as Processor | null,
   },
 } as const;
 

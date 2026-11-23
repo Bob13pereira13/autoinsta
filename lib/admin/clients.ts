@@ -255,9 +255,9 @@ export async function setClientStatus(actorEmail: string, workspaceId: string, a
   if (owner?.email) {
     try {
       if (action === "approve") {
-        await sendEmail({ to: owner.email, ...approvedMessage(new URL("/login", getBaseUrl()).toString(), owner.name, owner.locale) });
+        await sendEmail({ kind: "client_approved", to: owner.email, ...approvedMessage(new URL("/login", getBaseUrl()).toString(), owner.name, owner.locale) });
       } else if (action === "reject") {
-        await sendEmail({ to: owner.email, ...rejectedMessage(reason!, owner.name, owner.locale) });
+        await sendEmail({ kind: "client_rejected", to: owner.email, ...rejectedMessage(reason!, owner.name, owner.locale) });
       }
     } catch (err) {
       console.error(`[admin] Could not send the ${action} e-mail:`, (err as Error).message);

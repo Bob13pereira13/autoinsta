@@ -1090,6 +1090,9 @@ async function sendFollowRecheckAck({
  */
 async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   const { instagramAccountId, userId, payload, fallback } = job.data;
+  // A read fallback queued by an older version (sending after a DM was only
+  // read): no longer done. Dropped quietly, nothing sent or logged.
+  if (fallback) return;
 
   const isFollowCheck = payload.startsWith("followcheck:");
   if (!isFollowCheck && !payload.startsWith("reveal:")) return;
@@ -1133,22 +1136,6 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   // instead of only firing once per person.
   const dedupeId = `reveal:${userId}`;
 
-  if (fallback) {
-    const existingReveal = await prisma.dmLog.findUnique({
-      where: {
-        automationId_commentId: {
-          automationId: automation.id,
-          commentId: dedupeId,
-        },
-      },
-    });
-    if (
-      existingReveal?.status === "SENT" ||
-      existingReveal?.dmDeliveryUnconfirmed
-    )
-      return;
-  }
-
   let accessToken: InstagramContext;
   try {
     accessToken = await createInstagramContext(
@@ -1176,23 +1163,15 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
     .digest("hex");
 
   // Follow-gate: before revealing the link, verify the user follows. On a
-  // `followcheck:` tap a non-follower gets the prompt again (no quota spent);
-  // on a read fallback a non-follower is silently skipped — the gate must not
-  // be bypassable by just reading the DM and waiting. On a tap, following or
-  // unverifiable (null) falls through and delivers the link — fail-open so a
-  // real follower is never trapped.
-  if ((isFollowCheck || fallback) && automation.requireFollow) {
+  // `followcheck:` tap a non-follower gets the prompt again (no quota spent).
+  // Following or unverifiable (null) falls through and delivers the link —
+  // fail-open so a real follower is never trapped.
+  if (isFollowCheck && automation.requireFollow) {
     const follows = await getUserFollowStatus({
       context: accessToken,
       recipientId: userId,
     });
-    // A read fallback needs a confirmed follow. Instagram only reports follow
-    // status once the person has tapped a button (before that it answers
-    // "User consent is required", i.e. null), so failing open here handed the
-    // link to anyone who read the opening DM and waited, follower or not.
-    if (fallback && follows !== true) return;
     if (follows === false) {
-      if (fallback) return;
 
       // A tap on an opening-DM button is not a claim to follow — most people
       // who tap it simply don't follow yet — so they get the follow prompt
@@ -1394,21 +1373,6 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
       automation.workspaceId,
       usage.periodStart,
     );
-
-    // The read fallback is speculative: it only runs when the user read the
-    // opening DM and never tapped the button, which means they never messaged
-    // us, which means the 24-hour window is closed and Meta rejects the send
-    // ("outside of allowed window"). That is the expected outcome here, not a
-    // failure the user can act on — so don't log it as FAILED and don't retry
-    // it against a window that cannot reopen on its own. It still delivers in
-    // the case that does work: the user replied by typing instead of tapping.
-    if (fallback && !isDeliveryUnconfirmed(error)) {
-      console.log(
-        "[DM Worker] Read fallback not delivered (messaging window closed):",
-        formatError(error),
-      );
-      return;
-    }
 
     await prisma.dmLog.upsert({
       where: {

@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { brand, brandText } from "@/config/brand";
+import { headers } from "next/headers";
+import { isLocale } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
+import { LEGAL_LOCALE_HEADER } from "@/lib/legal/paths";
 import { getSavedTheme } from "@/lib/theme/server";
 import { inter, spaceGrotesk } from "./fonts";
 import "./globals.css";
@@ -49,9 +52,12 @@ export default async function RootLayout({
   // system. Rendered on the server, so the page never flashes the other theme.
   const theme = await getSavedTheme();
   const { locale } = await getI18n();
+  // A legal page has its own language (set by the proxy): /privacy is English
+  // whatever the interface language.
+  const legalLocale = (await headers()).get(LEGAL_LOCALE_HEADER);
   return (
     <html
-      lang={locale}
+      lang={isLocale(legalLocale) ? legalLocale : locale}
       className={`h-full ${inter.variable} ${spaceGrotesk.variable}`}
       data-theme={theme ?? undefined}
     >

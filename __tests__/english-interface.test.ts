@@ -9,8 +9,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { config as proxyConfig } from "../proxy";
-import { LEGAL_PATHS } from "@/lib/legal/paths";
+import { NextRequest } from "next/server";
+import { config as proxyConfig, proxy } from "../proxy";
+import { LEGAL_LOCALE_HEADER, LEGAL_PATHS, legalPageLocale } from "@/lib/legal/paths";
 
 const root = path.join(__dirname, "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -88,7 +89,7 @@ describe("screens in English", () => {
     expect(read("components/localized-layout.tsx")).toContain("<LanguageSwitcher />");
     expect(read("components/legal-shell.tsx")).toContain("data-legal-language");
     // The page's own language is declared for screen readers and translators.
-    expect(read("app/layout.tsx")).toContain("lang={locale}");
+    expect(read("app/layout.tsx")).toMatch(/lang=\{isLocale\(legalLocale\) \? legalLocale : locale\}/);
   });
 });
 
@@ -153,11 +154,28 @@ describe("legal pages in both languages", () => {
     const redirects = (await nextConfig.redirects?.()) ?? [];
     const legalAddresses = Object.values(LEGAL_PATHS).flatMap((page) => Object.values(page) as string[]);
     expect(redirects.filter((r) => legalAddresses.includes(r.source))).toEqual([]);
-    for (const page of Object.values(LEGAL_PATHS)) {
-      for (const address of Object.values(page)) {
+    for (const [, page] of Object.entries(LEGAL_PATHS)) {
+      for (const [locale, address] of Object.entries(page)) {
         expect(statSync(path.join(root, "app", address, "page.tsx")).isFile()).toBe(true);
-        expect(proxyConfig.matcher.some((m: string) => address === m || address.startsWith(m.replace("/:path*", "") + "/"))).toBe(false);
+        // The proxy runs on it only to mark its language for <html lang>:
+        // without a session it lets the page through, never to the sign-in.
+        expect(proxyConfig.matcher).toContain(address);
+        const response = await proxy(new NextRequest(`https://app.test${address}`));
+        expect(response.headers.get("location"), address).toBeNull();
+        expect(response.headers.get("x-middleware-next"), address).toBe("1");
+        expect(response.headers.get(`x-middleware-request-${LEGAL_LOCALE_HEADER}`), address).toBe(locale);
       }
     }
+  });
+
+  it("<html lang> follows the legal page's language (English pages say en whatever the interface language)", () => {
+    expect(legalPageLocale("/privacy")).toBe("en");
+    expect(legalPageLocale("/terms")).toBe("en");
+    expect(legalPageLocale("/data-deletion")).toBe("en");
+    expect(legalPageLocale("/privacidade")).toBe("pt-BR");
+    expect(legalPageLocale("/dashboard")).toBeNull();
+    expect(read("app/layout.tsx")).toContain("lang={isLocale(legalLocale) ? legalLocale : locale}");
+    // Also after a client-side navigation (the root layout does not render again).
+    expect(read("components/legal-shell.tsx")).toContain("<DocumentLang lang={locale} />");
   });
 });

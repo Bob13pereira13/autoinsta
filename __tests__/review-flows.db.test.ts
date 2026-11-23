@@ -276,6 +276,24 @@ describe.skipIf(!databaseUrl)("Meta App Review screencast flows, end to end", ()
     expect(await state.db.dmLog.count({ where: { commenterId: "dm_person", status: "SENT" } })).toBe(1);
   });
 
+  it("   a read receipt (someone only read a DM) is accepted, recorded and ignored: no job, nothing sent", async () => {
+    const before = calls.length;
+    const jobsBefore = state.jobs.length;
+    const response = await webhookRoute(
+      signedWebhook({ object: "instagram", entry: [{ id: IG_ID, time: 3, messaging: [{ sender: { id: "dm_person" }, recipient: { id: IG_ID }, timestamp: 3, read: { watermark: 3 } }] }] })
+    );
+    expect(response.status).toBe(200);
+    await runJobs();
+    expect(state.jobs.length).toBe(jobsBefore);
+    expect(sent(before)).toEqual([]);
+    const event = await state.db.webhookEvent.findFirstOrThrow({ orderBy: { createdAt: "desc" } });
+    expect(event.status).toBe("PROCESSED");
+    expect(event.errorMessage).toBeNull();
+    // And the account is no longer subscribed to read receipts.
+    const subscribe = calls.find((c) => c.method === "POST" && c.url.pathname.endsWith("/subscribed_apps"));
+    expect(subscribe?.body?.subscribed_fields).toEqual(["comments", "messages", "messaging_postbacks"]);
+  });
+
   it("4. a reply to a story → automatic reply", async () => {
     const before = calls.length;
     await webhookRoute(

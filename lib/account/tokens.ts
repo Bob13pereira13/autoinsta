@@ -107,7 +107,7 @@ export async function sendWelcomeEmail(userId: string): Promise<string> {
   if (!user.email) throw new Error("User has no e-mail address");
   const url = authTokenUrl(await createAuthToken(userId, "WELCOME"), "WELCOME");
   const message = welcomeEmail(url, user.name);
-  await sendEmail({ to: user.email, ...message });
+  await sendEmail({ kind: "welcome_invitation", to: user.email, ...message });
   return url;
 }
 
@@ -137,7 +137,7 @@ export async function requestPasswordReset(rawEmail: string): Promise<void> {
 
   const url = authTokenUrl(await createAuthToken(user.id, "RESET"), "RESET");
   try {
-    await sendEmail({ to: email, ...passwordResetEmail(url) });
+    await sendEmail({ kind: "password_reset", to: email, ...passwordResetEmail(url) });
   } catch (err) {
     console.error("[password-reset] Could not send e-mail:", err);
   }

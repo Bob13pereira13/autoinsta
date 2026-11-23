@@ -80,3 +80,17 @@ export function passwordResetEmail(url: string) {
     }),
   };
 }
+
+/** The admin's "Send test e-mail" (Settings): proves the provider takes and delivers e-mail. */
+export function testEmail(appUrl: string, via: string) {
+  return {
+    subject: `E-mail de teste do ${brand.name}`,
+    ...layout({
+      heading: "E-mail de teste",
+      intro: `Se você recebeu esta mensagem, o envio de e-mails do ${brand.name} está funcionando (${via}).`,
+      buttonLabel: "Abrir a área de gestão",
+      url: appUrl,
+      footer: "Enviado pelo botão “Enviar e-mail de teste” em Configurações da área de gestão.",
+    }),
+  };
+}

@@ -1,10 +1,9 @@
 import { prisma } from '@/lib/db/client';
 import { ECHO_JOB_NAME, getDMQueue, MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from '@/lib/queue/client';
 import { noteEcho } from '@/lib/automation/guards';
-import { parseCommentEvents, parseEchoEvents, parseMessageEvents, parsePostbackEvents, parseReadEvents } from '@/lib/meta/webhook';
+import { parseCommentEvents, parseEchoEvents, parseMessageEvents, parsePostbackEvents } from '@/lib/meta/webhook';
 import { Prisma, type InstagramProvider } from '@/app/generated/prisma/client';
 
-const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
 // Echoes are checked against the ids of the bot's own sends. The worker
 // records an id right after Meta answers the send, but the echo webhook can
 // arrive before that, so the check waits a little.
@@ -159,59 +158,10 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
       );
     }
 
-    // If a user reads the opening DM and never taps the button, try the same
-    // next-step DM five minutes later. It only goes out when the person wrote
-    // back by typing (that opens the conversation); after a read alone Meta
-    // refuses it (see processPostback). The worker no-ops this delayed job if a
-    // real button tap has already delivered the reveal.
-    const readEvents = parseReadEvents(
-      payload as Parameters<typeof parseReadEvents>[0]
-    );
-
-    for (const event of readEvents) {
-      const openingLogs = await prisma.dmLog.findMany({
-        where: {
-          commenterId: event.userId,
-          status: "SENT",
-          automation: {
-            isActive: true,
-            openingDmEnabled: true,
-            instagramAccount: {
-              instagramId: event.instagramAccountId,
-            },
-          },
-        },
-        select: {
-          automation: {
-            select: {
-              id: true,
-            },
-          },
-        },
-      });
-
-      const scheduledAutomationIds = new Set<string>();
-      for (const log of openingLogs) {
-        const automation = log.automation;
-        if (scheduledAutomationIds.has(automation.id)) continue;
-        scheduledAutomationIds.add(automation.id);
-
-        await queue.add(
-          POSTBACK_JOB_NAME,
-          {
-            instagramAccountId: event.instagramAccountId,
-          accountConnectionId: accountMap.get(event.instagramAccountId)?.id,
-            userId: event.userId,
-            payload: `reveal:${automation.id}`,
-            fallback: true,
-          },
-          {
-            delay: OPENING_DM_READ_FALLBACK_DELAY_MS,
-            jobId: `read_fallback_${event.instagramAccountId}_${event.userId}_${automation.id}`,
-          }
-        );
-      }
-    }
+    // Read receipts (someone read a DM) are not acted on: nothing is sent
+    // because a message was read. Accounts subscribed before messaging_seen
+    // was dropped may still send them; no parser picks them up, so they are
+    // recorded with the webhook and ignored, without error.
 
     await prisma.webhookEvent.update({
       where: { id: webhookEvent.id },

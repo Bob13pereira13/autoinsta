@@ -10,7 +10,8 @@ import {
   verifyWebhookVerifyToken,
   parseCommentEvents,
   parseMessageEvents,
-  parseReadEvents,
+  parsePostbackEvents,
+  parseEchoEvents,
 } from "../lib/meta/webhook";
 import { createHmac } from "crypto";
 
@@ -477,8 +478,8 @@ describe("parseMessageEvents", () => {
   });
 });
 
-describe("parseReadEvents", () => {
-  it("should parse Instagram DM read receipts", () => {
+describe("read receipts (messaging_seen)", () => {
+  it("are not acted on: no message, button tap or echo comes out of one", () => {
     const payload = {
       object: "instagram",
       entry: [
@@ -489,6 +490,7 @@ describe("parseReadEvents", () => {
             {
               sender: { id: "commenter_999" },
               recipient: { id: "ig_456" },
+              timestamp: 1770000000000,
               read: { watermark: 1770000000000 },
             },
           ],
@@ -496,34 +498,10 @@ describe("parseReadEvents", () => {
       ],
     };
 
-    expect(parseReadEvents(payload)).toEqual([
-      {
-        instagramAccountId: "ig_456",
-        userId: "commenter_999",
-        watermark: 1770000000000,
-      },
-    ]);
-  });
-
-  it("should ignore read receipts from the connected account itself", () => {
-    const payload = {
-      object: "instagram",
-      entry: [
-        {
-          id: "ig_456",
-          time: 1234567890,
-          messaging: [
-            {
-              sender: { id: "ig_456" },
-              recipient: { id: "ig_456" },
-              read: { watermark: 1770000000000 },
-            },
-          ],
-        },
-      ],
-    };
-
-    expect(parseReadEvents(payload)).toHaveLength(0);
+    expect(parseMessageEvents(payload)).toEqual([]);
+    expect(parsePostbackEvents(payload)).toEqual([]);
+    expect(parseEchoEvents(payload)).toEqual([]);
+    expect(parseCommentEvents(payload)).toEqual([]);
   });
 });
 
