@@ -1,16 +1,28 @@
 "use client";
 
 /**
- * Phone header: the menu button and the brand. Desktop has no top bar: each
- * screen starts with its own title, as in the design mockups.
+ * Phone header: the menu button and the brand (with the area's badge in the
+ * admin area). Desktop has no top bar: each screen starts with its own title,
+ * as in the design mockups.
  */
 
 import BrandMark from "@/components/brand-mark";
+import { AreaBadge } from "@/components/sidebar";
 import { useI18n } from "@/lib/i18n/provider";
 import { buttonClass } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 
-export default function TopBar({ onMenuClick, menuOpen }: { onMenuClick: () => void; menuOpen: boolean }) {
+export default function TopBar({
+  onMenuClick,
+  menuOpen,
+  homeHref,
+  badge,
+}: {
+  onMenuClick: () => void;
+  menuOpen: boolean;
+  homeHref: string;
+  badge?: string;
+}) {
   const { t } = useI18n();
   return (
     <header
@@ -29,7 +41,8 @@ export default function TopBar({ onMenuClick, menuOpen }: { onMenuClick: () => v
       >
         <Icon name="menu" size={20} />
       </button>
-      <BrandMark href="/dashboard" size="sm" />
+      <BrandMark href={homeHref} size="sm" />
+      {badge && <AreaBadge>{badge}</AreaBadge>}
     </header>
   );
 }

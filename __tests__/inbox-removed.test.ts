@@ -36,7 +36,7 @@ describe("Inbox removed", () => {
   });
 
   it("the menu and the top bar no longer link to it", () => {
-    for (const file of ["components/sidebar.tsx", "components/top-bar.tsx"]) {
+    for (const file of ["components/sidebar.tsx", "components/dashboard-shell.tsx", "components/top-bar.tsx"]) {
       expect(readFileSync(path.join(root, file), "utf8")).not.toMatch(/["']\/inbox["']/);
     }
   });

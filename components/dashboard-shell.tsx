@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import Sidebar from "@/components/sidebar";
-import TopBar from "@/components/top-bar";
+/** The client's dashboard: the shared frame (components/app-shell.tsx) with the client's menu. */
+
+import AppShell from "@/components/app-shell";
+import type { SidebarItem } from "@/components/sidebar-items";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -12,36 +14,39 @@ interface DashboardShellProps {
 }
 
 export default function DashboardShell({ children, workspaceName, instagramUsername, instagramAccountCount }: DashboardShellProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const main = useRef<HTMLElement>(null);
-  const closeSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    // Back to where the person was (the menu button lives in the header).
-    document.querySelector<HTMLElement>("header button[aria-expanded]")?.focus();
-  }, []);
+  const { t } = useI18n();
+  const items: SidebarItem[] = [
+    { label: t("Dashboard"), href: "/dashboard", icon: "dashboard" },
+    // Editing an automation still lives under /campaigns/..., so that menu item
+    // stays highlighted there too.
+    { label: t("Automations"), href: "/automations", icon: "automations", also: ["/campaigns"] },
+    { label: t("Accounts"), href: "/accounts", icon: "accounts" },
+    { label: t("DM Logs"), href: "/logs", icon: "logs" },
+    { label: t("Settings"), href: "/settings", icon: "settings" },
+  ];
+  const accountsLine =
+    instagramAccountCount === 0
+      ? null
+      : instagramAccountCount === 1 && instagramUsername
+        ? `@${instagramUsername}`
+        : t("{count} accounts connected", { count: instagramAccountCount });
 
   return (
-    // h-dvh, not h-screen: on mobile browsers the URL bar eats into 100vh, which
-    // would push the composer and pagination controls below the fold.
-    <div className="flex h-dvh overflow-hidden">
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={closeSidebar}
-        workspaceName={workspaceName}
-        instagramUsername={instagramUsername}
-        instagramAccountCount={instagramAccountCount}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} menuOpen={sidebarOpen} />
-
-        {/* overflow-x-hidden: enabling vertical scrolling makes the browser
-            allow horizontal scrolling too, which lets a wide child drag the
-            whole page sideways on a phone. */}
-        <main ref={main} className="flex-1 overflow-y-auto overflow-x-hidden" inert={sidebarOpen ? true : undefined}>
-          <div className="mx-auto max-w-6xl px-4 pb-12 pt-6 sm:px-6 lg:px-11 lg:pt-9">{children}</div>
-        </main>
-      </div>
-    </div>
+    <AppShell
+      items={items}
+      homeHref="/dashboard"
+      identity={{
+        name: workspaceName,
+        detail: accountsLine ? (
+          <p className="truncate text-xs text-faint">{accountsLine}</p>
+        ) : (
+          <a href="/api/instagram/connect" className="text-xs font-medium text-accent-fg hover:text-accent-fg-hover">
+            {t("Connect Instagram")}
+          </a>
+        ),
+      }}
+    >
+      {children}
+    </AppShell>
   );
 }

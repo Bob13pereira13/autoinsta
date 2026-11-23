@@ -1,13 +1,16 @@
 "use client";
 
 /**
- * Side menu: brand, the screens (stroke icons, the active one tinted), and at
- * the bottom the workspace, language, theme and sign out. On phones it is a
- * drawer: it slides in over the page, Esc or a tap outside closes it, and
- * Tab stays inside it while it is open.
+ * Side menu, shared by the client's dashboard and the admin area: brand (and,
+ * in the admin area, its badge), the screens (stroke icons, the active one
+ * tinted, also on their subpages), and at the bottom who is signed in,
+ * language, theme and sign out. On phones it is a drawer: it slides in over
+ * the page, Esc or a tap outside closes it, and Tab stays inside it while it
+ * is open. What goes in it comes from the shell (components/dashboard-shell.tsx,
+ * components/admin/admin-shell.tsx).
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import LanguageSwitcher from "@/components/language-switcher";
 import BrandMark from "@/components/brand-mark";
@@ -15,26 +18,29 @@ import { signOutAction } from "@/lib/auth-actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { NavItem } from "@/components/ui/nav-item";
 import ThemeToggle from "@/components/ui/theme-toggle";
-import { Icon, type IconName } from "@/components/ui/icons";
+import { Icon } from "@/components/ui/icons";
+import { isItemActive, type SidebarItem } from "@/components/sidebar-items";
 import { buttonClass } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
 
-const navItems: { label: "Dashboard" | "Automations" | "Accounts" | "DM Logs" | "Settings"; href: string; icon: IconName; also?: string }[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
-  // Editing an automation still lives under /campaigns/..., so that menu item
-  // stays highlighted there too.
-  { label: "Automations", href: "/automations", icon: "automations", also: "/campaigns" },
-  { label: "Accounts", href: "/accounts", icon: "accounts" },
-  { label: "DM Logs", href: "/logs", icon: "logs" },
-  { label: "Settings", href: "/settings", icon: "settings" },
-];
+/** Who is signed in: the round initials, the name, and a line below it. */
+export interface SidebarIdentity {
+  name: string;
+  detail?: ReactNode;
+}
 
-interface SidebarProps {
+export interface SidebarConfig {
+  items: SidebarItem[];
+  /** Where the logo leads. */
+  homeHref: string;
+  /** A pill next to the logo, e.g. "Admin area". */
+  badge?: string;
+  identity: SidebarIdentity;
+}
+
+interface SidebarProps extends SidebarConfig {
   isOpen: boolean;
   onClose: () => void;
-  workspaceName: string;
-  instagramUsername: string | null;
-  instagramAccountCount: number;
 }
 
 function initials(name: string): string {
@@ -42,7 +48,16 @@ function initials(name: string): string {
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase() || "•";
 }
 
-export default function Sidebar({ isOpen, onClose, workspaceName, instagramUsername, instagramAccountCount }: SidebarProps) {
+/** The area's badge, e.g. "Admin area" (also in the phone's top bar). */
+export function AreaBadge({ children }: { children: ReactNode }) {
+  return (
+    <span data-area-badge className="whitespace-nowrap rounded-full border border-accent-soft-border bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-soft-fg">
+      {children}
+    </span>
+  );
+}
+
+export default function Sidebar({ isOpen, onClose, items, homeHref, badge, identity }: SidebarProps) {
   const { t } = useI18n();
   const pathname = usePathname();
   const aside = useRef<HTMLElement>(null);
@@ -71,13 +86,6 @@ export default function Sidebar({ isOpen, onClose, workspaceName, instagramUsern
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  const accountsLine =
-    instagramAccountCount === 0
-      ? null
-      : instagramAccountCount === 1 && instagramUsername
-        ? `@${instagramUsername}`
-        : t("{count} accounts connected", { count: instagramAccountCount });
-
   return (
     <>
       {isOpen && <div aria-hidden="true" className="fixed inset-0 z-40 bg-overlay lg:hidden" onClick={onClose} />}
@@ -95,35 +103,33 @@ export default function Sidebar({ isOpen, onClose, workspaceName, instagramUsern
         // the status bar when installed to the home screen.
         style={{ paddingTop: "calc(1.375rem + env(safe-area-inset-top))" }}
       >
-        <div className="flex items-center justify-between gap-2 px-2.5">
-          <BrandMark href="/dashboard" size="sm" />
-          <button type="button" onClick={onClose} className={buttonClass("ghost", "icon", "lg:hidden")} aria-label={t("Close")}>
-            <Icon name="close" size={18} />
-          </button>
+        <div className="flex flex-col items-start gap-0.5 px-2.5 lg:gap-2">
+          <div className="flex w-full items-center justify-between gap-2">
+            <BrandMark href={homeHref} size="sm" />
+            <button type="button" onClick={onClose} className={buttonClass("ghost", "icon", "lg:hidden")} aria-label={t("Close")}>
+              <Icon name="close" size={18} />
+            </button>
+          </div>
+          {/* Under the logo: the logo and the badge do not fit side by side in 260 px. */}
+          {badge && <AreaBadge>{badge}</AreaBadge>}
         </div>
 
         <nav aria-label={t("Menu")} className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const prefixes = item.also ? [item.href, item.also] : [item.href];
-            const active = prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
-            return <NavItem key={item.href} href={item.href} icon={item.icon} label={t(item.label)} active={active} onClick={onClose} />;
-          })}
+          {items.map((item) => (
+            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isItemActive(item, pathname)} onClick={onClose} />
+          ))}
         </nav>
 
         <div className="flex flex-col gap-2.5 border-t border-sidebar-border px-1 pt-3.5">
-          <div className="flex items-center gap-2.5 px-1.5">
+          <div data-sidebar-identity className="flex items-center gap-2.5 px-1.5">
             <span aria-hidden="true" className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent-soft-fg">
-              {initials(workspaceName)}
+              {initials(identity.name)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-medium text-foreground">{workspaceName}</p>
-              {accountsLine ? (
-                <p className="truncate text-xs text-faint">{accountsLine}</p>
-              ) : (
-                <a href="/api/instagram/connect" className="text-xs font-medium text-accent-fg hover:text-accent-fg-hover">
-                  {t("Connect Instagram")}
-                </a>
-              )}
+              <p className="truncate text-[13px] font-medium text-foreground" title={identity.name}>
+                {identity.name}
+              </p>
+              {identity.detail}
             </div>
           </div>
           <div className="px-1.5 py-1">

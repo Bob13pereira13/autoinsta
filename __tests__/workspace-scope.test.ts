@@ -44,7 +44,8 @@ describe("Diagnostics belongs to the admin area", () => {
     expect(files).toContain("app/admin/diagnostics/page.tsx");
     expect(files).toContain("app/api/admin/diagnostics/route.ts");
     expect(files.filter((f) => /^app\/\(dashboard\)\/diagnostics/.test(f))).toEqual([]);
-    expect(read("app/admin/layout.tsx")).toContain('"/admin/diagnostics"');
+    // In the admin area's side menu.
+    expect(read("components/admin/admin-shell.tsx")).toContain('"/admin/diagnostics"');
   });
 
   it("the route only runs for ADMIN_EMAILS (withAdmin)", () => {
@@ -67,9 +68,11 @@ describe("old links and the client's menu", () => {
   });
 
   it("the menu has Dashboard, Automations, Accounts, DM Logs and Settings, then Theme and Sign out", () => {
-    const sidebar = read("components/sidebar.tsx");
-    const hrefs = [...sidebar.matchAll(/\{ label: "[^"]+", href: "([^"]+)"/g)].map((m) => m[1]);
+    // The items live in the client's shell; the shared side menu draws them.
+    const shell = read("components/dashboard-shell.tsx");
+    const hrefs = [...shell.matchAll(/\{ label: t\("[^"]+"\), href: "([^"]+)"/g)].map((m) => m[1]);
     expect(hrefs).toEqual(["/dashboard", "/automations", "/accounts", "/logs", "/settings"]);
+    const sidebar = read("components/sidebar.tsx");
     expect(sidebar).toContain("<ThemeToggle />");
     expect(sidebar).toContain("signOutAction");
   });

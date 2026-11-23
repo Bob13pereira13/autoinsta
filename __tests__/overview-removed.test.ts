@@ -56,7 +56,7 @@ describe("Overview removed", () => {
   });
 
   it("the menu, the top bar and the proxy lists no longer mention it", () => {
-    for (const file of ["components/sidebar.tsx", "components/top-bar.tsx", "proxy.ts"]) {
+    for (const file of ["components/sidebar.tsx", "components/dashboard-shell.tsx", "components/top-bar.tsx", "proxy.ts"]) {
       expect(read(file), file).not.toMatch(/["']\/overview/);
     }
     expect(proxyConfig.matcher).toEqual(expect.arrayContaining(["/dashboard", "/dashboard/:path*"]));
