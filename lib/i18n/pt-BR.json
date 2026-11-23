@@ -960,5 +960,14 @@
   "Provider: {provider}": "Provedor: {provider}",
   "Sender: {from}": "Remetente: {from}",
   "Not sent": "Não enviado",
-  "The provider refused or could not take the e-mail to {to}. Its answer:": "O provedor recusou ou não conseguiu receber o e-mail para {to}. A resposta dele:"
+  "The provider refused or could not take the e-mail to {to}. Its answer:": "O provedor recusou ou não conseguiu receber o e-mail para {to}. A resposta dele:",
+  "Check notifications": "Verificar notificações",
+  "Checking…": "Verificando…",
+  "Could not check. Try again.": "Não foi possível verificar. Tente de novo.",
+  "Subscription refused by Meta: {error}": "A Meta recusou a inscrição: {error}",
+  "Subscribed, but Meta's confirmation could not be read: {error}": "Inscrita, mas não deu para ler a confirmação da Meta: {error}",
+  "Meta confirms {fields}; missing: {missing}.": "A Meta confirma {fields}; faltam: {missing}.",
+  "Meta confirms {fields}.": "A Meta confirma {fields}.",
+  "This account does not use Meta's official login": "Esta conta não usa o login oficial da Meta",
+  "The account's access could not be read. Reconnect the account.": "Não foi possível ler o acesso da conta. Reconecte a conta."
 }

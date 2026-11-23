@@ -59,16 +59,14 @@ async function main() {
 
   let instagram: Parameters<typeof resetReviewAccount>[1]["instagram"];
   if (typeof flags["instagram-token"] === "string" && typeof flags["instagram-id"] === "string") {
-    const { getUserInfo, subscribeInstagramAccountToWebhooks } = await import("@/lib/meta/client");
+    const { getUserInfo } = await import("@/lib/meta/client");
     const { encryptToken } = await import("@/lib/meta/oauth");
     const auth = { accessToken: flags["instagram-token"], unifiedLogin: true };
     const info = await getUserInfo(auth, flags["instagram-id"]);
-    let webhookSubscribed = false;
-    try {
-      webhookSubscribed = Boolean((await subscribeInstagramAccountToWebhooks(info.id, auth)).success);
-    } catch (error) {
-      console.warn("Webhook subscription failed; comments and messages will not reach the app:", error instanceof Error ? error.message : error);
-    }
+    const { subscribeAndCheckWebhooks } = await import("@/lib/instagram/webhook-check");
+    const check = await subscribeAndCheckWebhooks({ instagramId: info.id, username: info.username, auth, workspaceId: null });
+    const webhookSubscribed = check.subscribed === true;
+    if (!check.ok) console.warn("Instagram notifications not fully confirmed by Meta (see /admin → Diagnostics):", check.subscribeError ?? check.checkError ?? `missing ${check.missing.join(", ")}`);
     instagram = { id: info.id, username: info.username, name: info.name ?? null, encryptedToken: encryptToken(auth.accessToken), webhookSubscribed };
   }
 

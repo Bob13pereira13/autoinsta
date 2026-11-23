@@ -831,13 +831,22 @@ export async function refreshLongLivedToken(
 export const WEBHOOK_FIELDS = ["comments", "messages", "messaging_postbacks"] as const;
 const MINIMAL_WEBHOOK_FIELDS = ["comments", "messages"] as const;
 
+/**
+ * Turns on notifications for one account. With a Unified login token (a
+ * Business Integration System User Access Token) Meta documents exactly this:
+ * POST /{instagram-account-id}/subscribed_apps on graph.facebook.com with that
+ * token; no Facebook Page and no page permission are involved. The fields
+ * actually delivered are the ones selected for the app in the App Dashboard
+ * ("API setup with Unified login" → Configure webhooks). Returns the fields
+ * asked for (the minimal set when Meta refused the extra one).
+ */
 export async function subscribeInstagramAccountToWebhooks(
   instagramAccountId: string,
   auth: MetaAuth
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; fields: readonly string[] }> {
   const accessToken = tokenOf(auth);
-  const subscribe = async (fields: readonly string[]) =>
-    handleResponse<{ success: boolean }>(
+  const subscribe = async (fields: readonly string[]) => ({
+    ...(await handleResponse<{ success: boolean }>(
       await fetch(`${instagramGraphBase(auth)}/${instagramAccountId}/subscribed_apps`, {
         method: "POST",
         headers: {
@@ -846,7 +855,9 @@ export async function subscribeInstagramAccountToWebhooks(
         },
         body: JSON.stringify({ subscribed_fields: fields }),
       })
-    );
+    )),
+    fields,
+  });
 
   try {
     return await subscribe(WEBHOOK_FIELDS);
@@ -859,6 +870,23 @@ export async function subscribeInstagramAccountToWebhooks(
     }
     throw err;
   }
+}
+
+/** What Meta says the account is subscribed to: the apps and the fields of each. */
+export async function getInstagramAccountSubscriptions(
+  instagramAccountId: string,
+  auth: MetaAuth
+): Promise<Array<{ id: string | null; name: string | null; fields: string[] }>> {
+  const url = new URL(`${instagramGraphBase(auth)}/${instagramAccountId}/subscribed_apps`);
+  url.searchParams.set("access_token", tokenOf(auth));
+  const data = await handleResponse<{ data?: Array<{ id?: string; name?: string; subscribed_fields?: unknown }> }>(
+    await fetch(url.toString())
+  );
+  return (data.data ?? []).map((app) => ({
+    id: app.id ? String(app.id) : null,
+    name: app.name ? String(app.name) : null,
+    fields: Array.isArray(app.subscribed_fields) ? app.subscribed_fields.map((f) => String(typeof f === "object" && f && "name" in f ? (f as { name: unknown }).name : f)) : [],
+  }));
 }
 
 /**

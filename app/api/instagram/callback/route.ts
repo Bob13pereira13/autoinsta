@@ -10,7 +10,6 @@ import {
   getUnifiedTokenInfo,
   getUserInfo,
   NoInstagramAccountError,
-  subscribeInstagramAccountToWebhooks,
   type UnifiedTokenInfo,
 } from "@/lib/meta/client";
 import {
@@ -20,6 +19,7 @@ import {
 } from "@/lib/meta/oauth";
 import { missingPermissions } from "@/lib/meta/permissions";
 import { MissingPermissionError, requiring } from "@/lib/meta/permission-errors";
+import { subscribeAndCheckWebhooks } from "@/lib/instagram/webhook-check";
 import { canManageWorkspace } from "@/lib/workspace-access";
 
 /**
@@ -158,33 +158,12 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
         }
       }
 
-      let webhookSubscribed = false;
-      try {
-        const subscription = await subscribeInstagramAccountToWebhooks(
-          instagramId,
-          auth
-        );
-        webhookSubscribed = Boolean(subscription.success);
-      } catch (subscriptionError) {
-        console.warn(
-          "[Instagram Callback] Webhook subscription failed:",
-          subscriptionError
-        );
-        // Without the subscription Meta sends no comments or messages, so no
-        // automation can answer: recorded for the admin's Diagnostics, and
-        // the Accounts tab shows it on the account.
-        await prisma.operationalEvent
-          .create({
-            data: {
-              source: "SYSTEM",
-              level: "ERROR",
-              workspaceId: state.workspaceId,
-              message: `Instagram webhook subscription failed for @${userInfo.username}`,
-              payload: { reason: subscriptionError instanceof Error ? subscriptionError.message.slice(0, 300) : "Unknown error" },
-            },
-          })
-          .catch(() => {});
-      }
+      // Turn notifications on, ask Meta what it confirms for the account and
+      // record both in the admin's Diagnostics (lib/instagram/webhook-check.ts).
+      // Without the subscription Meta sends no comments or messages, so the
+      // Accounts tab also shows it on the account.
+      const check = await subscribeAndCheckWebhooks({ instagramId, username: userInfo.username, auth, workspaceId: state.workspaceId });
+      const webhookSubscribed = check.subscribed === true;
       if (!webhookSubscribed) webhooksOff = true;
 
       const data = {

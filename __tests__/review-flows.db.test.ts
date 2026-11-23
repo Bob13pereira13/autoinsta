@@ -108,7 +108,9 @@ function graph(input: RequestInfo | URL, init?: RequestInit): Promise<Response> 
   }
   if (p === "/me/assigned_instagram_accounts") return json({ data: [{ id: IG_ID, username: "demo.store" }] });
   if (p === `/${IG_ID}` && method === "GET") return json({ id: IG_ID, username: "demo.store", name: "Demo Store" });
-  if (p === `/${IG_ID}/subscribed_apps`) return json({ success: true });
+  if (p === `/${IG_ID}/subscribed_apps` && method === "POST") return json({ success: true });
+  // What Meta confirms for the account: this app, with the fields it asked for.
+  if (p === `/${IG_ID}/subscribed_apps`) return json({ data: [{ id: "1234567890", name: "ChatIntegrAI", subscribed_fields: ["comments", "messages", "messaging_postbacks"] }] });
   if (p === `/${IG_ID}/messages`) return json({ recipient_id: "person", message_id: `mid_${calls.length}` });
   if (/^\/[\w]+\/replies$/.test(p)) return json({ id: `reply_${calls.length}` });
   if (url.searchParams.get("fields") === "username") return json({ username: "story_fan" });
@@ -217,6 +219,7 @@ describe.skipIf(!databaseUrl)("Meta App Review screencast flows, end to end", ()
       "GET /me/assigned_instagram_accounts", // business_management
       `GET /${IG_ID}`, // instagram_basic: username, name
       `POST /${IG_ID}/subscribed_apps`, // comments and messages notifications
+      `GET /${IG_ID}/subscribed_apps`, // what Meta confirms (recorded in Diagnostics)
     ]);
     const accounts = await (await accountsRoute()).json();
     expect(accounts.data.instagramAccounts).toEqual([expect.objectContaining({ username: "demo.store", instagramId: IG_ID })]);
@@ -233,6 +236,12 @@ describe.skipIf(!databaseUrl)("Meta App Review screencast flows, end to end", ()
       notInScopes: ["business_management"],
     });
     expect(JSON.stringify(report)).not.toContain("system-user-token");
+    // And what Meta confirms for the account's notifications.
+    const notifications = await state.db.operationalEvent.findFirstOrThrow({
+      where: { workspaceId: workspace.id, message: { startsWith: "Instagram notifications for @demo.store" } },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(notifications).toMatchObject({ level: "INFO", message: "Instagram notifications for @demo.store: Meta confirms comments, messages, messaging_postbacks" });
   });
 
   it("   the demo script then adds one automation per channel, in English, Direct mode, no follow gate", async () => {

@@ -45,6 +45,8 @@ function callback() {
   );
 }
 const urls = () => fetchMock.mock.calls.map(([url]) => String(url));
+// Meta's answer to GET /{ig-id}/subscribed_apps after the subscription.
+const CONFIRMED = { data: [{ id: "app", name: "App", subscribed_fields: ["comments", "messages", "messaging_postbacks"] }] };
 // Instagram ids already connected to the workspace (simulated).
 let workspaceAccounts: string[] = [];
 
@@ -78,6 +80,7 @@ describe("Instagram OAuth callback", () => {
     respond({ access_token: "long", expires_in: 5184000 });
     respond({ id: "app-scoped", user_id: "ig1", username: "shop" });
     respond({ success: true });
+    respond(CONFIRMED);
 
     const response = await callback();
 
@@ -106,8 +109,10 @@ describe("Instagram OAuth callback", () => {
     respond({ data: [{ id: "ig1" }, { id: "ig2" }] });
     respond({ id: "ig1", username: "one" });
     respond({ success: true });
+    respond(CONFIRMED);
     respond({ id: "ig2", username: "two" });
     respond({ success: true });
+    respond(CONFIRMED);
 
     const response = await callback();
 
@@ -121,7 +126,9 @@ describe("Instagram OAuth callback", () => {
     expect(urls()[2]).toContain("/ig1?");
     expect(urls()[2]).not.toContain("user_id");
     expect(urls()[3]).toMatch(/\/ig1\/subscribed_apps$/);
-    expect(urls()[4]).toContain("/ig2?");
+    // Then Meta is asked what it confirms for the account.
+    expect(urls()[4]).toMatch(/\/ig1\/subscribed_apps\?access_token=suat$/);
+    expect(urls()[5]).toContain("/ig2?");
     expect(mockPrisma.instagramAccount.create).toHaveBeenCalledTimes(2);
     expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -151,6 +158,7 @@ describe("Instagram OAuth callback", () => {
     respond({ data: [{ id: "ig1" }] });
     respond({ id: "ig1", username: "one" });
     respond({ success: true });
+    respond(CONFIRMED);
 
     await callback();
 
@@ -202,6 +210,7 @@ describe("Instagram OAuth callback", () => {
       respond({ data: [{ id: "ig1" }] }); // assigned_instagram_accounts works (business_management)
       respond({ id: "ig1", username: "one" });
       respond({ success: true });
+    respond(CONFIRMED);
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
       expect(urls().some((url) => url.includes("assigned_instagram_accounts"))).toBe(true);
       expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({ data: expect.objectContaining({ instagramId: "ig1" }) });
@@ -232,6 +241,7 @@ describe("Instagram OAuth callback", () => {
       respond({ data: [{ id: "ig1" }] });
       respond({ id: "ig1", username: "one" });
       respond({ success: true });
+    respond(CONFIRMED);
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
       expect(events()).toContainEqual(expect.objectContaining({ level: "WARNING", message: "Instagram login: Meta's debug_token could not be read" }));
     });
@@ -287,6 +297,7 @@ describe("Instagram OAuth callback", () => {
       respond({ data: [{ id: "ig1" }] });
       respond({ id: "ig1", username: "one" });
       respond({ success: true });
+    respond(CONFIRMED);
       expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
     });
 
@@ -296,11 +307,50 @@ describe("Instagram OAuth callback", () => {
       respond({ data: [{ id: "ig1" }] });
       respond({ id: "ig1", username: "one" });
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "(#200) Permissions error", code: 200 } }), { status: 403 }));
+      respond({ data: [] });
       const response = await callback();
       expect(location(response)).toBe("https://app.test/accounts?instagram=connected&webhooks=off");
       expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({ data: expect.objectContaining({ webhookSubscribed: false }) });
       expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ level: "ERROR", message: "Instagram webhook subscription failed for @one" }),
+        data: expect.objectContaining({
+          level: "ERROR",
+          message: "Instagram notifications for @one: subscription failed",
+          payload: expect.objectContaining({ subscribeError: expect.stringContaining("Permissions error"), confirmedFields: [] }),
+        }),
+      });
+    });
+
+    it("subscribed, and Meta's confirmation recorded in Diagnostics: every field, or the ones missing", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+      respond(CONFIRMED);
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          level: "INFO",
+          message: "Instagram notifications for @one: Meta confirms comments, messages, messaging_postbacks",
+          payload: expect.objectContaining({ instagramId: "ig1", requestedFields: ["comments", "messages", "messaging_postbacks"], missing: [] }),
+        }),
+      });
+
+      // Meta lists this app with comments only: the record says what is missing.
+      fetchMock.mockReset();
+      mockPrisma.operationalEvent.create.mockClear();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+      respond({ data: [{ id: "other-app", subscribed_fields: ["messages"] }, { id: "app", subscribed_fields: ["comments"] }] });
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          level: "WARNING",
+          message: "Instagram notifications for @one: Meta does not confirm messages, messaging_postbacks",
+          payload: expect.objectContaining({ confirmedFields: ["comments"], missing: ["messages", "messaging_postbacks"] }),
+        }),
       });
     });
 
@@ -344,6 +394,7 @@ describe("Instagram OAuth callback", () => {
       for (const id of accountIds) {
         respond({ id, username: id });
         respond({ success: true });
+    respond(CONFIRMED);
       }
     }
 

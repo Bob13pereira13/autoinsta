@@ -24,12 +24,11 @@ O código foi revisado e testado de ponta a ponta com a Meta **simulada**. Três
 comportamento real da Meta e só dá para confirmar no seu app, com @primus3d_:
 
 1. **Notificações (webhooks) da conta.** Ao conectar, o app chama `POST /{ig-id}/subscribed_apps` com o
-   token do usuário do sistema. Se a Meta recusar, a conta conecta, mas nenhum comentário ou mensagem chega e
-   nenhuma automação responde. Agora o app **avisa** isso em Contas ("Instagram notifications are not active
-   yet") e registra o erro em `/admin` → Diagnóstico. Antes de gravar: conecte @primus3d_, confirme que o
-   aviso **não** aparece, mande uma DM de outra conta e veja o evento chegar em Diagnóstico. Se não chegar,
-   não grave: me avise. Pode ser preciso incluir `pages_manage_metadata` na configuração, e isso é decisão
-   sua, porque é uma permissão a mais para justificar.
+   token do usuário do sistema e, logo depois, `GET /{ig-id}/subscribed_apps` para ver o que a Meta confirma.
+   As duas respostas vão para `/admin` → Diagnóstico ("Instagram notifications for @…"). Se a Meta recusar, a
+   conta conecta com o aviso "Instagram notifications are not active yet" em Contas. Antes de gravar: conecte
+   @primus3d_, mande uma DM de outra conta e veja o evento chegar em Diagnóstico. Se comentários chegam e
+   mensagens não, siga a seção 3.1. **Não é preciso `pages_manage_metadata`** nesse tipo de token (seção 3.1).
 2. **`business_management` não aparece no token, e isso é o esperado.** O `debug_token` do nosso login
    (token de usuário do sistema) traz `instagram_basic`, `instagram_manage_comments`,
    `instagram_manage_messages` e `public_profile`, sem `business_management`, e a conexão funciona. A
@@ -106,9 +105,10 @@ comportamento real da Meta e só dá para confirmar no seu app, com @primus3d_:
       Nada de anúncios, publicação ou insights.
 - [ ] Facebook Login for Business → Settings: *Valid OAuth Redirect URIs* e *Deauthorize callback URL*
       (seção 2).
-- [ ] Webhooks do Instagram: URL de callback, *Verify token* e os campos `comments`, `messages` e
-      `messaging_postbacks`. **Desmarque `messaging_seen`** se estiver marcado: o app não usa mais. Teste com
-      *Test → Send to My Server* e confira o evento em `/admin` → Diagnóstico.
+- [ ] Webhooks: na aba **API setup with Unified login** → **Configure webhooks**, a URL de callback, o
+      *Verify token* e os campos `comments`, `messages` e `messaging_postbacks` (seção 3.1). **Desmarque
+      `messaging_seen`** se estiver marcado: o app não usa mais. Teste com *Test → Send to My Server* e confira
+      o evento em `/admin` → Diagnóstico.
 - [ ] Funções do app (App roles): o seu usuário do Facebook (que conecta @primus3d_) e a segunda conta (que
       comenta e manda DM) precisam ter função no app enquanto ele não tem Advanced Access.
 - [ ] App Review: pedir **Advanced Access** em `instagram_basic`, `instagram_manage_comments`,
@@ -157,6 +157,7 @@ Todas vão para `graph.facebook.com` com o token de usuário do sistema que o lo
 | 4 | Web | `GET /me/assigned_instagram_accounts?fields=id,username` | `getAssignedInstagramAccounts` | o token do login (lista a conta que o cliente atribuiu ao app na tela da Meta) | a conta escolhida no login aparece em Contas |
 | 5 | Web | `GET /{ig-id}?fields=id,username,name,profile_picture_url` | `getUserInfo` (login e `/api/instagram/profile`) | **instagram_basic** | nome, @ e foto da conta |
 | 6 | Web | `POST /{ig-id}/subscribed_apps` (`comments`, `messages`, `messaging_postbacks`) | `subscribeInstagramAccountToWebhooks` | instagram_manage_comments, instagram_manage_messages | sem isso nenhuma automação recebe eventos (risco 1 da seção 0) |
+| 6b | Web | `GET /{ig-id}/subscribed_apps` | `getInstagramAccountSubscriptions` | a mesma do token | o que a Meta confirma para a conta, gravado no Diagnóstico; também no botão **Verificar notificações** (`/admin` → cliente → contas) |
 | 7 | Web | `GET /{ig-id}/media?fields=…` | `getUserMedia*` (`/api/instagram/posts`) | **instagram_basic** | grade de posts e reels no editor ("Specific posts") |
 | 8 | Worker | `POST /{comment-id}/replies` | `sendCommentReply` | **instagram_manage_comments** | resposta pública ao comentário |
 | 9 | Worker | `GET /{comment-id}?fields=id,hidden,replies{from}` | `getCommentState` | instagram_manage_comments | com espera: não responder de novo nem a comentário apagado |
@@ -171,6 +172,48 @@ Todas vão para `graph.facebook.com` com o token de usuário do sistema que o lo
 
 **De fora para dentro:** webhooks (`POST /api/webhook`, assinatura `X-Hub-Signature-256` verificada) e os
 callbacks de exclusão e desautorização (`signed_request` verificado).
+
+### 3.1 Webhooks de mensagens: o que a documentação da Meta diz e o que conferir
+
+O nosso login gera um **Business Integration System User Access Token** e chama `graph.facebook.com` com o
+ID da conta do Instagram. Na documentação atual da Meta isso é o **Instagram API with Unified Login**:
+
+- *Set up Instagram Webhooks*, seção "Instagram API with Unified Login": "open **Configure webhooks** on
+  the **API setup with Unified login** tab. Add the callback URL and verify token, then select fields. Then
+  subscribe each Instagram professional account your client shared to your app. Use the Business
+  Integration System User Access Token […] and send a `POST` request to the Instagram professional
+  account's `/subscribed_apps` edge on `graph.facebook.com`." É exatamente a chamada 6.
+- *Instagram webhook fields and permissions*, seção "Unified Login": `messages` e `messaging_postbacks`
+  exigem só `instagram_manage_messages`; `comments`, `instagram_manage_comments`.
+- *Instagram API with Unified Login*: "Your clients don't need a Facebook Page."
+- O caminho pela Página (`POST /{page-id}/subscribed_apps` com token de **Página** e `pages_manage_metadata`,
+  `pages_read_engagement`, `pages_show_list`) é do **Instagram API with Facebook Login** (token de usuário
+  ou de Página do Facebook) e do Instagram Messaging pelo Messenger Platform. Não se aplica ao nosso token,
+  e por isso essas permissões **não** entram na configuração `1007716072385958`.
+- *Set up Instagram Webhooks*, Limitations: "You cannot select fields for each app user account. An
+  account receives every field selected for the app." Ou seja: se os **comentários chegam**, a conta está
+  inscrita; se as **mensagens não chegam**, a causa não é a inscrição da conta.
+
+**Comentários chegam e mensagens não: confira nesta ordem**
+
+1. `/admin` → cliente → contas → **Verificar notificações**. Deve mostrar "A Meta confirma comments,
+   messages, messaging_postbacks". Se faltar `messages`, o problema está na inscrição; o erro da Meta aparece
+   ali e no Diagnóstico.
+2. Painel do app → **API setup with Unified login** → **Configure webhooks**: URL de callback, *verify
+   token* e os campos `messages` e `messaging_postbacks` marcados **nessa aba**. Campos marcados só em outro
+   lugar (produto Webhooks → objeto Instagram, ou a aba de Facebook Login) podem não valer para esse login.
+3. **Modo do app.** "Your app must be published, regardless of app review status, to receive webhooks"
+   (*Webhooks for Instagram Messaging*). Em desenvolvimento, ou sem Advanced Access, a Meta só manda dados
+   de pessoas com função no app: quem **envia a DM** de teste precisa ter função (Instagram Tester aceito).
+4. **Outro app dono das conversas.** No Meta Business Suite da conta, em Configurações → mensagens
+   avançadas / roteamento de conversas (*Conversation Routing*), veja se outro app (ManyChat, a caixa de
+   entrada do Business Suite como padrão, o agente de IA da Meta) está como app padrão. Quem não controla a
+   conversa recebe `standby` em vez de `messages`, e esse campo não existe no Unified Login.
+5. **Permitir acesso às mensagens** ligado no app do Instagram (você já conferiu).
+
+Fontes: developers.facebook.com/documentation/instagram-platform/webhooks/setup,
+…/instagram-platform/webhooks/fields, …/instagram-platform/instagram-api-with-unified-login e
+…/business-messaging/instagram-messaging/webhooks.
 
 **Por que `business_management` está no pedido.** É exigida pela **configuração do login** (Facebook Login
 for Business, token de usuário do sistema): é com ela que a tela da Meta deixa o cliente escolher a

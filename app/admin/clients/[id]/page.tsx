@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminAccountControls, ClientStatusActions, LimitEditor, NotesEditor } from "@/components/admin/client-actions";
+import WebhookCheckButton from "@/components/admin/webhook-check-button";
 import { ClientStatusBadge } from "@/components/admin/status-badge";
 import { formatDate, formatMoney } from "@/components/admin/format";
 import { SYSTEM_ACTOR } from "@/lib/admin/audit";
@@ -124,6 +125,7 @@ export default async function AdminClientPage({ params }: { params: Promise<{ id
                   </p>
                 </div>
                 <AdminAccountControls clientId={ws.id} accountId={account.id} username={account.username} enabled={account.automationsEnabled} automations={account._count.automations} />
+                <WebhookCheckButton clientId={ws.id} accountId={account.id} />
               </li>
             ))}
           </ul>
