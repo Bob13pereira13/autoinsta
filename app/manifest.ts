@@ -14,7 +14,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/dashboard",
     display: "standalone",
     orientation: "portrait",
-    background_color: brand.colors.splash,
+    // The splash screen shows the icon on this colour: the icon's own background.
+    background_color: brand.colors.iconBackground,
     theme_color: brand.colors.theme,
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

@@ -1,9 +1,11 @@
 /**
- * App icons, made from the new logo's symbol: white symbol centred on a solid
- * square in the brand's primary colour (#7C3AED), nothing transparent, with room for round cuts (iOS rounds
- * the corners, Android launchers cut circles). The maskable icon keeps the
- * symbol inside Android's safe zone (a circle of 40% of the side). The PNGs
- * are decoded here with zlib only, so no image library is needed.
+ * App icons, made from docs/design/app-icon.svg (the icon sent to Meta): the
+ * logo's symbol in white on a solid square in `brand.colors.iconBackground`,
+ * nothing transparent, no rounded corners (iOS and Android round them). The
+ * symbol sits where the SVG puts it, with room for round cuts; the maskable
+ * icon keeps it inside Android's safe zone (a circle of 40% of the side),
+ * reduced only if it would not fit; the favicon enlarges it to be legible at
+ * 16 px. The PNGs are decoded here with zlib only, so no image library is needed.
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -13,8 +15,25 @@ import manifest from "@/app/manifest";
 import { brand } from "@/config/brand";
 
 const root = path.join(__dirname, "..");
-// The brand's primary colour (#7C3AED).
-const BG = [1, 3, 5].map((i) => parseInt(brand.colors.primary.slice(i, i + 2), 16));
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+// The icons' own background (not the panel's primary colour).
+const BG = rgb(brand.colors.iconBackground);
+const svg = readFileSync(path.join(root, "docs/design/app-icon.svg"), "utf8");
+
+/**
+ * Where the symbol is in the SVG, as a share of the side: the symbol's own
+ * extent in its 100-unit box (the bubble's ring of radius 30 + half its 17
+ * stroke around (48, 48), the tail's tip at (10, 92), the sparkle's tip at x
+ * 95), moved by the SVG's transform.
+ */
+const SYMBOL_EXTENT = { x0: 9.5, y0: 9.5, x1: 95, y1: 92 };
+const [, tx, ty, scale] = svg.match(/translate\(([\d.]+) ([\d.]+)\) scale\(([\d.]+)\)/)!.map(Number);
+const DESIGN = {
+  x0: (tx + SYMBOL_EXTENT.x0 * scale) / 100,
+  y0: (ty + SYMBOL_EXTENT.y0 * scale) / 100,
+  x1: (tx + SYMBOL_EXTENT.x1 * scale) / 100,
+  y1: (ty + SYMBOL_EXTENT.y1 * scale) / 100,
+};
 
 type Decoded = { width: number; height: number; colorType: number; transparentChunk: boolean; pixel: (x: number, y: number) => number[] };
 
@@ -66,24 +85,29 @@ function decodePng(buf: Buffer): Decoded {
   return { width, height, colorType, transparentChunk, pixel: (x, y) => [...out.subarray(y * stride + x * channels, y * stride + x * channels + channels)] };
 }
 
-/** Where the white symbol is: its farthest pixel from the centre (share of the side) and its offset. */
+/**
+ * Where the symbol is: every pixel clearly off the background (antialiased
+ * edges included), its box in pixels and its farthest point from the centre
+ * (share of the side). `white` = the symbol is drawn in pure white somewhere.
+ */
 function symbolOf(png: Decoded) {
-  let far = 0, x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+  let far = 0, x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1, white = false;
   for (let y = 0; y < png.height; y++) {
     for (let x = 0; x < png.width; x++) {
-      const [r, g, b] = png.pixel(x, y);
-      if (r > 200 && g > 200 && b > 200) {
+      const p = png.pixel(x, y);
+      if (p[0] === 255 && p[1] === 255 && p[2] === 255) white = true;
+      if (Math.max(...[0, 1, 2].map((i) => Math.abs(p[i] - BG[i]))) > 48) {
         far = Math.max(far, Math.hypot(x + 0.5 - png.width / 2, y + 0.5 - png.height / 2) / png.width);
-        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + 1); y1 = Math.max(y1, y + 1);
       }
     }
   }
-  return { far, dx: (x0 + x1 + 1) / 2 - png.width / 2, dy: (y0 + y1 + 1) / 2 - png.height / 2, found: x1 >= 0 };
+  return { far, box: { x0, y0, x1, y1 }, white, found: x1 >= 0 };
 }
 
-function expectIcon(png: Decoded, size: number, maxRadius: number) {
+/** Solid background in every corner, nothing transparent anywhere, a white symbol. */
+function expectSolid(png: Decoded, size: number) {
   expect([png.width, png.height]).toEqual([size, size]);
-  // Solid background in every corner, and nothing transparent anywhere.
   for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
     expect(png.pixel(x, y).slice(0, 3)).toEqual(BG);
     if (png.colorType === 6) expect(png.pixel(x, y)[3]).toBe(255);
@@ -93,40 +117,59 @@ function expectIcon(png: Decoded, size: number, maxRadius: number) {
   }
   const symbol = symbolOf(png);
   expect(symbol.found).toBe(true);
-  expect(symbol.far).toBeLessThanOrEqual(maxRadius);
-  expect(Math.abs(symbol.dx)).toBeLessThanOrEqual(1.5);
-  expect(Math.abs(symbol.dy)).toBeLessThanOrEqual(1.5);
+  expect(symbol.white).toBe(true);
+  return symbol;
+}
+
+/** The symbol where the SVG puts it (within 1.5 px), inside the round cut. */
+function expectDesign(png: Decoded, size: number) {
+  const symbol = expectSolid(png, size);
+  for (const edge of ["x0", "y0", "x1", "y1"] as const) {
+    expect(Math.abs(symbol.box[edge] - DESIGN[edge] * size), edge).toBeLessThanOrEqual(1.5);
+  }
+  expect(symbol.far).toBeLessThanOrEqual(0.4);
+  return symbol;
 }
 
 const png = (rel: string) => decodePng(readFileSync(path.join(root, rel)));
 
 describe("app icons", () => {
-  // Inside the inscribed circle (0.5) with margin, for round cuts.
+  it("the design: docs/design/app-icon.svg is the logo's symbol, white, on the icon background, square corners", () => {
+    const logo = readFileSync(path.join(root, "public/brand/logo-light.svg"), "utf8");
+    const paths = (text: string) => [...text.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
+    expect(paths(svg)).toEqual(paths(logo).slice(0, 3));
+    expect(svg).toContain(`<rect width="100" height="100" fill="${brand.colors.iconBackground}"/>`);
+    expect(svg).not.toMatch(/rx=/);
+    expect(svg.match(/fill="#FFFFFF"|stroke="#FFFFFF"/g)).toHaveLength(3);
+    // The icon background is its own colour: the panel keeps the primary.
+    expect(brand.colors.iconBackground).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
   it.each([
-    ["public/icon-192.png", 192],
+    ["docs/design/app-icon-1024.png", 1024],
     ["public/icon-512.png", 512],
+    ["public/icon-192.png", 192],
     ["public/apple-touch-icon.png", 180],
-  ])("%s: %ipx, solid, symbol inside the round cut", (file, size) => {
+  ])("%s: %ipx, RGB without transparency, the symbol where the design puts it", (file, size) => {
     const icon = png(file);
     expect(icon.colorType).toBe(2); // RGB, no alpha channel
     expect(icon.transparentChunk).toBe(false);
-    expectIcon(icon, size, 0.4);
+    expectDesign(icon, size);
   });
 
-  it("maskable: symbol inside Android's safe zone (40% circle) with margin", () => {
+  it("maskable: inside Android's safe zone (40% circle), reduced only if it had to be", () => {
     const icon = png("public/icon-maskable-512.png");
     expect(icon.colorType).toBe(2);
-    expectIcon(icon, 512, 0.34);
-  });
-
-  it("Meta's app icon: 1024x1024 PNG without transparency", () => {
-    const icon = png("docs/design/app-icon-1024.png");
-    expect(icon.colorType).toBe(2);
     expect(icon.transparentChunk).toBe(false);
-    expectIcon(icon, 1024, 0.4);
+    const maskable = expectSolid(icon, 512);
+    expect(maskable.far).toBeLessThanOrEqual(0.4);
+    // The design already fits the safe zone, so it is not reduced: same size as icon-512.
+    const regular = symbolOf(png("public/icon-512.png"));
+    expect(regular.far).toBeLessThanOrEqual(0.4);
+    expect(maskable.box.x1 - maskable.box.x0).toBeGreaterThanOrEqual(regular.box.x1 - regular.box.x0 - 1);
   });
 
-  it("favicon.ico: 16, 32 and 48, each solid with the symbol centred", () => {
+  it("favicon.ico: 16, 32 and 48, each solid, the symbol larger than in the app icons and inside the square", () => {
     const ico = readFileSync(path.join(root, "app/favicon.ico"));
     expect(ico.readUInt16LE(2)).toBe(1); // icon
     const count = ico.readUInt16LE(4);
@@ -137,14 +180,21 @@ describe("app icons", () => {
       const length = ico.readUInt32LE(entry + 8);
       const start = ico.readUInt32LE(entry + 12);
       sizes.push(size);
-      expectIcon(decodePng(ico.subarray(start, start + length)), size, 0.47);
+      const { box } = expectSolid(decodePng(ico.subarray(start, start + length)), size);
+      // Legible in a tab: wider than in the app icons (53% of the side)…
+      expect((box.x1 - box.x0) / size).toBeGreaterThanOrEqual(0.7);
+      // …and still at least a pixel from every edge (tabs do not cut the square).
+      expect(Math.min(box.x0, box.y0, size - box.x1, size - box.y1)).toBeGreaterThanOrEqual(1);
     }
     expect(sizes.sort((a, b) => a - b)).toEqual([16, 32, 48]);
   });
 
-  it("the old logo picture is gone, and the manifest points at files that exist", () => {
+  it("the manifest: splash on the icon background, the bar in the brand's colour, files that exist", () => {
+    const m = manifest();
+    expect(m.background_color).toBe(brand.colors.iconBackground);
+    expect(m.theme_color).toBe(brand.colors.theme);
     expect(existsSync(path.join(root, "docs/design/logo-1024.png"))).toBe(false);
-    const icons = manifest().icons ?? [];
+    const icons = m.icons ?? [];
     expect(icons.map((i) => i.purpose)).toEqual(["any", "any", "maskable"]);
     for (const icon of icons) expect(existsSync(path.join(root, "public", icon.src))).toBe(true);
   });

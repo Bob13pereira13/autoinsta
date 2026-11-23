@@ -40,6 +40,7 @@ O visual muda; o comportamento, as rotas, as APIs e os textos (salvo onde dito a
 | Texto terciário | `#9C9CB4` | `#66667C` |
 | Placeholder | `#8B8BA3` | `#75758A` |
 | Destaque (marca) | `brand.colors.primary` (padrão `#7C3AED`) | o mesmo |
+| Fundo dos ícones do app e da tela de abertura | `brand.colors.iconBackground` (`#111827`), símbolo branco; desenho em `docs/design/app-icon.svg` | o mesmo |
 | Gradiente de destaque | `linear-gradient(135deg, var(--accent), #C026D3)` | o mesmo |
 | Brilho do destaque | `0 0 18px rgba(168,85,247,.4)`; hover `0 0 28px rgba(168,85,247,.65)` | `0 0 16px rgba(168,85,247,.3)`; hover `0 0 24px rgba(168,85,247,.45)` |
 | Destaque suave (fundo) | `rgba(124,58,237,.16)` | `#F3EEFF` |

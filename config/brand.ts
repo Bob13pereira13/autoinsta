@@ -41,16 +41,18 @@ export const brand = {
    * /public/brand/ e ajuste os caminhos; `width` e `height` dão a proporção.
    * Use SVG (ou PNG) com fundo transparente.
    *
-   * Ícones do app: o símbolo do logotipo, branco e centralizado, sobre um
-   * quadrado cheio da cor `primary`, sem transparência e com margem para os
-   * cortes redondos do celular. Ficam em /app/favicon.ico (16, 32 e 48 px),
-   * /public/icon-192.png, /public/icon-512.png, /public/apple-touch-icon.png
-   * (iOS arredonda os cantos sozinho) e /public/icon-maskable-512.png
-   * (Android: o símbolo fica dentro da zona segura, um círculo de 40% do
-   * lado). Substitua esses arquivos mantendo os nomes; o teste
-   * __tests__/app-icons.test.ts confere tamanho, fundo e margens. Para o Meta
-   * App Review use docs/design/app-icon-1024.png (1024x1024, sem
-   * transparência), enviado direto no painel da Meta.
+   * Ícones do app: o símbolo do logotipo, branco, sobre um quadrado cheio da
+   * cor `colors.iconBackground`, sem transparência e sem cantos arredondados
+   * (o sistema arredonda sozinho). O desenho de origem é
+   * docs/design/app-icon.svg; dele saem /app/favicon.ico (16, 32 e 48 px, com
+   * o símbolo maior para ficar legível na aba), /public/icon-192.png,
+   * /public/icon-512.png, /public/apple-touch-icon.png (iOS arredonda os
+   * cantos sozinho) e /public/icon-maskable-512.png (Android: o símbolo fica
+   * dentro da zona segura, um círculo de 40% do lado). Substitua esses
+   * arquivos mantendo os nomes; o teste __tests__/app-icons.test.ts confere
+   * tamanho, fundo, posição do símbolo e margens. Para o Meta App Review use
+   * docs/design/app-icon-1024.png (1024x1024, sem transparência), enviado
+   * direto no painel da Meta.
    */
   logo: {
     light: "/brand/logo-light.svg",
@@ -71,8 +73,12 @@ export const brand = {
     primaryHover: "#6D28D9",
     /** Cor da barra do navegador no celular e do app instalado (segue a marca). */
     theme: "#7C3AED",
-    /** Fundo da tela de abertura do app instalado. */
-    splash: "#08080E",
+    /**
+     * Fundo dos ícones do app (o mesmo do ícone enviado à Meta) e da tela de
+     * abertura do app instalado, que mostra o ícone sobre essa cor. Não muda
+     * botões nem destaques do painel, que seguem `primary`.
+     */
+    iconBackground: "#111827",
   },
 
   /** Contato exibido para clientes e para titulares de dados. */

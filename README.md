@@ -115,7 +115,10 @@ servidos publicamente em `/media/<chave aleatória>` (a Meta baixa o arquivo por
 ## Personalizando a marca
 
 Edite `config/brand.ts`: nome, frase, descrição, logotipo (`public/brand/`), cores e dados legais.
-Troque também os ícones `public/icon-192.png`, `public/icon-512.png` e `public/apple-touch-icon.png`.
+Os ícones do app (`app/favicon.ico`, `public/icon-192.png`, `public/icon-512.png`,
+`public/icon-maskable-512.png`, `public/apple-touch-icon.png` e `docs/design/app-icon-1024.png`, o
+enviado à Meta) saem de `docs/design/app-icon.svg`, com fundo em `colors.iconBackground`; troque os
+arquivos mantendo os nomes (o teste `__tests__/app-icons.test.ts` confere fundo e posição do símbolo).
 Os campos marcados com `[PREENCHER]` (razão social, CNPJ, endereço, e-mail de suporte, encarregado de
 dados) aparecem na Política de Privacidade e nos Termos — **preencha antes de publicar**. Na área de
 gestão, **`/admin` → Diagnóstico** lista os campos pendentes (só para os e-mails de `ADMIN_EMAILS`).
