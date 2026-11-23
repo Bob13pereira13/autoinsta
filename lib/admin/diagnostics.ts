@@ -2,6 +2,8 @@ import { brand, missingBrandFields } from "@/config/brand";
 import { prisma } from "@/lib/db/client";
 import { getWorkerAlerts, getWorkerHealth, type WorkerAlert } from "@/lib/ops/worker-health";
 import { getDMQueue } from "@/lib/queue/client";
+import { WEBHOOK_RECEIPT_HOURS } from "@/lib/webhooks/receipts";
+import { buildReceiptsReport } from "@/lib/webhooks/receipts-report";
 
 /**
  * Production diagnostics for the operators (admin area only): worker health,
@@ -108,7 +110,26 @@ export async function getDiagnostics({ workspaceId }: { workspaceId?: string | n
     dmFailures: withClient(dmFailures),
     tokenRefreshFailures: withClient(tokenRefreshFailures),
     operationalEvents: withClient(operationalEvents),
+    // Platform-wide (a webhook belongs to no client until it matches an account).
+    webhookReceipts: await getWebhookReceiptsReport(),
   };
+}
+
+/** The last 24 hours of webhook receipts, with the connected accounts to match unknown ids against. */
+async function getWebhookReceiptsReport() {
+  const since = new Date(Date.now() - WEBHOOK_RECEIPT_HOURS * 3600_000);
+  const [rows, accounts] = await Promise.all([
+    prisma.webhookReceipt.findMany({ where: { createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, take: 2000 }),
+    prisma.instagramAccount.findMany({
+      where: { provider: "META" },
+      select: { username: true, instagramId: true, instagramScopedId: true, metaLoginUserId: true, workspace: clientSelect },
+      take: 1000,
+    }),
+  ]);
+  return buildReceiptsReport(
+    rows,
+    accounts.map(({ workspace, ...a }) => ({ ...a, client: clientOf(workspace)?.name ?? null }))
+  );
 }
 
 export type Diagnostics = Awaited<ReturnType<typeof getDiagnostics>>;

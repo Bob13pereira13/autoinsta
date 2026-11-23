@@ -6,6 +6,21 @@ import {
   verifyWebhookVerifyToken,
 } from "@/lib/meta/webhook";
 import { processInstagramWebhook } from "@/lib/queue/process-webhook";
+import { describeWebhook, recordWebhookReceipt } from "@/lib/webhooks/receipts";
+
+/**
+ * The instagramIds of connected accounts among a payload's entry ids, the same
+ * match processInstagramWebhook makes (anything else is discarded there).
+ */
+async function knownAccountIds(payload: unknown): Promise<Set<string>> {
+  const entries = (payload as { entry?: unknown })?.entry;
+  const ids = Array.isArray(entries)
+    ? entries.map((e) => (e && typeof e === "object" && "id" in e ? String((e as { id: unknown }).id) : null)).filter((id): id is string => Boolean(id))
+    : [];
+  if (!ids.length) return new Set();
+  const accounts = await prisma.instagramAccount.findMany({ where: { instagramId: { in: ids }, provider: "META" }, select: { instagramId: true } });
+  return new Set(accounts.map((a) => a.instagramId));
+}
 
 
 export async function GET(request: NextRequest) {
@@ -60,11 +75,17 @@ export async function POST(request: NextRequest) {
   try {
     payload = JSON.parse(rawBody);
   } catch {
+    await recordWebhookReceipt({ object: null, accepted: false, reason: "invalid_json", entries: [] });
     return NextResponse.json(
       { success: false, error: "Invalid JSON" },
       { status: 400 }
     );
   }
+
+  // What arrived and what happens to it, for the admin's Diagnostics (24 h):
+  // tells "Meta does not send it" from "the app discards it". No message text,
+  // no ids of people (lib/webhooks/receipts.ts).
+  await recordWebhookReceipt(describeWebhook(payload, await knownAccountIds(payload).catch(() => new Set<string>())));
 
   try {
     await processInstagramWebhook({ payload: payload as Parameters<typeof parseCommentEvents>[0], provider: 'META' });

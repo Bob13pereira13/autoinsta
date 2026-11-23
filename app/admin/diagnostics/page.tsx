@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getDiagnostics, type DiagnosticsClient } from "@/lib/admin/diagnostics";
 import { getI18n } from "@/lib/i18n/server";
 import { logReasonText } from "@/lib/dm-logs/reasons";
+import { WebhookReceiptsSection } from "@/components/admin/webhook-receipts";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,8 @@ export default async function AdminDiagnosticsPage({ searchParams }: { searchPar
           </div>
         ))}
       </div>
+
+      <WebhookReceiptsSection report={data.webhookReceipts} t={t} locale={locale} />
 
       <Section title={t("Recent Worker Alerts")}>
         {data.workerAlerts.length ? (

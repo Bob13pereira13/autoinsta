@@ -503,6 +503,24 @@ model WebhookEvent {
   @@index([status])
 }
 
+/// What arrived in each signed webhook POST from Meta, for the admin's
+/// Diagnostics: the object, each entry's id, the keys and fields present and
+/// whether the entry was accepted or discarded (and why). No message text and
+/// no ids of people. Kept 24 hours.
+model WebhookReceipt {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  object    String?
+  /// At least one entry went on to processing.
+  accepted  Boolean
+  /// Why the whole POST was discarded (invalid_json, object_not_instagram, no_entries), or null.
+  reason    String?
+  /// One summary per entry (lib/webhooks/receipts.ts).
+  entries   Json
+
+  @@index([createdAt])
+}
+
 model OperationalEvent {
   id          String                 @id @default(cuid())
   workspaceId String?
