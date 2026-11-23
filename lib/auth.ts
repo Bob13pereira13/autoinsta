@@ -15,6 +15,7 @@ import {
   LoginRateLimitedError,
 } from "@/lib/account/authorize";
 import { getEmailFrom, sendEmail } from "@/lib/email/send";
+import { adoptAccountLocale } from "@/lib/i18n/account-locale";
 import { magicLinkEmail } from "@/lib/email/templates";
 
 type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
@@ -113,6 +114,11 @@ export const authConfig = {
     },
   },
   events: {
+    // Password and e-mail link alike: a browser without a language choice
+    // takes the account's language (the review account is saved in English).
+    async signIn({ user }) {
+      if (user?.id) await adoptAccountLocale(user.id);
+    },
     async createUser({ user }) {
       if (user.id) {
         await ensureWorkspaceForUser(user.id, user.email);
