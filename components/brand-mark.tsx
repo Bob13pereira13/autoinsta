@@ -54,7 +54,7 @@ export default function BrandMark({
     );
   }
   return (
-    <Link href={href} className={cx(classes, "rounded-item")} aria-label={`${brand.name} — início`}>
+    <Link href={href} className={cx(classes, "rounded-item")} aria-label={brand.name}>
       {content}
     </Link>
   );

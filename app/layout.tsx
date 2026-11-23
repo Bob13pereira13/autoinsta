@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { brand } from "@/config/brand";
+import { brand, brandText } from "@/config/brand";
+import { getI18n } from "@/lib/i18n/server";
 import { getSavedTheme } from "@/lib/theme/server";
 import { inter, spaceGrotesk } from "./fonts";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: `${brand.name} - ${brand.tagline}`,
-  description: brand.description,
+export async function generateMetadata(): Promise<Metadata> {
+  const { locale } = await getI18n();
+  const text = brandText(locale);
+  return { ...metadata, title: `${brand.name} - ${text.tagline}`, description: text.description };
+}
+
+const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -43,9 +48,10 @@ export default async function RootLayout({
   // A saved choice (theme button) wins; without one, globals.css follows the
   // system. Rendered on the server, so the page never flashes the other theme.
   const theme = await getSavedTheme();
+  const { locale } = await getI18n();
   return (
     <html
-      lang="pt-BR"
+      lang={locale}
       className={`h-full ${inter.variable} ${spaceGrotesk.variable}`}
       data-theme={theme ?? undefined}
     >

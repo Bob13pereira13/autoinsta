@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/client";
 import { getRedisConnection } from "@/lib/queue/client";
+import { QUEUE_RETENTION } from "@/lib/privacy/retention";
 
 /**
  * Guards for STORIES/DIRECT automations without keywords (they answer any
@@ -152,7 +153,7 @@ export async function handleEcho({
  * be stored), so each echo is also noted here the moment it arrives, and the
  * delayed send looks at both.
  */
-const ECHO_NOTE_TTL_SECONDS = 15 * 60;
+const ECHO_NOTE_TTL_SECONDS = QUEUE_RETENTION.echoNoteMinutes * 60;
 const echoNoteKey = (accountConnectionId: string, recipientId: string) => `echoes:${accountConnectionId}:${recipientId}`;
 
 /** Note an echo as it arrives (before it is classified). Best-effort. */

@@ -58,12 +58,7 @@ import {
 } from "@/lib/automation/editor-scope";
 import { automationTypeSlug } from "@/lib/automation/type-slugs";
 import { readCache, writeCache } from "@/lib/client-cache";
-import {
-  DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL,
-  DEFAULT_FOLLOW_PROMPT_MESSAGE,
-  DEFAULT_LINK_BUTTON_LABEL,
-  DEFAULT_OPENING_BUTTON_LABEL,
-} from "@/lib/campaigns/defaults";
+import { CUSTOMER_DEFAULTS, editorDefaults } from "@/lib/campaigns/defaults";
 import {
   IMPORT_QUEUE_KEY,
   IMPORT_ACCOUNT_KEY,
@@ -158,7 +153,9 @@ function Toggle({
 }
 
 export default function CampaignBuilder({ mode, campaignId, initialType = "COMMENTS" }: CampaignBuilderProps) {
-  const { t, message } = useI18n();
+  const { t, message, locale } = useI18n();
+  // New automations start with the default texts in the interface language.
+  const defaults = editorDefaults(locale);
   const router = useRouter();
 
   const [loading, setLoading] = useState(mode === "edit");
@@ -223,14 +220,14 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
   const [dmMessage, setDmMessage] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
   const [trackedDestinationUrl, setTrackedDestinationUrl] = useState("");
-  const [linkButtonLabel, setLinkButtonLabel] = useState(DEFAULT_LINK_BUTTON_LABEL);
+  const [linkButtonLabel, setLinkButtonLabel] = useState(defaults.DEFAULT_LINK_BUTTON_LABEL);
   const [secondLinkOpen, setSecondLinkOpen] = useState(false);
   const [secondaryDestinationUrl, setSecondaryDestinationUrl] = useState("");
-  const [secondaryButtonLabel, setSecondaryButtonLabel] = useState(DEFAULT_LINK_BUTTON_LABEL);
+  const [secondaryButtonLabel, setSecondaryButtonLabel] = useState(defaults.DEFAULT_LINK_BUTTON_LABEL);
   const [requireFollow, setRequireFollow] = useState(false);
   const [followPromptMessage, setFollowPromptMessage] = useState("");
   const [followPromptButtonLabel, setFollowPromptButtonLabel] =
-    useState(DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL);
+    useState(defaults.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL);
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(0);
@@ -339,19 +336,20 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         setOpeningDmMessage(c.openingDmMessage ?? "");
         setOpeningDmButtonLabel(c.openingDmButtonLabel ?? "");
         setDmMessage(c.dmMessage);
-        setLinkButtonLabel(c.linkButtonLabel ?? DEFAULT_LINK_BUTTON_LABEL);
+        const saved = editorDefaults(locale);
+        setLinkButtonLabel(c.linkButtonLabel ?? saved.DEFAULT_LINK_BUTTON_LABEL);
         setIsActive(c.isActive);
         const link = c.trackedLinks?.[0]?.destinationUrl ?? "";
         setTrackedDestinationUrl(link);
         setLinkOpen(Boolean(link));
         const secondLink = c.trackedLinks?.[1];
         setSecondaryDestinationUrl(secondLink?.destinationUrl ?? "");
-        setSecondaryButtonLabel(secondLink?.label ?? DEFAULT_LINK_BUTTON_LABEL);
+        setSecondaryButtonLabel(secondLink?.label ?? saved.DEFAULT_LINK_BUTTON_LABEL);
         setSecondLinkOpen(Boolean(secondLink?.destinationUrl));
         setRequireFollow(c.requireFollow ?? false);
         setFollowPromptMessage(c.followPromptMessage ?? "");
         setFollowPromptButtonLabel(
-          c.followPromptButtonLabel ?? DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
+          c.followPromptButtonLabel ?? saved.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
         );
         setFollowUpEnabled(c.followUpEnabled ?? false);
         setFollowUpMessage(c.followUpMessage ?? "");
@@ -359,7 +357,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
-  }, [mode, campaignId]);
+  }, [mode, campaignId, locale]);
 
   // Track which posts on the selected account are already assigned to an
   // automation, so the picker can highlight them. The campaign being edited is
@@ -405,7 +403,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
     setDeliveryMode(hasOpening ? "steps" : "direct");
     setOpeningDmMessage(row.openingDmMessage ?? "");
     setOpeningDmButtonLabel(
-      row.openingDmButtonLabel || (hasOpening ? DEFAULT_OPENING_BUTTON_LABEL : "")
+      row.openingDmButtonLabel || (hasOpening ? CUSTOMER_DEFAULTS.DEFAULT_OPENING_BUTTON_LABEL : "")
     );
     const link = row.trackedUrl ?? "";
     setTrackedDestinationUrl(link);
@@ -619,13 +617,13 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
         ? publicReplyMessages.map((m) => m.trim()).filter(Boolean)
         : [],
       trackedDestinationUrl: trackedDestinationUrl.trim() || "",
-      linkButtonLabel: linkButtonLabel.trim() || DEFAULT_LINK_BUTTON_LABEL,
+      linkButtonLabel: linkButtonLabel.trim() || defaults.DEFAULT_LINK_BUTTON_LABEL,
       secondaryDestinationUrl: secondaryDestinationUrl.trim() || "",
-      secondaryButtonLabel: secondaryButtonLabel.trim() || DEFAULT_LINK_BUTTON_LABEL,
+      secondaryButtonLabel: secondaryButtonLabel.trim() || defaults.DEFAULT_LINK_BUTTON_LABEL,
       requireFollow,
       followPromptMessage: requireFollow ? followPromptMessage.trim() : "",
       followPromptButtonLabel: requireFollow
-        ? followPromptButtonLabel.trim() || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
+        ? followPromptButtonLabel.trim() || defaults.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL
         : "",
       followUpEnabled,
       followUpMessage: followUpEnabled ? followUpMessage.trim() : "",
@@ -1000,7 +998,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                 aria-label={t("Keywords")}
                 className="field"
               />
-              <Hint>{t("Separate with commas (up to 10). Case, accents, punctuation and emojis don't matter: PREÇO, preço and preco are the same.")}</Hint>
+              <Hint>{t("Separate with commas (up to 10). Case, accents, punctuation and emojis don't matter: NAÏVE, naïve and naive are the same.")}</Hint>
               {keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1.5" aria-hidden="true">
                   {keywords.map((kw) => (
@@ -1127,7 +1125,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   <textarea
                     value={followPromptMessage}
                     onChange={(e) => setFollowPromptMessage(e.target.value)}
-                    placeholder={DEFAULT_FOLLOW_PROMPT_MESSAGE}
+                    placeholder={defaults.DEFAULT_FOLLOW_PROMPT_MESSAGE}
                     rows={3}
                     aria-label={t("Follow request text")}
                     className="field resize-none"
@@ -1138,7 +1136,7 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
                   <input
                     value={followPromptButtonLabel}
                     onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
-                    placeholder={DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
+                    placeholder={defaults.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
                     aria-label={t("Button label")}
                     className="field"
                     maxLength={20}
@@ -1379,15 +1377,15 @@ export default function CampaignBuilder({ mode, campaignId, initialType = "COMME
             openingDmButtonLabel={openingDmButtonLabel}
             revealMessage={dmMessage}
             hasLink={Boolean(trackedDestinationUrl.trim())}
-            linkButtonLabel={linkButtonLabel || DEFAULT_LINK_BUTTON_LABEL}
+            linkButtonLabel={linkButtonLabel || defaults.DEFAULT_LINK_BUTTON_LABEL}
             linkUrl={trackedDestinationUrl.trim() || undefined}
             hasSecondLink={
               secondLinkOpen && Boolean(secondaryDestinationUrl.trim())
             }
-            secondLinkButtonLabel={secondaryButtonLabel || DEFAULT_LINK_BUTTON_LABEL}
+            secondLinkButtonLabel={secondaryButtonLabel || defaults.DEFAULT_LINK_BUTTON_LABEL}
             requireFollow={requireFollow}
             followPromptMessage={followPromptMessage}
-            followPromptButtonLabel={followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
+            followPromptButtonLabel={followPromptButtonLabel || defaults.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}
             followUpEnabled={followUpEnabled}
             followUpMessage={followUpMessage}
             followUpDelayMinutes={followUpDelayMinutes}

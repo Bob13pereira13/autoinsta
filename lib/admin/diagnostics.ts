@@ -1,4 +1,4 @@
-import { missingBrandFields } from "@/config/brand";
+import { brand, missingBrandFields } from "@/config/brand";
 import { prisma } from "@/lib/db/client";
 import { getWorkerAlerts, getWorkerHealth, type WorkerAlert } from "@/lib/ops/worker-health";
 import { getDMQueue } from "@/lib/queue/client";
@@ -94,7 +94,12 @@ export async function getDiagnostics({ workspaceId }: { workspaceId?: string | n
   return {
     filter,
     clients: clients.map((c) => clientOf(c)!),
-    brandMissingFields: missingBrandFields(),
+    // Also the data processors not named yet in the Privacy Policy (it then
+    // describes them without a name; Meta's data handling questions ask for them).
+    brandMissingFields: [
+      ...missingBrandFields(),
+      ...Object.entries(brand.processors).filter(([, value]) => !value).map(([key]) => `processors.${key}`),
+    ],
     queueCounts,
     workerHealth,
     workerAlerts,

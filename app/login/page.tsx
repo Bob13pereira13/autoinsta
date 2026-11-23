@@ -135,7 +135,7 @@ export default async function LoginPage({
                 type="email"
                 required
                 autoComplete="email"
-                placeholder="voce@empresa.com.br"
+                placeholder={t("you@company.com")}
                 className={inputClass}
               />
             </div>
@@ -179,7 +179,7 @@ export default async function LoginPage({
                 type="email"
                 required
                 autoComplete="email"
-                placeholder="voce@empresa.com.br"
+                placeholder={t("you@company.com")}
                 className={inputClass}
               />
               <button

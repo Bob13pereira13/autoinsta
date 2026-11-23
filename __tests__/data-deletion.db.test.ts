@@ -24,6 +24,19 @@ import {
   revokeInstagramAccess,
 } from "../lib/privacy/data-deletion";
 import { purgeExpiredData } from "../lib/privacy/purge";
+import { removeInstagramAccounts } from "../lib/instagram/remove-account";
+import { createSignedRequest } from "../lib/meta/signed-request";
+import { POST as dataDeletionRoute } from "../app/api/webhooks/meta/data-deletion/route";
+import { POST as deauthorizeRoute } from "../app/api/webhooks/meta/deauthorize/route";
+import { NextRequest } from "next/server";
+
+const SECRET = "test-facebook-app-secret";
+const formPost = (url: string, signedRequest: string) =>
+  new NextRequest(url, {
+    method: "POST",
+    body: new URLSearchParams({ signed_request: signedRequest }).toString(),
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+  });
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const schema = `deletion_${randomBytes(4).toString("hex")}`;
@@ -116,6 +129,71 @@ describe.skipIf(!databaseUrl)("Meta data deletion on real PostgreSQL", () => {
     expect(request.accountsDeleted).toBe(1);
     expect(request.metaUserId).toBeNull();
     expect(request.metaUserIdHash).toBe(hashMetaUserId("ig_victim"));
+  });
+
+  it("the trash button in Accounts deletes exactly what Meta's request deletes (as the Privacy Policy says)", async () => {
+    await seedAccount("victim");
+    await seedAccount("bystander");
+    await state.db.botMessage.create({ data: { mid: "m_victim", instagramId: "ig_victim", recipientId: "c1" } });
+
+    expect(await removeInstagramAccounts("ws_victim", ["acc_victim", "acc_bystander"])).toBe(1); // other workspaces ignored
+
+    const db = state.db;
+    expect(await db.instagramAccount.findMany({ select: { id: true } })).toEqual([{ id: "acc_bystander" }]);
+    expect(await db.automation.count({ where: { id: "auto_victim" } })).toBe(0);
+    expect(await db.dmLog.count({ where: { instagramAccountId: "acc_victim" } })).toBe(0);
+    expect(await db.trackedLink.count({ where: { slug: "slug_victim" } })).toBe(0);
+    expect(await db.linkClick.count({ where: { instagramAccountId: "acc_victim" } })).toBe(0);
+    // Meta's notifications and the operational logs about it go too.
+    expect(await db.webhookEvent.count()).toBe(1);
+    expect(await db.operationalEvent.count({ where: { message: { contains: "@victim" } } })).toBe(0);
+    expect(await db.botMessage.count({ where: { instagramId: "ig_victim" } })).toBe(0);
+    expect(await db.dmLog.count({ where: { instagramAccountId: "acc_bystander" } })).toBe(1);
+  });
+
+  describe("the callbacks Meta calls, with a signed_request made in the test", () => {
+    beforeEach(() => vi.stubEnv("FACEBOOK_APP_SECRET", SECRET));
+    afterAll(() => vi.unstubAllEnvs());
+
+    it("data deletion: valid → deletes and answers { url, confirmation_code }; the status says completed", async () => {
+      await seedAccount("deleted", { metaLoginUserId: "fb_user_7" });
+      const signed = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: "fb_user_7", issued_at: 1 }, SECRET);
+      const response = await dataDeletionRoute(formPost("https://app.test/api/webhooks/meta/data-deletion", signed));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(Object.keys(body).sort()).toEqual(["confirmation_code", "url"]);
+      expect(body.url).toMatch(new RegExp(`/exclusao-dados\\?codigo=${body.confirmation_code}$`));
+      expect(await state.db.instagramAccount.count()).toBe(0);
+      const request = await state.db.dataDeletionRequest.findUniqueOrThrow({ where: { confirmationCode: body.confirmation_code } });
+      expect(request).toMatchObject({ status: "COMPLETED", accountsDeleted: 1, metaUserId: null });
+    });
+
+    it("data deletion: a wrong signature, a tampered payload or no signed_request → 400 and nothing deleted", async () => {
+      await seedAccount("kept", { metaLoginUserId: "fb_user_8" });
+      const forged = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: "fb_user_8" }, "not-the-secret");
+      const [signature] = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: "someone" }, SECRET).split(".");
+      const tampered = `${signature}.${Buffer.from(JSON.stringify({ algorithm: "HMAC-SHA256", user_id: "fb_user_8" })).toString("base64url")}`;
+      for (const bad of [forged, tampered, ""]) {
+        const response = await dataDeletionRoute(formPost("https://app.test/api/webhooks/meta/data-deletion", bad));
+        expect(response.status).toBe(400);
+      }
+      expect(await state.db.instagramAccount.count()).toBe(1);
+      expect(await state.db.dataDeletionRequest.count()).toBe(0);
+    });
+
+    it("deauthorize: valid → the token is wiped and the account flagged; forged → 400, untouched", async () => {
+      await seedAccount("removed", { metaLoginUserId: "fb_user_9" });
+      const forged = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: "fb_user_9" }, "wrong");
+      expect((await deauthorizeRoute(formPost("https://app.test/api/webhooks/meta/deauthorize", forged))).status).toBe(400);
+      expect((await state.db.instagramAccount.findUniqueOrThrow({ where: { id: "acc_removed" } })).accessToken).toBe("encrypted");
+
+      const signed = createSignedRequest({ algorithm: "HMAC-SHA256", user_id: "fb_user_9" }, SECRET);
+      const response = await deauthorizeRoute(formPost("https://app.test/api/webhooks/meta/deauthorize", signed));
+      expect(response.status).toBe(200);
+      const account = await state.db.instagramAccount.findUniqueOrThrow({ where: { id: "acc_removed" } });
+      expect(account.accessToken).toBe("");
+      expect(account.tokenInvalidAt).not.toBeNull();
+    });
   });
 
   it("matches the app-scoped Instagram id as well", async () => {

@@ -17,12 +17,19 @@ import { IMPORT_QUEUE_KEY, IMPORT_ACCOUNT_KEY } from "@/lib/import-queue";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 
-const SAMPLE = `keywords,dm_message,public_reply,tracked_url,opening_dm,opening_dm_button
+// Example rows, in the interface language (they become the customer's own texts).
+const SAMPLES = {
+  "pt-BR": `keywords,dm_message,public_reply,tracked_url,opening_dm,opening_dm_button
 "CATALOGO","Aqui está o catálogo: {link}","Te mandei na DM!","https://sualoja.com.br/catalogo","Quer o catálogo? Toque abaixo","Me manda o link"
-"PRECO,PREÇO","A tabela de preços está nos destaques do perfil.","Olha a DM 📩",,,`;
+"PRECO,PREÇO","A tabela de preços está nos destaques do perfil.","Olha a DM 📩",,,`,
+  en: `keywords,dm_message,public_reply,tracked_url,opening_dm,opening_dm_button
+"CATALOG","Here is the catalog: {link}","Sent you a DM!","https://yourstore.com/catalog","Want the catalog? Tap below","Send me the link"
+"PRICE","The price list is in the profile highlights.","Check your DMs 📩",,,`,
+} as const;
 
 export default function ImportCampaignsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const SAMPLE = SAMPLES[locale === "en" ? "en" : "pt-BR"];
   const router = useRouter();
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");

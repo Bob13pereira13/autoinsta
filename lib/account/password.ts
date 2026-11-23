@@ -37,19 +37,27 @@ export async function verifyPassword(password: string, stored: string | null | u
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-/** Returns a pt-BR error message, or null when the password is acceptable. */
+/** What is wrong with a new password (English, a catalog key the screens translate). */
+export const PASSWORD_ERRORS = {
+  tooShort: "The password needs at least 8 characters.",
+  tooLong: "The password can have at most 128 characters.",
+  predictable: "Choose a less predictable password.",
+  sameAsEmail: "The password cannot be the same as your e-mail.",
+} as const;
+
+/** Returns an error message (a catalog key), or null when the password is acceptable. */
 export function validateNewPassword(password: unknown, email?: string | null): string | null {
   if (typeof password !== "string" || password.length < PASSWORD_MIN_LENGTH) {
-    return `A senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+    return PASSWORD_ERRORS.tooShort;
   }
   if (password.length > PASSWORD_MAX_LENGTH) {
-    return `A senha pode ter no máximo ${PASSWORD_MAX_LENGTH} caracteres.`;
+    return PASSWORD_ERRORS.tooLong;
   }
   if (/^(.)\1+$/.test(password)) {
-    return "Escolha uma senha menos previsível.";
+    return PASSWORD_ERRORS.predictable;
   }
   if (email && password.toLowerCase() === email.toLowerCase()) {
-    return "A senha não pode ser igual ao seu e-mail.";
+    return PASSWORD_ERRORS.sameAsEmail;
   }
   return null;
 }

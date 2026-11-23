@@ -33,7 +33,8 @@ interface Account {
   automationCount: number;
 }
 
-const CONNECT_URL = "/api/instagram/connect";
+// "Connect Instagram" first explains the login and its permissions.
+const CONNECT_URL = "/accounts/connect";
 
 export default function AccountsPage() {
   const { t, message } = useI18n();

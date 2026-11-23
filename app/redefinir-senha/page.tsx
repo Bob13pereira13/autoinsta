@@ -14,7 +14,7 @@ async function savePassword(_state: SetPasswordState, formData: FormData): Promi
   "use server";
   const password = formData.get("password");
   if (password !== formData.get("confirm")) {
-    return { error: "As senhas não coincidem." };
+    return { error: "The passwords do not match." };
   }
   const result = await setPasswordWithToken(String(formData.get("token") ?? ""), password);
   if (!result.ok) return { error: result.error };

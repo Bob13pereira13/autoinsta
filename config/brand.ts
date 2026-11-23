@@ -28,6 +28,12 @@ export const brand = {
   /** Descrição usada em metatags e no manifest. */
   description:
     "Plataforma de automação para contas profissionais do Instagram: quando alguém comenta uma palavra-chave no seu post ou reel, enviamos a resposta por mensagem direta usando a API oficial da Meta.",
+  /** A frase e a descrição em inglês (interface em English, Meta App Review). */
+  en: {
+    tagline: "Automatic Instagram replies, from comment to DM.",
+    description:
+      "Automation for Instagram professional accounts: when someone comments a keyword on your post or reel, we send your reply by direct message through Meta's official API.",
+  },
 
   /**
    * Logotipo (símbolo + nome), em duas versões: `light` para o tema claro (cor
@@ -97,7 +103,22 @@ export const brand = {
      * Data da última revisão das páginas legais (AAAA-MM-DD). Atualize quando
      * mudar o texto de /privacidade ou /termos.
      */
-    lastUpdated: "2026-11-22",
+    lastUpdated: "2026-11-23",
+  },
+
+  /**
+   * Quem trata dados por nós (operadores, LGPD art. 39). Aparecem na Política
+   * de Privacidade, seção "Compartilhamento", e nas respostas de tratamento de
+   * dados do Meta App Review. Nome da empresa e país onde os dados ficam.
+   */
+  processors: {
+    /**
+     * Hospedagem do app, do banco e da fila. Ex.: "Hetzner Online GmbH
+     * (Alemanha)". Enquanto for null, a política descreve sem nomear.
+     */
+    hosting: null as string | null,
+    /** Envio de e-mails transacionais. Ex.: "Resend, Inc. (Estados Unidos)". */
+    email: null as string | null,
   },
 } as const;
 
@@ -116,10 +137,20 @@ export function missingBrandFields(source: unknown = brand, prefix = ""): string
   return [];
 }
 
-/** Formata a data de revisão das páginas legais em pt-BR. */
-export function legalLastUpdatedLabel(): string {
+/** Um valor da marca, ou null enquanto ainda for "[PREENCHER]". */
+export function filledBrandValue(value: string): string | null {
+  return value && !value.includes(PLACEHOLDER) ? value : null;
+}
+
+/** Frase e descrição no idioma da interface. */
+export function brandText(locale: string): { tagline: string; description: string } {
+  return locale === "en" ? brand.en : { tagline: brand.tagline, description: brand.description };
+}
+
+/** Formata a data de revisão das páginas legais (pt-BR ou en). */
+export function legalLastUpdatedLabel(locale: string = "pt-BR"): string {
   const [year, month, day] = brand.legal.lastUpdated.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("pt-BR", {
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(locale === "en" ? "en-US" : "pt-BR", {
     day: "numeric",
     month: "long",
     year: "numeric",

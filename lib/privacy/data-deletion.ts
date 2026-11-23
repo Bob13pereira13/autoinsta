@@ -49,7 +49,16 @@ export function findAccountsForMetaUser(userId: string) {
   });
 }
 
-async function deleteInstagramAccountData(account: { id: string; instagramId: string }) {
+/**
+ * Everything stored for one connected Instagram account, as the Privacy Policy
+ * says: the account and its token and, by cascade, its automations, send logs,
+ * tracked links, link clicks, uploaded media and conversation activity; the
+ * stored Meta notifications and operational logs that mention it; the bot's
+ * message ids. Used by the trash button in Accounts, by Meta's data deletion
+ * callback and by the clean-up of rejected sign-ups, so all of them delete the
+ * same things.
+ */
+export async function deleteInstagramAccountData(account: { id: string; instagramId: string }) {
   const mediaKeys = await mediaKeysForAccounts([account.id]);
   await prisma.$transaction(async (tx) => {
     // JSONB containment (@>): any webhook entry addressed to this account.

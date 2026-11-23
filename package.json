@@ -14,7 +14,8 @@
     "user": "tsx scripts/users.ts",
     "user:create": "tsx scripts/users.ts create",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "review-account": "tsx scripts/review-account.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

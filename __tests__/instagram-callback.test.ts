@@ -164,6 +164,68 @@ describe("Instagram OAuth callback", () => {
     });
   });
 
+  describe("every way the login can end lands on Accounts with a code it explains (never an error page)", () => {
+    const unified = () => {
+      vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
+      vi.stubEnv("META_APP_ID", "app");
+      vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
+      mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
+    };
+    const location = (response: Response) => response.headers.get("location");
+
+    it("cancel on Meta's dialog → denied, nothing asked of Meta", async () => {
+      const response = await GET(new NextRequest("https://app.test/api/instagram/callback?error=access_denied&error_reason=user_denied&state=s"));
+      expect(location(response)).toBe("https://app.test/accounts?instagram=denied");
+      expect(mockExchange).not.toHaveBeenCalled();
+    });
+
+    it("a permission unchecked in the dialog → missing_permissions with which ones; nothing connected", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1", scopes: ["instagram_basic", "business_management", "public_profile"] } });
+      const response = await callback();
+      expect(location(response)).toBe(
+        "https://app.test/accounts?instagram=missing_permissions&missing=instagram_manage_comments%2Cinstagram_manage_messages"
+      );
+      expect(urls().some((url) => url.includes("assigned_instagram_accounts"))).toBe(false);
+      expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
+    });
+
+    it("all permissions granted → connected", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1", scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "business_management", "public_profile"] } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+    });
+
+    it("Meta refuses the webhook subscription → connected, with the warning that automations cannot answer yet", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "(#200) Permissions error", code: 200 } }), { status: 403 }));
+      const response = await callback();
+      expect(location(response)).toBe("https://app.test/accounts?instagram=connected&webhooks=off");
+      expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({ data: expect.objectContaining({ webhookSubscribed: false }) });
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ level: "ERROR", message: "Instagram webhook subscription failed for @one" }),
+      });
+    });
+
+    it("a failure anywhere (Meta down, database error) → failed, Meta's text kept for the admin only", async () => {
+      unified();
+      mockExchange.mockRejectedValue(new Error("Token exchange failed: Invalid verification code format."));
+      const response = await callback();
+      expect(location(response)).toBe("https://app.test/accounts?instagram=failed");
+      expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ payload: { reason: "Token exchange failed: Invalid verification code format." } }),
+      });
+      mockPrisma.workspaceMember.findFirst.mockRejectedValue(new Error("database is down"));
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=failed");
+    });
+  });
+
   it("explains a Unified login that granted no Instagram account", async () => {
     vi.stubEnv("META_LOGIN_CONFIG_ID", "config");
     vi.stubEnv("META_APP_ID", "app");
@@ -174,10 +236,9 @@ describe("Instagram OAuth callback", () => {
 
     const response = await callback();
 
-    expect(response.headers.get("location")).toContain("instagram=failed");
-    expect(decodeURIComponent(response.headers.get("location")!)).toContain(
-      "business_management"
-    );
+    // A code the Accounts tab explains (professional account linked to a
+    // Page, select it on the login screen), never Meta's raw text.
+    expect(response.headers.get("location")).toMatch(/\/accounts\?instagram=no_account$/);
     expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
   });
 

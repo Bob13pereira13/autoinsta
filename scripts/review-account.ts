@@ -1,0 +1,97 @@
+/**
+ * Create or reset the Meta App Review demo account (GUIA_META_APP_REVIEW.md).
+ *
+ *   npm run review-account -- --email reviewer@yourdomain.com --password 'a long password'
+ *
+ * Creates (or resets) a customer with that e-mail and password, e-mail already
+ * confirmed, workspace ACTIVE, and in it one automation per channel (Comments
+ * with keyword LINK, Stories replies, Direct with keyword PRICE), in "Direct"
+ * mode without "Require follow", plus a few sample entries in DM Logs.
+ *
+ * The test Instagram account: connect it once through the app (sign in as the
+ * reviewer, Accounts, Connect Instagram) and run this again; it is kept and its
+ * automations are recreated. Or pass a token to connect it from here:
+ *
+ *   npm run review-account -- --email ... --password ... \
+ *     --instagram-id 1784... --instagram-token EAA...
+ *
+ * Options: --link <url> (where the link button leads; default: the app's home
+ * page), --no-sample-logs. Reads DATABASE_URL, ENCRYPTION_KEY and the Meta
+ * settings from .env (when the file exists) or from the environment.
+ */
+import { existsSync } from "node:fs";
+
+if (existsSync(".env")) process.loadEnvFile(".env");
+
+function parseArgs(argv: string[]) {
+  const flags: Record<string, string | boolean> = {};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (!arg.startsWith("--")) continue;
+    const name = arg.slice(2);
+    const next = argv[i + 1];
+    if (next === undefined || next.startsWith("--")) flags[name] = true;
+    else flags[name] = argv[++i];
+  }
+  return flags;
+}
+
+async function main() {
+  const flags = parseArgs(process.argv.slice(2));
+  const email = typeof flags.email === "string" ? flags.email : "";
+  const password = typeof flags.password === "string" ? flags.password : "";
+  if (!email || !password) {
+    console.error("Usage: npm run review-account -- --email <e-mail> --password <password> [--instagram-id <id> --instagram-token <token>] [--link <url>] [--no-sample-logs]");
+    process.exit(1);
+  }
+
+  const { prisma } = await import("@/lib/db/client");
+  const { validateNewPassword } = await import("@/lib/account/password");
+  const { getBaseUrl } = await import("@/lib/env");
+  const { resetReviewAccount } = await import("@/lib/review/demo-account");
+
+  const invalid = validateNewPassword(password, email);
+  if (invalid) {
+    console.error(invalid);
+    process.exit(1);
+  }
+
+  let instagram: Parameters<typeof resetReviewAccount>[1]["instagram"];
+  if (typeof flags["instagram-token"] === "string" && typeof flags["instagram-id"] === "string") {
+    const { getUserInfo, subscribeInstagramAccountToWebhooks } = await import("@/lib/meta/client");
+    const { encryptToken } = await import("@/lib/meta/oauth");
+    const auth = { accessToken: flags["instagram-token"], unifiedLogin: true };
+    const info = await getUserInfo(auth, flags["instagram-id"]);
+    let webhookSubscribed = false;
+    try {
+      webhookSubscribed = Boolean((await subscribeInstagramAccountToWebhooks(info.id, auth)).success);
+    } catch (error) {
+      console.warn("Webhook subscription failed; comments and messages will not reach the app:", error instanceof Error ? error.message : error);
+    }
+    instagram = { id: info.id, username: info.username, name: info.name ?? null, encryptedToken: encryptToken(auth.accessToken), webhookSubscribed };
+  }
+
+  const result = await resetReviewAccount(prisma, {
+    email,
+    password,
+    linkUrl: typeof flags.link === "string" ? flags.link : getBaseUrl(),
+    sampleLogs: !flags["no-sample-logs"],
+    instagram,
+  });
+
+  console.log(`Reviewer: ${email} (e-mail confirmed, workspace active)`);
+  console.log(`Sign in at: ${getBaseUrl()}/login`);
+  if (result.instagram) {
+    console.log(`Instagram: @${result.instagram.username}`);
+    for (const automation of result.automations) console.log(`  automation: ${automation.name} (${automation.type})`);
+    console.log(`Sample log entries: ${result.sampleLogs}`);
+  } else {
+    console.log("No Instagram account connected yet: sign in as the reviewer, Accounts → Connect Instagram, then run this again.");
+  }
+  await prisma.$disconnect();
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

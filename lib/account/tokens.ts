@@ -70,7 +70,7 @@ export async function setPasswordWithToken(token: string, password: unknown): Pr
   const record = await findValidAuthToken(token);
   // A sign-up confirmation link only confirms the address; it never sets a password.
   if (!record || (record.purpose !== "WELCOME" && record.purpose !== "RESET")) {
-    return { ok: false, error: "Este link é inválido, expirou ou já foi usado. Peça um novo." };
+    return { ok: false, error: "This link is invalid, expired or was already used. Request a new one." };
   }
   const invalid = validateNewPassword(password, record.user.email);
   if (invalid) return { ok: false, error: invalid };
@@ -83,7 +83,7 @@ export async function setPasswordWithToken(token: string, password: unknown): Pr
   });
   // Lost a race with another tab using the same link.
   if (used.count === 0) {
-    return { ok: false, error: "Este link já foi usado. Peça um novo." };
+    return { ok: false, error: "This link was already used. Request a new one." };
   }
 
   await prisma.$transaction([

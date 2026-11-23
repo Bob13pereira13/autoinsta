@@ -40,7 +40,7 @@ export default function DashboardShell({ children, workspaceName, instagramUsern
         detail: accountsLine ? (
           <p className="truncate text-xs text-faint">{accountsLine}</p>
         ) : (
-          <a href="/api/instagram/connect" className="text-xs font-medium text-accent-fg hover:text-accent-fg-hover">
+          <a href="/accounts/connect" className="text-xs font-medium text-accent-fg hover:text-accent-fg-hover">
             {t("Connect Instagram")}
           </a>
         ),

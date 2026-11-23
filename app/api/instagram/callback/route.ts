@@ -9,6 +9,7 @@ import {
   getLongLivedToken,
   getUnifiedTokenInfo,
   getUserInfo,
+  NoInstagramAccountError,
   subscribeInstagramAccountToWebhooks,
 } from "@/lib/meta/client";
 import {
@@ -16,21 +17,42 @@ import {
   exchangeCodeForToken,
   verifyOAuthState,
 } from "@/lib/meta/oauth";
+import { missingPermissions } from "@/lib/meta/permissions";
 import { canManageWorkspace } from "@/lib/workspace-access";
 
+/**
+ * Where Meta's login comes back. Every outcome ends on the Accounts tab with a
+ * code the page explains (components/instagram-connect-notice.tsx), and the
+ * person can try again from there; nothing here answers with an error page.
+ *   denied              the person cancelled the login
+ *   missing_permissions a requested permission was not granted (&missing=)
+ *   no_account          no Instagram professional account came with the login
+ *   invalid             the login link was missing or older than 10 minutes
+ *   forbidden           not allowed to connect accounts in this workspace
+ *   limit               the client's account limit (&max=, &connected=)
+ *   already_connected   the account belongs to another workspace
+ *   failed              anything else (the detail goes to the admin's Diagnostics)
+ *   connected           done (&webhooks=off if Meta refused the notifications)
+ */
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get("code");
-  const error = request.nextUrl.searchParams.get("error");
-  const state = verifyOAuthState(request.nextUrl.searchParams.get("state"));
   const baseUrl = getBaseUrl();
-
-  if (error) {
-    return NextResponse.redirect(`${baseUrl}/accounts?instagram=denied`);
+  const back = (query: string) => NextResponse.redirect(`${baseUrl}/accounts?${query}`);
+  try {
+    return await handleCallback(request, baseUrl, back);
+  } catch (err) {
+    console.error("[Instagram Callback] Unexpected error:", err);
+    return back("instagram=failed");
   }
+}
 
-  if (!code || !state) {
-    return NextResponse.redirect(`${baseUrl}/accounts?instagram=invalid`);
-  }
+async function handleCallback(request: NextRequest, baseUrl: string, back: (query: string) => NextResponse) {
+  const params = request.nextUrl.searchParams;
+  const code = params.get("code");
+  const state = verifyOAuthState(params.get("state"));
+
+  // Cancel on Meta's dialog: error=access_denied (error_reason=user_denied).
+  if (params.get("error")) return back("instagram=denied");
+  if (!code || !state) return back("instagram=invalid");
 
   const session = await auth();
   if (!session?.user?.id) {
@@ -45,7 +67,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (!membership || !canManageWorkspace(membership.role)) {
-    return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
+    return back("instagram=forbidden");
   }
 
   // Only ACTIVE clients connect accounts, up to the limit in effect (the
@@ -55,7 +77,7 @@ export async function GET(request: NextRequest) {
     select: { status: true, instagramAccountLimit: true },
   });
   if (!workspace || workspace.status !== "ACTIVE") {
-    return NextResponse.redirect(`${baseUrl}/accounts?instagram=forbidden`);
+    return back("instagram=forbidden");
   }
   const accountLimit = effectiveAccountLimit(workspace.instagramAccountLimit, await getDefaultAccountLimit());
 
@@ -84,6 +106,12 @@ export async function GET(request: NextRequest) {
         console.warn("[Instagram Callback] Token details unknown:", expiryError);
         return null;
       });
+      // A permission unchecked in the dialog: nothing is connected, and the
+      // Accounts tab says which one and how to try again.
+      const missing = missingPermissions(tokenInfo?.scopes ?? []);
+      if (missing.length) {
+        return back(`instagram=missing_permissions&missing=${encodeURIComponent(missing.join(","))}`);
+      }
       tokenExpiresAt = tokenInfo?.expiresAt ?? null;
       metaLoginUserId = tokenInfo?.userId ?? null;
       // One Unified login can grant several Instagram accounts; connect each.
@@ -102,6 +130,7 @@ export async function GET(request: NextRequest) {
     const metaLogin = unifiedLogin ? "UNIFIED" : "INSTAGRAM";
     const encryptedToken = encryptToken(accessToken);
     let connected = 0;
+    let webhooksOff = false;
     // A new account beyond the client's limit is skipped (reconnecting one
     // it already has is always allowed).
     let limited = false;
@@ -139,7 +168,22 @@ export async function GET(request: NextRequest) {
           "[Instagram Callback] Webhook subscription failed:",
           subscriptionError
         );
+        // Without the subscription Meta sends no comments or messages, so no
+        // automation can answer: recorded for the admin's Diagnostics, and
+        // the Accounts tab shows it on the account.
+        await prisma.operationalEvent
+          .create({
+            data: {
+              source: "SYSTEM",
+              level: "ERROR",
+              workspaceId: state.workspaceId,
+              message: `Instagram webhook subscription failed for @${userInfo.username}`,
+              payload: { reason: subscriptionError instanceof Error ? subscriptionError.message.slice(0, 300) : "Unknown error" },
+            },
+          })
+          .catch(() => {});
       }
+      if (!webhookSubscribed) webhooksOff = true;
 
       const data = {
         username: userInfo.username,
@@ -169,23 +213,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (limited) {
-      return NextResponse.redirect(
-        `${baseUrl}/accounts?instagram=limit&max=${accountLimit}&connected=${connected}`
-      );
+      return back(`instagram=limit&max=${accountLimit}&connected=${connected}`);
     }
     if (!connected) {
-      return NextResponse.redirect(
-        `${baseUrl}/accounts?instagram=already_connected`
-      );
+      return back("instagram=already_connected");
     }
 
-    return NextResponse.redirect(`${baseUrl}/accounts?instagram=connected`);
+    return back(webhooksOff ? "instagram=connected&webhooks=off" : "instagram=connected");
   } catch (err) {
+    if (err instanceof NoInstagramAccountError) return back("instagram=no_account");
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Instagram Callback] Error:", err);
-    // The message is the only diagnostic a self-hoster gets for a failed
-    // connect, so persist it alongside the other operational events rather
-    // than leaving it in server logs they may not be able to reach.
+    // The detail is for the operator (admin Diagnostics), not for the screen:
+    // the person sees what to do next, never Meta's raw error.
     await prisma.operationalEvent
       .create({
         data: {
@@ -198,10 +238,6 @@ export async function GET(request: NextRequest) {
       })
       .catch(() => {});
 
-    return NextResponse.redirect(
-      `${baseUrl}/accounts?instagram=failed&reason=${encodeURIComponent(
-        message.slice(0, 200)
-      )}`
-    );
+    return back("instagram=failed");
   }
 }

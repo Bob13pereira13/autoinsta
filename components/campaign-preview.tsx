@@ -12,7 +12,7 @@
 import { useI18n } from "@/lib/i18n/provider";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { cx } from "@/components/ui/cx";
-import { DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL, DEFAULT_FOLLOW_PROMPT_MESSAGE, DEFAULT_LINK_BUTTON_LABEL, DEFAULT_LINK_ONLY_TEXT } from "@/lib/campaigns/defaults";
+import { editorDefaults } from "@/lib/campaigns/defaults";
 
 export type PreviewTab = "post" | "comments" | "dm" | "conversation";
 
@@ -120,14 +120,15 @@ function renderMessage(text: string, hasLink: boolean, linkUrl: string | undefin
 }
 
 function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode; opening: boolean }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const defaults = editorDefaults(locale);
   const resolved = props.revealMessage.replace(/\{username\}/g, SAMPLE_USER);
   // As when sending: with a link, it always goes as a button under the text
   // ({link} is taken out of it).
   const showCard = props.hasLink;
   const bodyText = showCard ? resolved.replace(/\s*\{link\}\s*/g, " ").trim() : resolved;
   const linkButtons = showCard
-    ? [props.linkButtonLabel || DEFAULT_LINK_BUTTON_LABEL, ...(props.hasSecondLink ? [props.secondLinkButtonLabel || DEFAULT_LINK_BUTTON_LABEL] : [])]
+    ? [props.linkButtonLabel || defaults.DEFAULT_LINK_BUTTON_LABEL, ...(props.hasSecondLink ? [props.secondLinkButtonLabel || defaults.DEFAULT_LINK_BUTTON_LABEL] : [])]
     : [];
   const delay = props.dmDelaySeconds ?? 0;
   const delayLabel = delay === 30 ? t("30 seconds") : delay === 60 ? t("1 minute") : delay === 300 ? t("5 minutes") : null;
@@ -143,11 +144,11 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
       )}
       {props.requireFollow && (
         <>
-          <Incoming buttons={[props.followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL]}>
+          <Incoming buttons={[props.followPromptButtonLabel || defaults.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL]}>
             {props.followPromptMessage ||
-              DEFAULT_FOLLOW_PROMPT_MESSAGE}
+              defaults.DEFAULT_FOLLOW_PROMPT_MESSAGE}
           </Incoming>
-          <Outgoing>{props.followPromptButtonLabel || DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}</Outgoing>
+          <Outgoing>{props.followPromptButtonLabel || defaults.DEFAULT_FOLLOW_PROMPT_BUTTON_LABEL}</Outgoing>
           <MediaBubbles items={props.media?.FOLLOW_PROMPT} />
         </>
       )}
@@ -155,7 +156,7 @@ function Conversation(props: CampaignPreviewProps & { inbound?: React.ReactNode;
         {!props.revealMessage
           ? t("Write a message")
           : showCard
-            ? bodyText || DEFAULT_LINK_ONLY_TEXT
+            ? bodyText || defaults.DEFAULT_LINK_ONLY_TEXT
             : renderMessage(props.revealMessage, props.hasLink, props.linkUrl, t("your link"))}
       </Incoming>
       <MediaBubbles items={props.media?.MAIN} />

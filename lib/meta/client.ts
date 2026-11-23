@@ -637,6 +637,20 @@ export async function getRecentMediaComments(
 }
 
 // A Unified login token belongs to the client business's system user, not to
+/**
+ * The login worked but gave the app no Instagram professional account: none
+ * was selected in the dialog, or the Instagram account is not a professional
+ * account linked to a Facebook Page in the business portfolio.
+ */
+export class NoInstagramAccountError extends Error {
+  constructor() {
+    super(
+      "No Instagram account is assigned to this login. Add business_management to the Meta login configuration and connect again."
+    );
+    this.name = "NoInstagramAccountError";
+  }
+}
+
 // one Instagram account, and one login can grant several. They are the assets
 // the client assigned during login. In practice this comes back empty unless
 // the login configuration also includes business_management (issue #104).
@@ -650,11 +664,7 @@ export async function getAssignedInstagramAccounts(
     await fetch(url.toString())
   );
   const accounts = data.data ?? [];
-  if (!accounts.length) {
-    throw new Error(
-      "No Instagram account is assigned to this login. Add business_management to the Meta login configuration and connect again."
-    );
-  }
+  if (!accounts.length) throw new NoInstagramAccountError();
   return accounts;
 }
 

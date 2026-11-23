@@ -71,11 +71,22 @@ describe("no old English default is left in the code that sends or shows them", 
 
   for (const file of files) {
     it(file, () => {
-      const source = readFileSync(path.join(__dirname, "..", file), "utf8");
+      let source = readFileSync(path.join(__dirname, "..", file), "utf8");
+      // The English editor defaults (interface in English) are allowed only in
+      // their own block; the worker never uses them (checked below).
+      source = source.replace(/export const CUSTOMER_DEFAULTS_EN = \{[\s\S]*?\} as const;/, "");
       const bad = literals(source).filter((s) => FORBIDDEN.test(s) || OLD.test(s));
       expect(bad).toEqual([]);
     });
   }
+
+  it("the English defaults are only for the editor in English; what the worker sends when a field is empty stays Portuguese", () => {
+    const read = (file: string) => readFileSync(path.join(__dirname, "..", file), "utf8");
+    for (const file of ["lib/queue/dm-worker.ts", "lib/campaigns/links.ts", "lib/tracking/message.ts", "lib/instagram/send-messages.ts"]) {
+      expect(read(file), file).not.toMatch(/CUSTOMER_DEFAULTS_EN|editorDefaults/);
+    }
+    expect(read("components/campaign-builder.tsx")).toContain("editorDefaults(locale)");
+  });
 });
 
 // "repo" as a word: "Report" and "Relatório" are fine.

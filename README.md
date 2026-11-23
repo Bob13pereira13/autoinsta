@@ -176,7 +176,14 @@ Resumo das rotas que a Meta usa:
 | `/media/<chave>` | Imagens e vídeos das DMs (públicos; a Meta baixa daqui) |
 | `/api/webhooks/meta/data-deletion` | Data Deletion Request Callback |
 | `/api/webhooks/meta/deauthorize` | Deauthorize Callback |
-| `/privacidade`, `/termos`, `/exclusao-dados` | Páginas públicas exigidas |
+| `/privacidade`, `/termos`, `/exclusao-dados` | Páginas públicas exigidas, em português |
+| `/privacy`, `/terms`, `/data-deletion` | As mesmas páginas em inglês (use estas no painel da Meta) |
+
+Conta de demonstração para o revisor da Meta (e-mail confirmado, espaço ativo, uma automação por canal):
+
+```bash
+npm run review-account -- --email reviewer@seudominio.com --password 'uma senha longa'
+```
 
 ## Desenvolvimento
 

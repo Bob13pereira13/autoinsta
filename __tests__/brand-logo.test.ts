@@ -50,7 +50,8 @@ describe("BrandMark", () => {
 
   it("is a labelled link home, or a labelled image without a link; the name is not repeated as text", () => {
     const link = renderToStaticMarkup(createElement(BrandMark, {}));
-    expect(link).toContain('aria-label="ChatIntegrAI — início"');
+    // The brand name alone: the same in every interface language.
+    expect(link).toContain('aria-label="ChatIntegrAI"');
     expect(link).toContain('href="/"');
     expect(link.match(/alt=""/g)).toHaveLength(2);
     const plain = renderToStaticMarkup(createElement(BrandMark, { href: null, size: "sm" }));

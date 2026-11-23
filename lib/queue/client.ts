@@ -6,6 +6,7 @@
 
 import { Queue } from "bullmq";
 import Redis from "ioredis";
+import { QUEUE_RETENTION } from "@/lib/privacy/retention";
 
 let connection: Redis | null = null;
 
@@ -119,14 +120,16 @@ export function getDMQueue(): Queue<DmQueueJob> {
     dmQueue = new Queue<DmQueueJob>("dm-processing", {
       connection: getRedisConnection(),
       defaultJobOptions: {
-        removeOnComplete: { count: 1000 }, // Keep last 1000 completed jobs
+        // Finished jobs (they carry the comment or message) stay at most 24 h,
+        // and at most the last 1000: the Privacy Policy states this period.
+        removeOnComplete: { age: QUEUE_RETENTION.finishedJobHours * 60 * 60, count: QUEUE_RETENTION.finishedJobCount },
         // Clear failed jobs shortly after they exhaust retries. Job ids are
         // deterministic (comment_<acct>_<id>), so a retained failed job would
         // block the polling reconciler from ever retrying that comment. Clearing
         // them lets a later sweep re-enqueue and try again once a transient
         // failure (e.g. an Instagram rate-limit window) has passed. Failure
         // detail is still preserved in DmLog.
-        removeOnFail: { age: 300, count: 2000 },
+        removeOnFail: { age: QUEUE_RETENTION.failedJobMinutes * 60, count: 2000 },
         attempts: 3,
         backoff: {
           type: "custom",

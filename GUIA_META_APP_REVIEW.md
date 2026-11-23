@@ -1,339 +1,360 @@
-# Guia de configuração e Meta App Review
+# Guia do Meta App Review
 
-Este guia cobre o que fazer no painel **Meta for Developers** para colocar o app em produção e passar no
-App Review. Ele parte da configuração que o seu app usa: **"API setup with Unified login"** (Facebook
-Login for Business com ativos do Instagram e token de usuário do sistema que não expira). Ao final, há
-notas para apps antigos que ainda usam o "Instagram login".
+Objetivo: aprovar na primeira tentativa. Este guia descreve o app **como ele é hoje**.
 
-> **Antes de tudo, o que o código não resolve sozinho.** Para atender clientes que não são testadores
-> do app, você precisa de **Advanced Access** em cada permissão. A Meta só concede isso depois da
-> **verificação da empresa** (Business Verification, com CNPJ) e com o app em modo **Live**. Sem essas
-> duas coisas, só contas com função no app (administradores, desenvolvedores e testadores) conseguem
-> conectar o Instagram, por melhor que seja o vídeo.
+- **Login:** Instagram API with Facebook Login, isto é, Facebook Login for Business com a configuração
+  `1007716072385958` (tipo de token: *System-user access token*, sem expiração, ativo: conta do Instagram).
+  No código isso é o "Unified login" (`META_LOGIN_CONFIG_ID`).
+- **Permissões pedidas:** `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`,
+  `business_management` e `public_profile`. A lista vive em `lib/meta/permissions.ts`; a tela de
+  consentimento do app, a Política de Privacidade e a checagem das permissões concedidas leem de lá.
+- **Fora do vídeo e das justificativas:** "Exigir que siga" (pedido para seguir antes do link).
 
-Em todo o guia, troque `https://app.suaempresa.com.br` pelo domínio real (o mesmo de `NEXTAUTH_URL`).
-
----
-
-## 0. Checklist antes de enviar
-
-- [ ] App publicado em um domínio **HTTPS** próprio, com `NEXTAUTH_URL` apontando para ele.
-- [ ] `config/brand.ts` preenchido: razão social, CNPJ, endereço, e-mail de suporte e e-mail do encarregado.
-      Na área de gestão (`/admin` → **Diagnóstico**, só para os e-mails de `ADMIN_EMAILS`) aparece o que
-      ainda está como `[PREENCHER]`.
-- [ ] `/privacidade`, `/termos` e `/exclusao-dados` abrindo sem login.
-- [ ] Worker rodando (`npm run worker`) e rotina diária rodando (Vercel Cron ou `scripts/cron.sh`).
-- [ ] Nenhum valor de exemplo do `.env.example` nos segredos: em produção o app web e o worker **se
-      recusam a iniciar** se `NEXTAUTH_SECRET`, `CRON_SECRET`, `ENCRYPTION_KEY`, `FACEBOOK_APP_SECRET`,
-      `INSTAGRAM_APP_SECRET` ou `WEBHOOK_VERIFY_TOKEN` estiverem com o valor de exemplo (a mensagem no log
-      diz qual variável trocar).
-- [ ] Variáveis da Meta configuradas: `META_UNIFIED_LOGIN_URL` (ou `META_APP_ID` + `META_LOGIN_CONFIG_ID`),
-      `FACEBOOK_APP_SECRET` e `WEBHOOK_VERIFY_TOKEN`.
-- [ ] **Verificação da empresa** concluída no portfólio empresarial (Configurações do negócio → Central de
-      segurança → Verificação).
-- [ ] No app: ícone de **1024×1024**, categoria, e-mail de contato, URL da Política de Privacidade, URL dos
-      Termos e URL de exclusão de dados preenchidos (Configurações do app → Básico).
-- [ ] Uma conta Instagram **profissional** (Business ou Creator) para a demonstração, já vinculada ao
-      portfólio, e uma **segunda conta** do Instagram para comentar e receber a DM.
-- [ ] Na conta da demonstração, no app do Instagram: Configurações → Mensagens e respostas a stories →
-      Controles de mensagens → **Ferramentas conectadas → Permitir acesso às mensagens** ativado.
-      Sem isso, a DM não é enviada.
-- [ ] Uma conta de acesso para os revisores (seção 4).
-- [ ] Volume persistente de mídia montado no app web (`UPLOADS_DIR`, ver README) e o domínio servindo
-      `/media/...` sem login: a Meta baixa as imagens e vídeos das DMs por essa URL pública.
-- [ ] Para gravar o vídeo de Stories: a segunda conta deve ser **pública** (a Meta só avisa menções em
-      stories de contas públicas) e a conta de demonstração deve ter um story publicado nas últimas 24 h.
+Em todo o guia, troque `https://SEU_DOMINIO` pelo domínio real (o mesmo de `NEXTAUTH_URL`).
 
 ---
 
-## 1. URLs para colar no painel da Meta
+## 0. Riscos que você precisa verificar antes de enviar
 
-| O quê | URL | Onde colar |
-|---|---|---|
-| **OAuth Redirect URI** | `https://app.suaempresa.com.br/api/instagram/callback` | Facebook Login for Business → Settings → **Valid OAuth Redirect URIs** |
-| **Webhook Callback URL** | `https://app.suaempresa.com.br/api/webhook` | Caso de uso "Gerenciar mensagens e conteúdo no Instagram" → API setup with Unified login → **Configure webhooks** |
-| **Verify token** do webhook | o valor de `WEBHOOK_VERIFY_TOKEN` | no mesmo lugar, campo *Verify token* |
-| **Política de Privacidade** | `https://app.suaempresa.com.br/privacidade` | Configurações do app → Básico → *Privacy policy URL* |
-| **Termos de Uso** | `https://app.suaempresa.com.br/termos` | Configurações do app → Básico → *Terms of Service URL* |
-| **Data Deletion (callback)** | `https://app.suaempresa.com.br/api/webhooks/meta/data-deletion` | Configurações do app → Básico → *User data deletion* → **Data deletion callback URL** (e também em Facebook Login for Business → Settings, se o campo aparecer) |
-| **Deauthorize callback** | `https://app.suaempresa.com.br/api/webhooks/meta/deauthorize` | Facebook Login for Business → Settings → *Deauthorize callback URL* |
-| Página de status da exclusão | `https://app.suaempresa.com.br/exclusao-dados` | não precisa colar: o callback devolve esse link com o código de confirmação |
-| Site do app | `https://app.suaempresa.com.br` | Configurações do app → Básico → *Site URL* / *App domains*: `app.suaempresa.com.br` |
+O código foi revisado e testado de ponta a ponta com a Meta **simulada**. Três pontos dependem do
+comportamento real da Meta e só dá para confirmar no seu app, com a conta de teste:
 
-O painel da Meta muda de nome e de posição com frequência. Se um campo não estiver exatamente onde a
-tabela indica, procure pelo nome em inglês entre parênteses.
-
-**Campos do webhook a assinar:** `comments`, `messages`, `messaging_postbacks` e `messaging_seen`.
-O app também assina esses campos em cada conta conectada; os dois últimos fazem funcionar os botões da
-DM (seguir para receber o link, botão de abrir) e o envio automático após a leitura.
-
-**Teste do webhook:** clique em *Test* ao lado de `comments` e depois em **Send to My Server**. Um evento
-aparece em `/admin` → Diagnóstico. Em modo de desenvolvimento, a Meta só entrega eventos reais de contas com
-função no app.
+1. **Notificações (webhooks) da conta.** Ao conectar, o app chama `POST /{ig-id}/subscribed_apps` com o
+   token do usuário do sistema. Se a Meta recusar, a conta conecta, mas nenhum comentário ou mensagem chega e
+   nenhuma automação responde. Agora o app **avisa** isso em Contas ("Instagram notifications are not active
+   yet") e registra o erro em `/admin` → Diagnóstico. Antes de gravar: conecte a conta de teste, confirme que o
+   aviso **não** aparece, mande uma DM de outra conta e veja o evento chegar em Diagnóstico. Se não chegar,
+   não grave: me avise. Pode ser preciso incluir `pages_manage_metadata` na configuração, e isso é decisão
+   sua, porque é uma permissão a mais para justificar.
+2. **`business_management` some do token.** Há relatos de que a Meta só mantém essa permissão no token
+   quando o app tem *Advanced Access* em `public_profile`. Sem ela, o login termina e a tela de Contas mostra
+   "No Instagram professional account found". Por isso `public_profile` entra no pedido.
+3. **Pedido de exclusão vindo da Meta.** A Meta não documenta qual ID chega no callback de exclusão para
+   tokens de usuário do sistema. O app compara com o ID da conta do Instagram, o ID com escopo do app e o
+   usuário do token. Se não bater, o pedido fica registrado como "nada encontrado" e gera um alerta em
+   Diagnóstico. A política oferece também a exclusão pelo painel (lixeira) e por e-mail, que sempre
+   funcionam.
 
 ---
 
-## 2. Configuração de login (Unified login)
+## 1. Checklist
 
-1. No caso de uso **"Gerenciar mensagens e conteúdo no Instagram"**, abra **API setup with Unified
-   login → Configure your app → Create new configuration**.
-2. Tipo de token: **System-user access token**; expiração: **Never**; ativo obrigatório: **Instagram account**.
-3. Permissões: mantenha apenas **`instagram_basic`**, **`instagram_manage_comments`** e
-   **`instagram_manage_messages`**. Não inclua permissões de anúncios, de publicação nem
-   **`instagram_manage_insights`**: o app não as usa (não lê métricas nem número de seguidores), e cada
-   permissão a mais precisa de justificativa e de vídeo. Se uma configuração antiga tiver
-   `instagram_manage_insights`, remova-a antes de enviar o App Review.
-4. **Inclua `business_management`.** O editor do Unified login não oferece essa permissão. Adicione o
-   produto **Facebook Login for Business**, abra **Configurations**, clique em **Edit** na mesma
-   configuração (mantendo o mesmo ID) e inclua `business_management`. Sem ela o login conclui, mas o token
-   não enxerga nenhuma conta do Instagram e a conexão falha com "Nenhuma conta do Instagram foi atribuída
-   a este login". Segundo quem já passou por isso, a Meta só mantém `business_management` no token quando
-   o app tem **Advanced Access em `public_profile`**. Peça os dois no App Review.
-5. Copie a URL de login da configuração e coloque em `META_UNIFIED_LOGIN_URL` (ou copie o *Configuration
-   ID* para `META_LOGIN_CONFIG_ID` e o *App ID* para `META_APP_ID`). O app usa o `client_id` e o
-   `config_id` dessa URL e sempre substitui `redirect_uri` e `state` pelos dele.
+### 1.1 Código (já feito neste repositório)
 
-**`pages_show_list` / `pages_read_engagement` não são necessárias.** O Unified login não usa Página do
-Facebook: a conta é localizada por `/me/assigned_instagram_accounts`. Pedir permissões que o vídeo não
-demonstra é um dos motivos mais comuns de reprovação.
+- [x] Toda chamada à Graph API mapeada para a permissão que exige (seção 3). Nenhuma permissão pedida sem
+      uso num fluxo visível, e nenhuma chamada que exija permissão não pedida, até onde o código e a
+      documentação permitem afirmar (ver riscos da seção 0).
+- [x] Interface 100% em inglês com o idioma em English (teste `__tests__/english-interface.test.ts` e
+      auditoria no navegador). O seletor de idioma fica na página inicial, no login, no cadastro e nas
+      telas de senha; as páginas legais têm endereço próprio em inglês.
+- [x] Política de Privacidade, Termos e Exclusão de dados públicos, sem login, em português e inglês, com
+      os prazos lidos do código (`lib/privacy/retention.ts`) e as permissões lidas de
+      `lib/meta/permissions.ts`.
+- [x] Callbacks de exclusão e de desautorização validam o `signed_request` com o `FACEBOOK_APP_SECRET`,
+      apagam os dados e devolvem `{ url, confirmation_code }`; a página de status funciona
+      (testes com pedido válido e inválido em `__tests__/data-deletion.db.test.ts`).
+- [x] A lixeira em Contas apaga o mesmo que o pedido de exclusão da Meta.
+- [x] Antes do login da Meta, a tela `/accounts/connect` mostra os requisitos e cada permissão com o motivo,
+      e o botão oficial **Continue with Facebook**.
+- [x] Cancelar o login, recusar uma permissão, não ter conta profissional ligada a uma Página e falhas da
+      Meta: cada caso volta para Contas com mensagem clara e **Try again**, nunca erro 500.
+- [x] Página inicial explica o produto e mostra razão social, CNPJ, endereço, suporte e os links legais.
+- [x] Script da conta do revisor: `npm run review-account` (seção 5).
+- [x] Os quatro fluxos do vídeo e a desconexão testados de ponta a ponta com banco e Redis reais
+      (`__tests__/review-flows.db.test.ts`).
 
----
+### 1.2 Você (configuração e painel da Meta)
 
-## 3. Justificativas para o formulário do App Review
+**No `config/brand.ts` (antes de tudo):**
 
-Cole o texto em **inglês** no formulário (os revisores leem em inglês). A versão em português serve
-como referência para você.
+- [ ] `processors.hosting` e `processors.email`: o nome da empresa e o país de cada um (ex.:
+      `"Hetzner Online GmbH (Alemanha)"`, `"Resend, Inc. (Estados Unidos)"`). Enquanto estiverem vazios, a
+      política descreve sem nomear e `/admin` → Diagnóstico mostra a pendência.
+- [ ] `legal.address`: hoje está só "São Paulo/SP". Coloque o endereço completo da sede.
 
-### `instagram_basic`
+**No servidor (Coolify):** `META_LOGIN_CONFIG_ID=1007716072385958`, `META_APP_ID`, `FACEBOOK_APP_SECRET`,
+`WEBHOOK_VERIFY_TOKEN`, `NEXTAUTH_URL=https://SEU_DOMINIO`; worker e rotinas (`scripts/cron.sh`) rodando.
 
-**EN**
+**No portfólio empresarial (Business Manager):**
 
-> We use instagram_basic to identify the Instagram professional account the business connected through
-> our login configuration (account ID, username, name and profile picture) and to list that account's own
-> posts and reels in our dashboard, so the business owner can choose which post or reel an automation
-> applies to. With this permission we only read the connecting account's own profile and media. The only
-> data we read about another person is the username of someone who comments on or messages the
-> connected account, used solely to personalize the automated reply ({username}) and kept in that
-> account's DM log; we never read other users' media. The screencast shows the account appearing in the Accounts tab after login and the
-> post grid listing the account's posts and reels when an automation is created.
+- [ ] **Verificação da empresa** (Configurações do negócio → Central de segurança → Verificação), com o
+      CNPJ. Sem ela não há Advanced Access.
+- [ ] **Verificação de acesso** (Access Verification / Tech Provider): no painel do app, em
+      *App Review → Access verification*, declarar que o app atende **outras empresas** (os seus clientes) e
+      enviar a verificação. É exigida de apps que acessam ativos de outros negócios com Facebook Login for
+      Business.
 
-**PT**
+**No app (developers.facebook.com):**
 
-> Usamos instagram_basic para identificar a conta profissional do Instagram que a empresa conectou pelo
-> nosso login (ID, nome de usuário, nome e foto de perfil) e para listar os posts e reels da própria
-> conta no painel, para o dono escolher em qual post ou reel a automação vai funcionar. Com esta permissão
-> lemos apenas o perfil e as mídias da própria conta conectada. O único dado que lemos de outra pessoa é
-> o nome de usuário de quem comenta ou envia mensagem para a conta conectada, usado só para personalizar
-> a resposta automática ({username}) e guardado no registro de DMs dessa conta; nunca lemos mídias de
-> outros usuários. O vídeo mostra a conta
-> aparecendo na aba Contas após o login e a grade de publicações e reels ao criar uma automação.
+- [ ] Configurações do app → Básico: ícone **1024×1024** (`docs/design/app-icon-1024.png`), categoria,
+      e-mail de contato, URLs da seção 2 (privacidade, termos, exclusão de dados), domínio do app.
+- [ ] Facebook Login for Business → Configurations: a configuração `1007716072385958` com exatamente
+      `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages` e `business_management`.
+      Nada de anúncios, publicação ou insights.
+- [ ] Facebook Login for Business → Settings: *Valid OAuth Redirect URIs* e *Deauthorize callback URL*
+      (seção 2).
+- [ ] Webhooks do Instagram: URL de callback, *Verify token* e os campos `comments`, `messages`,
+      `messaging_postbacks` e `messaging_seen`. Teste com *Test → Send to My Server* e confira o evento em
+      `/admin` → Diagnóstico.
+- [ ] Funções do app (App roles): a conta do Instagram de teste e a segunda conta (que comenta e manda DM)
+      precisam ser testadoras enquanto o app não tem Advanced Access.
+- [ ] App Review: pedir **Advanced Access** em `instagram_basic`, `instagram_manage_comments`,
+      `instagram_manage_messages`, `business_management` e `public_profile`, com as justificativas da
+      seção 4, o vídeo da seção 7 e as instruções da seção 5.
+- [ ] Respostas de tratamento de dados (seção 6).
+- [ ] Depois de aprovado: modo **Live**.
 
-### `instagram_manage_comments`
-
-**EN**
-
-> When someone comments on a post or reel of the connected account, we receive the comment through the
-> comments webhook and check it against the keywords the account owner configured (for example "LINK").
-> If it matches and the owner enabled it, we post one public reply under that comment (for example
-> "Sent you a DM!"). We also read the comments of the account's own media to recover comments a webhook
-> may have missed. We only act on comments on the connected account's own posts and reels, never on
-> other accounts' content, and we never hide or delete comments. The screencast shows a comment with the
-> keyword and the public reply appearing under it.
-
-**PT**
-
-> Quando alguém comenta em um post ou reel da conta conectada, recebemos o comentário pelo webhook de
-> comentários e verificamos se ele contém a palavra-chave configurada pelo dono (por exemplo "LINK"). Se
-> contiver e o dono tiver ativado, publicamos uma resposta pública sob o comentário (por exemplo "Te mandei
-> uma DM!"). Também lemos os comentários das mídias da própria conta para recuperar comentários que o
-> webhook não entregou. Atuamos apenas em comentários nos posts e reels da própria conta conectada, nunca
-> em conteúdo de outras contas, e nunca ocultamos ou apagamos comentários. O vídeo mostra um comentário com
-> a palavra-chave e a resposta pública aparecendo.
-
-### `instagram_manage_messages`
-
-**EN**
-
-> We use instagram_manage_messages to answer people who start a conversation with the business, with
-> content the business configured in our dashboard. There are three cases, each set up as a separate
-> automation: (1) Comments: after a person comments the configured keyword on the business's post or
-> reel, we send that person a single private reply (private replies API, using the comment ID); if the
-> person taps the button in that reply, we send the requested link and, optionally, images or a video the
-> business uploaded. (2) Stories: when a person replies to one of the business's stories (message webhook
-> with reply_to.story) or mentions the business in their own story (story_mention attachment), we reply
-> by DM with the configured message. (3) Direct: when a person sends the business a direct message that
-> contains a configured keyword, or optionally any message, we reply with the configured message.
-> Images and videos are sent as message attachments by public URL, only inside the conversation the
-> person opened and within the 24-hour messaging window. To avoid spam, each incoming comment or message
-> triggers at most one automation; automations without a keyword answer the same person at most once per
-> configurable interval (24 hours by default) and stay silent for 24 hours after a human from the business
-> replies to that person (detected from message echoes), so automation never talks over a person. We
-> deduplicate retries and count every API call (text, each image, each video) against an hourly rate
-> limit per account. We do not read or display the business's Instagram conversations: the permission is
-> used only to send these automatic replies. The screencast shows each case: the DM after a comment (with
-> an image after the button), a reply to a story, a story mention, a direct message with a keyword, and the
-> delivery log.
-
-**PT**
-
-> Usamos instagram_manage_messages para responder pessoas que iniciam uma conversa com a empresa, com o
-> conteúdo que a empresa configurou no painel. São três casos, cada um configurado como uma automação
-> separada: (1) Comentários: depois que a pessoa comenta a palavra-chave no post ou reel da empresa,
-> enviamos uma única resposta privada (API de respostas privadas, com o ID do comentário); se a pessoa tocar
-> no botão dessa resposta, enviamos o link pedido e, se configurado, imagens ou um vídeo enviados pela
-> empresa. (2) Stories: quando a pessoa responde a um story da empresa (webhook de mensagem com
-> reply_to.story) ou marca a empresa no story dela (anexo story_mention), respondemos por DM com a mensagem
-> configurada. (3) Direct: quando a pessoa manda uma DM com uma palavra-chave configurada, ou opcionalmente
-> qualquer mensagem, respondemos com a mensagem configurada. Imagens e vídeos são enviados como anexos de
-> mensagem por URL pública, só dentro da conversa que a pessoa abriu e na janela de 24 horas. Para evitar
-> spam, cada comentário ou mensagem dispara no máximo uma automação; automações sem palavra-chave respondem
-> a mesma pessoa no máximo uma vez por intervalo configurável (24 horas por padrão) e ficam em silêncio por
-> 24 horas depois que alguém da empresa responde essa pessoa (detectado pelos echoes de mensagem), para a
-> automação nunca atropelar um atendente. Eliminamos duplicidades e contamos cada chamada à API (texto,
-> cada imagem, cada vídeo) no limite por hora de cada conta. Não lemos nem exibimos as conversas do
-> Instagram da empresa: a permissão é usada só para enviar essas respostas automáticas. O vídeo mostra cada
-> caso: a DM depois do comentário (com uma imagem depois do botão), a resposta a um story, a menção em story,
-> uma DM com palavra-chave e o registro de envios.
-
-### `business_management` (obrigatória no Unified login)
-
-**EN**
-
-> Our login configuration issues a business integration system-user token for the client's business
-> portfolio. We use business_management only to find which Instagram account the business assigned to our
-> app during login (GET /me/assigned_instagram_accounts), so we can attach that account to the business's
-> workspace. We do not create, modify or read any other business assets, ad accounts, pages or people. The
-> screencast shows the asset selection during login and the selected Instagram account appearing in
-> the Accounts tab right after.
-
-**PT**
-
-> Nossa configuração de login gera um token de usuário do sistema para o portfólio empresarial do cliente.
-> Usamos business_management apenas para descobrir qual conta do Instagram a empresa atribuiu ao nosso app
-> durante o login (GET /me/assigned_instagram_accounts) e vinculá-la ao espaço de trabalho da empresa. Não
-> criamos, alteramos nem lemos outros ativos do portfólio, contas de anúncios, páginas ou pessoas. O vídeo
-> mostra a seleção do ativo durante o login e a conta escolhida aparecendo na aba Contas logo depois.
-
-### `public_profile` (Advanced Access)
-
-**EN**
-
-> Granted by default with Facebook Login. We request Advanced Access because Meta only keeps
-> business_management on the login token for apps with Advanced Access to public_profile. We do not store
-> or display the person's Facebook profile; the login is used only to authorize the business's Instagram
-> account.
+**Na conta do Instagram de teste:** profissional (Business ou Creator), ligada a uma Página do Facebook
+no portfólio; no app do Instagram, Configurações → Mensagens e respostas ao story → Controles de
+mensagens → Ferramentas conectadas → **Permitir acesso às mensagens** ligado; ao menos um post publicado e
+um story nas últimas 24 h. A segunda conta precisa ser **pública** para testar respostas a story.
 
 ---
 
-## 4. Instruções e credenciais para os revisores
+## 2. URLs para o painel da Meta
 
-Crie uma conta só para a revisão (não use a sua):
+| Campo no painel | URL |
+|---|---|
+| Privacy Policy URL | `https://SEU_DOMINIO/privacy` (inglês; em português: `/privacidade`) |
+| Terms of Service URL | `https://SEU_DOMINIO/terms` (em português: `/termos`) |
+| User data deletion → **Data deletion instructions URL** | `https://SEU_DOMINIO/data-deletion` (em português: `/exclusao-dados`) |
+| User data deletion → **Data deletion callback URL** | `https://SEU_DOMINIO/api/webhooks/meta/data-deletion` |
+| Deauthorize callback URL (Facebook Login for Business → Settings) | `https://SEU_DOMINIO/api/webhooks/meta/deauthorize` |
+| Valid OAuth Redirect URIs | `https://SEU_DOMINIO/api/instagram/callback` |
+| App domains | `SEU_DOMINIO` (sem `https://`) |
+| Site URL | `https://SEU_DOMINIO` |
+| Webhooks → Callback URL | `https://SEU_DOMINIO/api/webhook` |
+| Webhooks → Verify token | o valor de `WEBHOOK_VERIFY_TOKEN` |
+
+O painel aceita o campo de *instruções* **ou** o de *callback* de exclusão; prefira o callback (o app
+devolve o link de status com o código). As páginas em inglês nunca redirecionam para as em português.
+
+---
+
+## 3. Chamadas à Graph API e permissões
+
+Todas vão para `graph.facebook.com` com o token de usuário do sistema que o login gera (código em
+`lib/meta/client.ts` e `lib/meta/oauth.ts`).
+
+| # | Onde roda | Chamada | Código | Permissão | Fluxo visível |
+|---|---|---|---|---|---|
+| 1 | Web | Diálogo `www.facebook.com/dialog/oauth?config_id=…` | `getAuthorizationUrl` | as da configuração | Accounts → Connect Instagram → Continue with Facebook |
+| 2 | Web | `GET /oauth/access_token` (código → token, com o app secret) | `exchangeCodeForToken` | nenhuma | volta do login |
+| 3 | Web | `GET /debug_token` (com o token do app) | `getUnifiedTokenInfo` | nenhuma | validade do token, usuário e **permissões concedidas** (recusa de permissão vira aviso em Contas) |
+| 4 | Web | `GET /me/assigned_instagram_accounts?fields=id,username` | `getAssignedInstagramAccounts` | **business_management** | a conta escolhida no login aparece em Contas |
+| 5 | Web | `GET /{ig-id}?fields=id,username,name,profile_picture_url` | `getUserInfo` (login e `/api/instagram/profile`) | **instagram_basic** | nome, @ e foto da conta |
+| 6 | Web | `POST /{ig-id}/subscribed_apps` (`comments`, `messages`, `messaging_postbacks`, `messaging_seen`) | `subscribeInstagramAccountToWebhooks` | instagram_manage_comments, instagram_manage_messages | sem isso nenhuma automação recebe eventos (risco 1 da seção 0) |
+| 7 | Web | `GET /{ig-id}/media?fields=…` | `getUserMedia*` (`/api/instagram/posts`) | **instagram_basic** | grade de posts e reels no editor ("Specific posts") |
+| 8 | Worker | `POST /{comment-id}/replies` | `sendCommentReply` | **instagram_manage_comments** | resposta pública ao comentário |
+| 9 | Worker | `GET /{comment-id}?fields=id,hidden,replies{from}` | `getCommentState` | instagram_manage_comments | com espera: não responder de novo nem a comentário apagado |
+| 10 | Worker (varredura a cada 5 min) | `GET /{media-id}/comments?fields=id,text,timestamp,from,replies{from}` | `getRecentMediaComments` | instagram_manage_comments | responde comentários que o webhook não entregou |
+| 11 | Worker | `POST /{ig-id}/messages` com `recipient.comment_id` (texto, botão de link) | `sendPrivateReply*` | **instagram_manage_messages** | a DM para quem comentou a palavra-chave |
+| 12 | Worker | `POST /{ig-id}/messages` com `recipient.id` (texto, botões, imagem ou vídeo) | `sendDirectMessage*`, `sendDirectAttachment` | **instagram_manage_messages** | respostas no Direct e a Stories |
+| 13 | Worker | `GET /{igsid}?fields=username` | `getRecipientUsername` | instagram_manage_messages | `{username}` na mensagem |
+| 14 | Worker | `GET /{igsid}?fields=is_user_follow_business` | `getUserFollowStatus` | instagram_manage_messages | só "Exigir que siga" (fora do vídeo) |
+| 15 | Rotina (a cada 5 min) | `GET /{ig-id}/media` | `getUserMedia` (`attach-next-reel`) | instagram_basic | automação "próximo reel" |
+| 16 | Rotina diária | `graph.instagram.com/refresh_access_token` | `refreshLongLivedToken` | nenhuma | só contas do antigo Instagram Login; não roda para Facebook Login |
+| 17 | Rotina diária | nenhuma chamada à Meta | `purge-data` | — | retenção e exclusões pendentes |
+
+**De fora para dentro:** webhooks (`POST /api/webhook`, assinatura `X-Hub-Signature-256` verificada) e os
+callbacks de exclusão e desautorização (`signed_request` verificado).
+
+**Por que `business_management` é necessária no nosso login.** A configuração gera um token de **usuário
+do sistema** do portfólio empresarial do cliente. Com esse token, `me` é o usuário do sistema, não a conta
+do Instagram. A única forma que o código tem de saber qual conta o cliente escolheu na tela da Meta é
+`GET /me/assigned_instagram_accounts` (chamada 4), que lista os ativos atribuídos a esse usuário do sistema.
+Sem `business_management`, essa lista volta vazia, o login termina sem conta e o app mostra "No Instagram
+professional account found". O app não lê nem altera nenhum outro ativo do portfólio (páginas, contas de
+anúncio, pessoas).
+
+**`public_profile`:** vem em todo login do Facebook. O código não lê o perfil do Facebook (não há chamada a
+`/me?fields=name`). Entra no pedido por causa do risco 2 da seção 0.
+
+**Confirmação.** Cada permissão pedida aparece num fluxo do vídeo:
+- `instagram_basic`: conta conectada com nome e @, e grade de posts;
+- `business_management`: a conta escolhida no login aparecendo em Contas;
+- `instagram_manage_comments`: resposta pública;
+- `instagram_manage_messages`: DMs de Comentários, Direct e Stories.
+
+Nenhuma chamada do código pede outra permissão. Fica a ressalva da chamada 6 (risco 1).
+
+---
+
+## 4. Justificativas (cole em inglês)
+
+### instagram_basic
+
+> Our app is a reply-automation tool for Instagram professional accounts. We use instagram_basic to read
+> the connected Instagram professional account's profile information (ID, username, name and profile
+> picture), shown in the app's Accounts page so the business knows which account is connected, and to read
+> the metadata of the account's own media (posts and reels), so the business can choose on which posts an
+> automation runs. We only read the account's own profile and media; we do not read other users’ profiles
+> or media. The screencast shows the account appearing in Accounts after login and the media grid in the
+> automation editor.
+
+### instagram_manage_comments
+
+> We use instagram_manage_comments to receive webhooks for new comments on the connected account's own posts
+> and reels, check them for the keyword the business configured, and post a public reply to the comment on
+> behalf of the business when the business turns that option on. Before a delayed reply we read the comment
+> to avoid replying twice or replying to a deleted comment. We do not moderate, hide or delete comments, and
+> we do not read comments on media the business does not own. The screencast shows a second account
+> commenting the keyword and the public reply appearing under the comment.
+
+### instagram_manage_messages
+
+> We use instagram_manage_messages so the business can respond automatically to people who start an
+> interaction with its Instagram account: a private reply to a person who commented a keyword on the
+> business's post, and an automatic reply to direct messages and story replies that contain a keyword the
+> business configured. Every message is triggered by that person's own comment, story reply or message,
+> within Meta's messaging windows. We receive messaging webhooks only to trigger these replies and to stop
+> automatic replies while a person from the business is talking to the customer. The screencast shows the
+> DM sent after a comment, the reply to a direct message and the reply to a story reply.
+
+### business_management
+
+> Our Facebook Login for Business configuration issues a business integration system-user token for the
+> customer’s business portfolio. We use business_management only to read which Instagram account the
+> business assigned to our app during login (GET /me/assigned_instagram_accounts), so we can connect that
+> account to the business’s workspace in our app. We do not read or manage any other business assets, ad
+> accounts, pages or people. The screencast shows the asset selection in Meta’s login dialog and the
+> selected Instagram account appearing in our Accounts page right after.
+
+### public_profile
+
+> Granted with every Facebook Login. Our app does not read or store the person’s Facebook profile; the
+> login is used only to authorize the business’s Instagram account. We request Advanced Access because
+> it is required for the login to keep the business_management permission.
+
+---
+
+## 5. Conta do revisor
+
+Crie (ou reinicie) a conta com:
 
 ```bash
-npm run user -- create revisor.meta@suaempresa.com.br --name "Meta Reviewer" --workspace "Meta Review" --no-email
+npm run review-account -- --email reviewer@SEU_DOMINIO --password 'uma senha longa'
 ```
 
-Abra o link impresso, defina a senha e conecte antes a conta Instagram de demonstração (assim o revisor
-encontra tudo pronto). Contas criadas pelo comando (ou em `/admin` → Novo cliente) já entram **Ativas**;
-não use o cadastro público para o revisor, porque ele ficaria aguardando a sua aprovação. No campo **App Review → Instructions** cole (em inglês):
+No Coolify, rode no terminal do contêiner do **web**. O script:
+- cria ou reinicia o cliente com o e-mail já confirmado, o espaço ativo (sem aprovação) e o idioma em inglês;
+- deixa o login sem anti-robô (o Turnstile só aparece no cadastro);
+- cria uma automação por canal, todas no modo Direto e sem "Exigir que siga":
+  - Comentários com a palavra-chave **LINK** e resposta pública;
+  - Stories respondendo qualquer resposta ao story;
+  - Direct com a palavra-chave **PRICE**;
+- coloca alguns registros de exemplo em DM Logs. Use `--no-sample-logs` para não criar.
 
-> Test login: https://app.suaempresa.com.br/login
-> E-mail: revisor.meta@suaempresa.com.br — Password: (the password you set)
+Para conectar a conta do Instagram de teste:
+1. Entre como o revisor.
+2. Vá em Accounts → Connect Instagram account e passe pelo login da Meta.
+3. Rode o comando de novo. Ele mantém a conta e recria as automações ligadas a ela.
+
+Cole no campo **App Review → Instructions**:
+
+> **Test credentials.** Sign in at https://SEU_DOMINIO/login with e-mail `reviewer@SEU_DOMINIO` and
+> password `(a senha)`. The interface language is English (Language selector at the bottom of the menu).
 >
-> The Instagram professional account @SUA_CONTA_DEMO is already connected and active (Accounts tab). Automations has three tabs, one per channel; three automations are already active:
-> - Comments: keyword LINK on any post. From any other Instagram account, comment LINK on a post of
->   @SUA_CONTA_DEMO: the commenter receives a DM with a button; after tapping it they receive the link and
->   an image, and a public reply is posted under the comment.
-> - Stories: keyword PRICE. Reply PRICE to the current story of @SUA_CONTA_DEMO: you receive a DM.
->   A second Stories automation answers mentions: mention @SUA_CONTA_DEMO in a story from a public
->   account and you receive a thank-you DM (once per person every 24 hours).
-> - Direct: keyword HOURS. Send HOURS by DM to @SUA_CONTA_DEMO: you receive the opening hours.
-> Every send is listed under DM Logs.
-> The interface language can be switched to English in Settings → Interface language.
+> **Connected account.** The Instagram professional account @SUA_CONTA_DE_TESTE is already connected
+> (Accounts page). To see the connection flow, click "Connect Instagram account": our page lists every
+> permission we request and why, then "Continue with Facebook" opens Meta's login.
+>
+> **What to try** (from any other Instagram account; while the app is in development mode, use an account
+> with a role in the app):
+> 1. Comment **LINK** on any post of @SUA_CONTA_DE_TESTE → a public reply appears under the comment and the
+>    commenter receives a DM with a link.
+> 2. Send a direct message containing **PRICE** to @SUA_CONTA_DE_TESTE → an automatic reply arrives.
+> 3. Reply to the current story of @SUA_CONTA_DE_TESTE → an automatic reply arrives.
+> 4. Every reply is listed under **DM Logs**.
+>
+> **Data deletion.** Accounts → trash icon deletes the account and its data. Instructions:
+> https://SEU_DOMINIO/data-deletion. Privacy Policy: https://SEU_DOMINIO/privacy.
 
-Antes de enviar, deixe criadas e ativas na conta de demonstração as três automações citadas acima
-(Comentários com `LINK` e uma imagem; Stories com duas automações — uma com a palavra-chave `PRICE` para
-respostas ao story e outra **sem palavra-chave, só com menções** ligadas; Direct com `HOURS`) e um story
-publicado. Automações sem palavra-chave respondem a mesma pessoa uma vez a cada 24 h e ficam quietas por
-24 h se alguém da conta conversou com ela: para regravar, use outra conta de teste ou espere. Lembre de **remover essa conta** depois da aprovação (`npm run user -- disable revisor.meta@...`).
+Depois da aprovação, desative a conta: `npm run user -- disable reviewer@SEU_DOMINIO`.
 
 ---
 
-## 5. Roteiro do vídeo (screencast)
+## 6. Tratamento de dados (rascunho das respostas)
 
-Regras da Meta para o vídeo: mostrar **cada permissão** sendo usada de verdade, com contas reais, do
-início ao fim. A Meta pede a interface **em inglês** ou com legendas; por isso o seletor de idioma
-continua disponível. Grave em 1080p, sem cortes no meio de um fluxo, com o cursor visível. Use legendas
-na própria edição (as frases sugeridas estão entre aspas). Duração ideal: 3 a 5 minutos.
+Marquei com **[CONFIRMAR]** o que só você sabe.
 
-**Preparação (fora do vídeo):** app em modo Live (ou contas com função no app), worker rodando, conta de
-demonstração **desconectada** (para mostrar o login completo), um post ou reel recente na conta, a
-segunda conta logada no celular, e o espelhamento da tela do celular (ou um segundo navegador com
-instagram.com) pronto.
+**Data processors / service providers with access to Platform Data:** Yes.
+- Hosting of the application, database and queue: **[CONFIRMAR: empresa e país]** (o mesmo de
+  `processors.hosting`).
+- E-mail delivery: **[CONFIRMAR]**. O provedor de e-mail recebe só o e-mail e o nome dos clientes, nunca
+  dados da Meta; se o formulário perguntar só por quem acessa *Platform Data*, ele não entra.
+- Cloudflare Turnstile: não recebe dados da Meta (só o IP de quem se cadastra).
 
-| # | Tempo | O que mostrar | Legenda sugerida (EN) | Permissão |
-|---|---|---|---|---|
-| 1 | 0:00 | Página inicial do site → **Política de Privacidade** (rolar até a tabela de permissões) → voltar | "This is our website. The privacy policy explains how Instagram data is used and deleted." | — |
-| 2 | 0:20 | **Login** com e-mail e senha da conta de demonstração. Em Configurações, trocar o idioma para **English** | "The business owner signs in to the dashboard. The UI is switched to English for this review." | — |
-| 3 | 0:40 | **Accounts** → **Connect Instagram account**. Mostrar a janela da Meta: login, **lista de permissões** e **seleção da conta do Instagram** (ativo) no portfólio. Conceder tudo | "The owner connects the Instagram professional account through Meta's login. The requested permissions and the selected Instagram account are shown here." | instagram_basic, business_management |
-| 4 | 1:20 | De volta em **Accounts**: a conta **@SUA_CONTA_DEMO** conectada e **Active** | "The assigned Instagram account is now connected to this workspace and active." | instagram_basic, business_management |
-| 5 | 1:35 | **Automations** → aba **Comments** → **New automation**: em "When", escolher **Specific posts** — a grade lista os **posts/reels da conta**; marcar um; palavra-chave `LINK`; ligar **opening DM with a button**; mensagem principal com um link e **uma imagem** enviada pelo botão "+ Add image or video"; ligar **reply to the comment publicly**; mostrar o resumo no topo e a prévia; salvar | "The owner creates a Comments automation on one of the account's own reels: keyword LINK, an opening DM with a button, then the link and an image, plus an optional public reply." | instagram_basic |
-| 6 | 2:30 | **Na segunda conta** (celular/outro navegador), comentar `LINK` no reel | "A different Instagram user comments LINK on that reel." | instagram_manage_comments |
-| 7 | 2:45 | Na segunda conta: a **DM de abertura** chegando; tocar no botão; chegam o **link e a imagem** | "The commenter receives a private reply; after tapping the button, the link and the image are delivered." | instagram_manage_messages |
-| 8 | 3:10 | No reel: a **resposta pública** sob o comentário | "The public reply is posted under the comment." | instagram_manage_comments |
-| 9 | 3:20 | No painel: aba **Stories** → mostrar a automação com `PRICE` (respostas a stories) e a de menções. Na segunda conta: **responder `PRICE` ao story** da conta de demonstração → a DM chega | "Stories automations answer replies to the business's stories. A reply with PRICE receives the price list by DM." | instagram_manage_messages |
-| 10 | 3:50 | Na segunda conta (pública): publicar um story **marcando @SUA_CONTA_DEMO** → a DM de agradecimento chega | "When someone mentions the business in their story, they receive a thank-you DM." | instagram_manage_messages |
-| 11 | 4:15 | Aba **Direct** → mostrar a automação `HOURS`. Na segunda conta: mandar **HOURS** por DM → a resposta chega | "Direct automations answer direct messages that contain a keyword." | instagram_manage_messages |
-| 12 | 4:35 | **DM Logs**: as linhas **Sent** de cada caso (canal, pessoa, mensagem, data) | "Every send is logged with its channel and status." | instagram_manage_messages |
-| 13 | 4:50 | **Accounts**: mostrar a chave **Active/Off** (desligar e religar), depois a **lixeira** na conta (ler a confirmação e confirmar) e abrir `/exclusao-dados` | "The owner can pause every automation of an account without deleting anything, or remove the account: its data, including uploaded images and videos, is deleted. Data deletion requests from Meta are handled automatically." | — |
+**Responsible entity:** {razão social de `config/brand.ts`}, CNPJ {cnpj}, Brazil.
+
+**Country where Platform Data is stored:** **[CONFIRMAR: país do servidor]**.
+
+**Requests from public authorities in the past 12 months:** No. **[CONFIRMAR]**
+
+**Policies and processes for public authority requests** (marque o que for verdade para você):
+
+> We disclose data only when legally required by a valid order from a Brazilian authority. Every
+> request is reviewed for legality before any disclosure; we challenge requests that are unlawful or
+> overbroad, disclose the minimum data required, and keep a record of each request and response.
+> **[CONFIRMAR]**
+
+**Data deletion:**
+> Customers delete an Instagram account and all its data at any time (Accounts → trash icon). Requests
+> from Meta are processed automatically by our data deletion callback. People who interacted with a
+> customer’s account can request deletion by e-mail to our data protection officer. Retention periods are
+> listed in the Privacy Policy.
+
+---
+
+## 7. Roteiro do vídeo
+
+Regras: interface em inglês, sem cortes dentro de um fluxo, cursor visível, 1080p, legendas em inglês na
+edição. Um trecho por permissão; se o formulário pedir um vídeo por permissão, recorte os trechos
+indicados, mantendo a cena 3 (login) em todos.
+
+**Antes de gravar:**
+- rode `npm run review-account` e entre como o revisor;
+- desconecte a conta de teste, para mostrar o login completo;
+- deixe a segunda conta aberta no celular, espelhado, ou em outro navegador;
+- confira o risco 1 da seção 0.
+
+| # | O que mostrar | Legenda (EN) | Permissão |
+|---|---|---|---|
+| 1 | Página inicial em inglês; abrir **Privacy Policy** e rolar até a tabela de permissões; mostrar **Data deletion** | "This is our website. The privacy policy explains which Instagram data we use, why, for how long, and how to delete it." | — |
+| 2 | **Sign in** com a conta do revisor | "The business owner signs in to the dashboard." | — |
+| 3 | **Accounts → Connect Instagram account**: a tela lista as permissões; clicar **Continue with Facebook**; no diálogo da Meta, entrar, escolher o portfólio e a conta do Instagram, ver as permissões e confirmar | "The owner connects the Instagram professional account with Facebook Login for Business. Our page explains each permission first; Meta's dialog shows the permissions and the asset selection." | business_management, instagram_basic |
+| 4 | De volta em **Accounts**: a conta com @ e nome, **Active** | "The Instagram account selected during login is now connected and shown with its username and name." | business_management, instagram_basic |
+| 5 | **Automations → Comments → Catalog link (comments)**: mostrar a palavra-chave LINK, o modo Direct, a resposta pública e a prévia; abrir "Specific posts" para mostrar a grade dos posts da conta | "The owner sets up a Comments automation: keyword LINK, a DM with a link, and a public reply. The editor lists the account's own posts and reels." | instagram_basic |
+| 6 | Na segunda conta: comentar **LINK** num post da conta de teste | "Another Instagram user comments LINK on the business's post." | instagram_manage_comments |
+| 7 | No post: a **resposta pública** aparece sob o comentário | "Our app posts the public reply under the comment." | instagram_manage_comments |
+| 8 | Na segunda conta: a **DM** chega com o link | "The commenter receives a private reply by DM with the link." | instagram_manage_messages |
+| 9 | Segunda conta manda **PRICE** por DM para a conta de teste; a resposta chega | "A direct message containing PRICE receives an automatic reply." | instagram_manage_messages |
+| 10 | Segunda conta **responde ao story** da conta de teste; a resposta chega | "A reply to the business's story receives an automatic reply." | instagram_manage_messages |
+| 11 | **DM Logs**: as linhas **Sent** dos três casos | "Every automatic reply is logged with its status." | — |
+| 12 | **Accounts → lixeira** na conta, confirmar; a conta some; abrir **Data deletion** | "Disconnecting the account deletes it and its data. Deletion requests from Meta are handled automatically." | — |
 
 Dicas que evitam reprovação:
-
-- **Não corte** entre a ação da segunda conta e a DM chegando (passos 6–7, 9, 10 e 11): o revisor quer
-  ver a causa e o efeito. Se a DM demorar, deixe o vídeo rodando. A menção em story (passo 10) costuma
-  levar alguns segundos a mais.
-- A duração passa de 5 minutos com os três canais. Se preferir, grave um vídeo por canal (Comentários,
-  Stories, Direct), sempre começando pelo login (passo 3).
-- Mostre o **nome da permissão** na tela de consentimento (passo 3). Se a tela não listar nomes, use uma
-  legenda com os nomes.
-- Use um **vídeo por permissão**, se o formulário pedir separado, recortando os passos indicados na
-  última coluna — mas mantenha o passo 3 (login) em todos.
-- Não mostre dados de pessoas reais além das suas contas de teste.
+- **Não corte** entre a ação da segunda conta e o resultado (cenas 6–10). Se a DM demorar, deixe rodar.
+  As automações do script respondem na hora (espera 0).
+- Mostre os **nomes das permissões**: a tela do app lista; se o diálogo da Meta não listar, use legenda.
+- Não mostre dados de pessoas reais além das contas de teste.
 
 ---
 
-## 6. Depois do envio
+## 8. Depois do envio
 
-- Resposta típica: 3 a 10 dias úteis. Se reprovar, a Meta indica a permissão e o motivo; ajuste o vídeo
-  ou a justificativa daquela permissão e reenvie só ela.
-- Motivos comuns: permissão pedida sem aparecer no vídeo; vídeo sem o login completo; DM não aparecendo
-  no vídeo; política de privacidade sem explicar o uso dos dados; app sem verificação da empresa.
-- Depois de aprovado, cada cliente conecta o próprio Instagram em **Contas → Conectar conta do Instagram**,
-  escolhendo o portfólio empresarial dele. A conta precisa estar em um portfólio, e o cliente precisa ser
-  administrador desse portfólio.
-
-### Problemas conhecidos do Unified login (relatos de outros desenvolvedores, não documentados pela Meta)
-
-- **"Nenhuma conta do Instagram foi atribuída a este login"**: falta `business_management` na
-  configuração (seção 2, item 4), ou o app não tem Advanced Access em `public_profile`.
-- **Webhooks de comentários chegam, mas os de mensagens não**: houve relato disso com o app em Standard
-  Access. Normaliza após o Advanced Access em `instagram_manage_messages`.
-- **Pedido de exclusão "não encontrado"**: a Meta não documenta qual ID chega no callback de exclusão
-  para esse tipo de login. O app compara com o ID da conta, o ID com escopo do app e o usuário do token;
-  um pedido que não bate com nada fica registrado e gera um alerta em `/admin` → Diagnóstico, para
-  você verificar manualmente.
+- Resposta típica em 3 a 10 dias úteis. Se reprovar, a Meta diz a permissão e o motivo: corrija o vídeo ou
+  a justificativa daquela permissão e reenvie só ela.
+- Motivos comuns: permissão sem aparecer no vídeo; vídeo sem o login completo; DM não aparecendo; política
+  sem explicar uso, retenção e exclusão; empresa sem verificação.
+- Depois da aprovação e do modo Live, cada cliente conecta o próprio Instagram em Accounts. A conta precisa
+  ser profissional, ligada a uma Página e estar num portfólio que o cliente administra.
 
 ---
 
-## Anexo: apps antigos com "Instagram login"
+## Anexo: Instagram Login (apps antigos)
 
-Se o seu app ainda oferecer **API setup with Instagram login**, deixe `META_UNIFIED_LOGIN_URL`,
-`META_APP_ID` e `META_LOGIN_CONFIG_ID` vazios e configure `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET`.
-Diferenças:
-
-- Redirect URI: Instagram → API setup with Instagram login → *Business login settings* → **OAuth redirect URIs**.
-- Permissões: `instagram_business_basic`, `instagram_business_manage_comments` e
-  `instagram_business_manage_messages` (as justificativas acima valem trocando os nomes; não há
-  `business_management`).
-- O token dura 60 dias. A rotina diária renova os tokens com 15 dias ou menos de validade (aos 45 dias).
-- Não precisa de portfólio empresarial nem de Página do Facebook.
+Sem `META_LOGIN_CONFIG_ID` (e sem `META_UNIFIED_LOGIN_URL`), o app usa o Instagram Login: escopos
+`instagram_business_basic`, `instagram_business_manage_comments` e `instagram_business_manage_messages`
+(as justificativas acima valem trocando os nomes; não há `business_management`), tokens de 60 dias renovados
+pela rotina diária e chamadas em `graph.instagram.com`. Não é o caso deste app hoje.

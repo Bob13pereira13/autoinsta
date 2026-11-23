@@ -14,7 +14,7 @@ export default function SetPasswordForm({
   token: string;
   submitLabel: string;
 }) {
-  const { t } = useI18n();
+  const { t, message } = useI18n();
   const [state, formAction, pending] = useActionState(action, { error: null });
   const inputClass = "field";
 
@@ -23,7 +23,7 @@ export default function SetPasswordForm({
       <input type="hidden" name="token" value={token} />
       {state.error && (
         <p role="alert" className="rounded-control border border-error-border bg-error-soft px-4 py-3 text-sm text-error">
-          {state.error}
+          {message(state.error)}
         </p>
       )}
       <div className="space-y-2">

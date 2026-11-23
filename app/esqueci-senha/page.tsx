@@ -60,7 +60,7 @@ export default async function EsqueciSenhaPage({
                 type="email"
                 required
                 autoComplete="email"
-                placeholder="voce@empresa.com.br"
+                placeholder={t("you@company.com")}
                 className="field"
               />
               <button
