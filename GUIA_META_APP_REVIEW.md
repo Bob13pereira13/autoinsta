@@ -140,7 +140,7 @@ Todas vão para `graph.facebook.com` com o token de usuário do sistema que o lo
 |---|---|---|---|---|---|
 | 1 | Web | Diálogo `www.facebook.com/dialog/oauth?config_id=…` | `getAuthorizationUrl` | as da configuração | Accounts → Connect Instagram → Continue with Facebook |
 | 2 | Web | `GET /oauth/access_token` (código → token, com o app secret) | `exchangeCodeForToken` | nenhuma | volta do login |
-| 3 | Web | `GET /debug_token` (com o token do app) | `getUnifiedTokenInfo` | nenhuma | validade do token, usuário e **permissões concedidas** (recusa de permissão vira aviso em Contas) |
+| 3 | Web | `GET /debug_token` (com o token do app) | `getUnifiedTokenInfo` | nenhuma | validade do token e usuário; `scopes` e `granular_scopes` vão para o Diagnóstico, sem decidir nada (com token de usuário do sistema, `scopes` pode omitir `business_management` mesmo funcionando). Permissão faltando é detectada pela própria chamada: erro 10 ou 200–299 em uma chamada essencial (4 e 5) vira aviso em Contas com a permissão dela |
 | 4 | Web | `GET /me/assigned_instagram_accounts?fields=id,username` | `getAssignedInstagramAccounts` | **business_management** | a conta escolhida no login aparece em Contas |
 | 5 | Web | `GET /{ig-id}?fields=id,username,name,profile_picture_url` | `getUserInfo` (login e `/api/instagram/profile`) | **instagram_basic** | nome, @ e foto da conta |
 | 6 | Web | `POST /{ig-id}/subscribed_apps` (`comments`, `messages`, `messaging_postbacks`, `messaging_seen`) | `subscribeInstagramAccountToWebhooks` | instagram_manage_comments, instagram_manage_messages | sem isso nenhuma automação recebe eventos (risco 1 da seção 0) |

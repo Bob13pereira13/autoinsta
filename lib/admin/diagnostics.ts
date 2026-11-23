@@ -60,7 +60,8 @@ export async function getDiagnostics({ workspaceId }: { workspaceId?: string | n
         where: byClient,
         orderBy: { createdAt: "desc" },
         take: 30,
-        select: { id: true, source: true, level: true, message: true, createdAt: true, resolvedAt: true, workspace: clientSelect },
+        // payload: the event's details (e.g. what Meta's debug_token reported at a login).
+        select: { id: true, source: true, level: true, message: true, payload: true, createdAt: true, resolvedAt: true, workspace: clientSelect },
       }),
       prisma.workspace.findMany({
         orderBy: [{ companyName: "asc" }, { name: "asc" }],

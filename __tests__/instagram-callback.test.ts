@@ -179,15 +179,106 @@ describe("Instagram OAuth callback", () => {
       expect(mockExchange).not.toHaveBeenCalled();
     });
 
-    it("a permission unchecked in the dialog → missing_permissions with which ones; nothing connected", async () => {
+    const metaError = (code: number, message = "(#200) Permissions error") =>
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message, type: "OAuthException", code, fbtrace_id: "trace" } }), { status: 403 }));
+    const events = () => mockPrisma.operationalEvent.create.mock.calls.map(([arg]) => arg.data);
+
+    it("scopes without business_management but the calls work → connected (system user token, as before)", async () => {
       unified();
-      respond({ data: { expires_at: 0, user_id: "1", scopes: ["instagram_basic", "business_management", "public_profile"] } });
+      // What a system user token's debug_token can report: business_management absent.
+      respond({
+        data: {
+          type: "SYSTEM_USER",
+          is_valid: true,
+          expires_at: 0,
+          user_id: "1",
+          scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+          granular_scopes: [
+            { scope: "instagram_basic", target_ids: ["ig1"] },
+            { scope: "instagram_manage_comments", target_ids: ["ig1"] },
+          ],
+        },
+      });
+      respond({ data: [{ id: "ig1" }] }); // assigned_instagram_accounts works (business_management)
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+      expect(urls().some((url) => url.includes("assigned_instagram_accounts"))).toBe(true);
+      expect(mockPrisma.instagramAccount.create).toHaveBeenCalledWith({ data: expect.objectContaining({ instagramId: "ig1" }) });
+      // What debug_token reported goes to the admin's Diagnostics, without the token.
+      const report = events().find((e) => e.message.startsWith("Instagram login: Meta's debug_token reports scopes"));
+      expect(report).toMatchObject({
+        source: "SYSTEM",
+        level: "INFO",
+        workspaceId: "workspace",
+        message: "Instagram login: Meta's debug_token reports scopes: instagram_basic, instagram_manage_comments, instagram_manage_messages, public_profile",
+        payload: {
+          type: "SYSTEM_USER",
+          isValid: true,
+          scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+          granularScopes: [
+            { scope: "instagram_basic", target_ids: ["ig1"] },
+            { scope: "instagram_manage_comments", target_ids: ["ig1"] },
+          ],
+          notInScopes: ["business_management"],
+        },
+      });
+      expect(JSON.stringify(events())).not.toContain("suat");
+    });
+
+    it("debug_token unreadable → the connection goes on; the failure is in Diagnostics", async () => {
+      unified();
+      metaError(190, "Invalid OAuth access token");
+      respond({ data: [{ id: "ig1" }] });
+      respond({ id: "ig1", username: "one" });
+      respond({ success: true });
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=connected");
+      expect(events()).toContainEqual(expect.objectContaining({ level: "WARNING", message: "Instagram login: Meta's debug_token could not be read" }));
+    });
+
+    it("the account list refused for lack of permission → missing_permissions naming business_management; nothing connected", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1", scopes: ["instagram_basic"] } });
+      metaError(200, "(#200) Requires business_management permission to manage the object");
       const response = await callback();
-      expect(location(response)).toBe(
-        "https://app.test/accounts?instagram=missing_permissions&missing=instagram_manage_comments%2Cinstagram_manage_messages"
-      );
-      expect(urls().some((url) => url.includes("assigned_instagram_accounts"))).toBe(false);
+      expect(location(response)).toBe("https://app.test/accounts?instagram=missing_permissions&missing=business_management");
       expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
+      expect(events()).toContainEqual(
+        expect.objectContaining({
+          level: "ERROR",
+          message: "Instagram connection refused by Meta: missing business_management",
+          payload: { permission: "business_management", reason: expect.stringContaining("code=200") },
+        })
+      );
+    });
+
+    it("the account's details refused (code 10, or any 2xx code) → missing_permissions naming instagram_basic", async () => {
+      for (const code of [10, 230, 299]) {
+        fetchMock.mockReset();
+        mockPrisma.instagramAccount.create.mockClear();
+        unified();
+        respond({ data: { expires_at: 0, user_id: "1" } });
+        respond({ data: [{ id: "ig1" }] });
+        metaError(code, "(#10) Application does not have permission for this action");
+        expect(location(await callback()), String(code)).toBe("https://app.test/accounts?instagram=missing_permissions&missing=instagram_basic");
+        expect(mockPrisma.instagramAccount.create).not.toHaveBeenCalled();
+      }
+    });
+
+    it("another Meta error in an essential call (e.g. code 100) is not called a permission → failed", async () => {
+      unified();
+      respond({ data: { expires_at: 0, user_id: "1" } });
+      respond({ data: [{ id: "ig1" }] });
+      metaError(100, "Unsupported get request");
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=failed");
+    });
+
+    it("Instagram Login: the account refused for lack of permission → missing_permissions naming instagram_business_basic", async () => {
+      vi.stubEnv("INSTAGRAM_APP_SECRET", "ig-secret");
+      mockExchange.mockResolvedValue({ accessToken: "short", userId: "1" });
+      respond({ access_token: "long", expires_in: 5184000 });
+      metaError(10, "(#10) Application does not have permission for this action");
+      expect(location(await callback())).toBe("https://app.test/accounts?instagram=missing_permissions&missing=instagram_business_basic");
     });
 
     it("all permissions granted → connected", async () => {
@@ -231,7 +322,7 @@ describe("Instagram OAuth callback", () => {
     vi.stubEnv("META_APP_ID", "app");
     vi.stubEnv("FACEBOOK_APP_SECRET", "secret");
     mockExchange.mockResolvedValue({ accessToken: "suat", userId: "" });
-    respond({ data: { expires_at: 0 } });
+    respond({ data: { expires_at: 0, scopes: ["instagram_basic", "public_profile"] } });
     respond({ data: [] });
 
     const response = await callback();

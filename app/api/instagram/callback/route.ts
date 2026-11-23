@@ -11,6 +11,7 @@ import {
   getUserInfo,
   NoInstagramAccountError,
   subscribeInstagramAccountToWebhooks,
+  type UnifiedTokenInfo,
 } from "@/lib/meta/client";
 import {
   encryptToken,
@@ -18,6 +19,7 @@ import {
   verifyOAuthState,
 } from "@/lib/meta/oauth";
 import { missingPermissions } from "@/lib/meta/permissions";
+import { MissingPermissionError, requiring } from "@/lib/meta/permission-errors";
 import { canManageWorkspace } from "@/lib/workspace-access";
 
 /**
@@ -25,7 +27,8 @@ import { canManageWorkspace } from "@/lib/workspace-access";
  * code the page explains (components/instagram-connect-notice.tsx), and the
  * person can try again from there; nothing here answers with an error page.
  *   denied              the person cancelled the login
- *   missing_permissions a requested permission was not granted (&missing=)
+ *   missing_permissions Meta refused an essential call for lack of a permission
+ *                       (code 10 or 200–299; &missing= names that call's permission)
  *   no_account          no Instagram professional account came with the login
  *   invalid             the login link was missing or older than 10 minutes
  *   forbidden           not allowed to connect accounts in this workspace
@@ -98,24 +101,23 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
       // login configuration, so read it rather than assume one; failing to
       // read it only costs the expiry date shown in Settings.
       accessToken = codeToken;
-      const tokenInfo = await getUnifiedTokenInfo(
-        accessToken,
-        requireMetaAppId(),
-        requireSecret("FACEBOOK_APP_SECRET")
-      ).catch((expiryError) => {
-        console.warn("[Instagram Callback] Token details unknown:", expiryError);
-        return null;
-      });
-      // A permission unchecked in the dialog: nothing is connected, and the
-      // Accounts tab says which one and how to try again.
-      const missing = missingPermissions(tokenInfo?.scopes ?? []);
-      if (missing.length) {
-        return back(`instagram=missing_permissions&missing=${encodeURIComponent(missing.join(","))}`);
+      let tokenInfo: UnifiedTokenInfo | null = null;
+      let tokenInfoFailure: string | null = null;
+      try {
+        tokenInfo = await getUnifiedTokenInfo(accessToken, requireMetaAppId(), requireSecret("FACEBOOK_APP_SECRET"));
+      } catch (detailsError) {
+        console.warn("[Instagram Callback] Token details unknown:", detailsError);
+        tokenInfoFailure = detailsError instanceof Error ? detailsError.message.slice(0, 300) : "Unknown error";
       }
+      // What Meta says about the token, for the admin's Diagnostics. Nothing is
+      // decided on its `scopes`: a system user token can leave out a
+      // permission that works (business_management). The calls below are the test.
+      await recordTokenReport(state.workspaceId, tokenInfo, tokenInfoFailure);
       tokenExpiresAt = tokenInfo?.expiresAt ?? null;
       metaLoginUserId = tokenInfo?.userId ?? null;
       // One Unified login can grant several Instagram accounts; connect each.
-      accountIds = (await getAssignedInstagramAccounts(accessToken)).map(
+      // Empty list → no_account; refused for lack of permission → missing_permissions.
+      accountIds = (await requiring("business_management", () => getAssignedInstagramAccounts(accessToken))).map(
         (account) => account.id
       );
     } else {
@@ -136,7 +138,7 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
     let limited = false;
 
     for (const accountId of accountIds) {
-      const userInfo = await getUserInfo(auth, accountId);
+      const userInfo = await requiring(unifiedLogin ? "instagram_basic" : "instagram_business_basic", () => getUserInfo(auth, accountId));
       // Webhooks and the messaging API key off the professional account ID
       // (user_id), not the app-scoped `id`. Store user_id so comment webhooks
       // can be matched back to this account. Fall back to id if user_id is
@@ -222,6 +224,22 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
     return back(webhooksOff ? "instagram=connected&webhooks=off" : "instagram=connected");
   } catch (err) {
     if (err instanceof NoInstagramAccountError) return back("instagram=no_account");
+    if (err instanceof MissingPermissionError) {
+      // Meta's own answer to an essential call: the Accounts tab names the
+      // permission; Meta's text goes to the admin's Diagnostics.
+      await prisma.operationalEvent
+        .create({
+          data: {
+            source: "SYSTEM",
+            level: "ERROR",
+            workspaceId: state.workspaceId,
+            message: `Instagram connection refused by Meta: missing ${err.permission}`,
+            payload: { permission: err.permission, reason: err.metaError.message.slice(0, 300) },
+          },
+        })
+        .catch(() => {});
+      return back(`instagram=missing_permissions&missing=${encodeURIComponent(err.permission)}`);
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Instagram Callback] Error:", err);
     // The detail is for the operator (admin Diagnostics), not for the screen:
@@ -240,4 +258,33 @@ async function handleCallback(request: NextRequest, baseUrl: string, back: (quer
 
     return back("instagram=failed");
   }
+}
+
+/**
+ * Records, on every Unified login, what Meta's debug_token reported about the
+ * token: type, validity, expiry, scopes and granular_scopes, and which
+ * requested permissions its scopes leave out. Never the token. Shown in the
+ * admin's Diagnostics (Operational Event Timeline).
+ */
+async function recordTokenReport(workspaceId: string, info: UnifiedTokenInfo | null, failure: string | null) {
+  const report = info?.report;
+  await prisma.operationalEvent
+    .create({
+      data: report
+        ? {
+            source: "SYSTEM",
+            level: "INFO",
+            workspaceId,
+            message: `Instagram login: Meta's debug_token reports scopes: ${report.scopes.join(", ") || "(none)"}`,
+            payload: { ...report, notInScopes: missingPermissions(report.scopes) },
+          }
+        : {
+            source: "SYSTEM",
+            level: "WARNING",
+            workspaceId,
+            message: "Instagram login: Meta's debug_token could not be read",
+            payload: { reason: failure ?? "Unknown error" },
+          },
+    })
+    .catch(() => {});
 }

@@ -879,19 +879,58 @@ export async function getUnifiedTokenExpiry(
  * and the user id debug_token reports for a Unified login token. The id is
  * kept so Meta's data deletion / deauthorize callbacks can be matched.
  */
+export interface UnifiedTokenInfo {
+  expiresAt: Date | null;
+  userId: string | null;
+  scopes: string[];
+  /**
+   * What debug_token reported, field by field and never the token itself, for
+   * the admin's Diagnostics. With a system user token `scopes` can leave out a
+   * permission that works (business_management), so nothing is decided on it.
+   */
+  report: {
+    type: string | null;
+    isValid: boolean | null;
+    expiresAt: number | null;
+    dataAccessExpiresAt: number | null;
+    scopes: string[];
+    granularScopes: { scope: string; target_ids?: string[] }[];
+  };
+}
+
 export async function getUnifiedTokenInfo(
   accessToken: string,
   appId: string,
   appSecret: string
-): Promise<{ expiresAt: Date | null; userId: string | null; scopes: string[] }> {
+): Promise<UnifiedTokenInfo> {
   const data = (await debugToken(accessToken, `${appId}|${appSecret}`)) as {
-    data?: { expires_at?: number; user_id?: string | number; scopes?: string[] };
+    data?: {
+      type?: string;
+      is_valid?: boolean;
+      expires_at?: number;
+      data_access_expires_at?: number;
+      user_id?: string | number;
+      scopes?: string[];
+      granular_scopes?: { scope: string; target_ids?: string[] }[];
+    };
   };
-  const expiresAt = data.data?.expires_at;
+  const d = data.data ?? {};
+  const scopes = Array.isArray(d.scopes) ? d.scopes.map(String) : [];
+  const granularScopes = Array.isArray(d.granular_scopes)
+    ? d.granular_scopes.map((g) => ({ scope: String(g.scope), ...(Array.isArray(g.target_ids) ? { target_ids: g.target_ids.map(String) } : {}) }))
+    : [];
   return {
-    expiresAt: expiresAt ? new Date(expiresAt * 1000) : null,
-    userId: data.data?.user_id != null ? String(data.data.user_id) : null,
-    scopes: data.data?.scopes ?? [],
+    expiresAt: d.expires_at ? new Date(d.expires_at * 1000) : null,
+    userId: d.user_id != null ? String(d.user_id) : null,
+    scopes,
+    report: {
+      type: typeof d.type === "string" ? d.type : null,
+      isValid: typeof d.is_valid === "boolean" ? d.is_valid : null,
+      expiresAt: typeof d.expires_at === "number" ? d.expires_at : null,
+      dataAccessExpiresAt: typeof d.data_access_expires_at === "number" ? d.data_access_expires_at : null,
+      scopes,
+      granularScopes,
+    },
   };
 }
 

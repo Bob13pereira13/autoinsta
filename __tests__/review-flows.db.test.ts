@@ -20,7 +20,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { PrismaClient } from "../app/generated/prisma/client";
 
@@ -74,6 +74,10 @@ let sql: Client;
 // ——— Meta, simulated ———
 type Call = { method: string; url: URL; body: Record<string, unknown> | null };
 const calls: Call[] = [];
+// A different answer for one path, set by a test (undefined = the usual answers below).
+let metaOverride: ((path: string) => Promise<Response> | undefined) | null = null;
+const metaError = (code: number, message: string) =>
+  Promise.resolve(new Response(JSON.stringify({ error: { message, type: "OAuthException", code, fbtrace_id: "trace" } }), { status: 403 }));
 function graph(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(String(input));
   const method = init?.method ?? "GET";
@@ -81,9 +85,26 @@ function graph(input: RequestInfo | URL, init?: RequestInit): Promise<Response> 
   calls.push({ method, url, body });
   const json = (data: unknown) => Promise.resolve(new Response(JSON.stringify(data), { status: 200 }));
   const p = url.pathname.replace(/^\/v[\d.]+/, "");
+  const forced = metaOverride?.(p);
+  if (forced) return forced;
   if (p === "/oauth/access_token") return json({ access_token: "system-user-token", token_type: "bearer" });
   if (p === "/debug_token") {
-    return json({ data: { user_id: "122000000000777", expires_at: 0, scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "business_management", "public_profile"] } });
+    // As Meta answers for a system user token (Facebook Login for Business):
+    // business_management works but is not in `scopes`.
+    return json({
+      data: {
+        type: "SYSTEM_USER",
+        is_valid: true,
+        user_id: "122000000000777",
+        expires_at: 0,
+        scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+        granular_scopes: [
+          { scope: "instagram_basic", target_ids: [IG_ID] },
+          { scope: "instagram_manage_comments", target_ids: [IG_ID] },
+          { scope: "instagram_manage_messages", target_ids: [IG_ID] },
+        ],
+      },
+    });
   }
   if (p === "/me/assigned_instagram_accounts") return json({ data: [{ id: IG_ID, username: "demo.store" }] });
   if (p === `/${IG_ID}` && method === "GET") return json({ id: IG_ID, username: "demo.store", name: "Demo Store" });
@@ -150,6 +171,40 @@ describe.skipIf(!databaseUrl)("Meta App Review screencast flows, end to end", ()
     expect(result.instagram).toBeNull();
   });
 
+  describe("   a login that Meta answers with a refusal or no account ends on Accounts with its code, nothing connected", () => {
+    const connect = async () => {
+      const workspace = await state.db.workspace.findFirstOrThrow({ where: { ownerId: state.userId } });
+      const response = await callbackRoute(new NextRequest(`${BASE}/api/instagram/callback?code=meta-code&state=${encodeURIComponent(createOAuthState(workspace.id))}`));
+      return { workspace, location: response.headers.get("location") };
+    };
+    afterEach(() => {
+      metaOverride = null;
+    });
+
+    it("the account list refused for lack of permission (code 200) → missing_permissions naming business_management", async () => {
+      metaOverride = (p) => (p === "/me/assigned_instagram_accounts" ? metaError(200, "(#200) Requires business_management permission to manage the object") : undefined);
+      const { workspace, location } = await connect();
+      expect(location).toBe(`${BASE}/accounts?instagram=missing_permissions&missing=business_management`);
+      expect(await state.db.instagramAccount.count({ where: { workspaceId: workspace.id } })).toBe(0);
+      const event = await state.db.operationalEvent.findFirstOrThrow({ where: { workspaceId: workspace.id, message: "Instagram connection refused by Meta: missing business_management" } });
+      expect(event.payload).toMatchObject({ permission: "business_management", reason: expect.stringContaining("code=200") });
+    });
+
+    it("the account's details refused (code 10) → missing_permissions naming instagram_basic", async () => {
+      metaOverride = (p) => (p === `/${IG_ID}` ? metaError(10, "(#10) Application does not have permission for this action") : undefined);
+      const { workspace, location } = await connect();
+      expect(location).toBe(`${BASE}/accounts?instagram=missing_permissions&missing=instagram_basic`);
+      expect(await state.db.instagramAccount.count({ where: { workspaceId: workspace.id } })).toBe(0);
+    });
+
+    it("no Instagram account in the login (empty list) → no_account", async () => {
+      metaOverride = (p) => (p === "/me/assigned_instagram_accounts" ? Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 })) : undefined);
+      const { workspace, location } = await connect();
+      expect(location).toBe(`${BASE}/accounts?instagram=no_account`);
+      expect(await state.db.instagramAccount.count({ where: { workspaceId: workspace.id } })).toBe(0);
+    });
+  });
+
   it("1. Connect Instagram → Meta's login → the account appears in Accounts", async () => {
     const workspace = await state.db.workspace.findFirstOrThrow({ where: { ownerId: state.userId } });
     const before = calls.length;
@@ -158,13 +213,26 @@ describe.skipIf(!databaseUrl)("Meta App Review screencast flows, end to end", ()
     const paths = calls.slice(before).map((c) => `${c.method} ${c.url.pathname.replace(/^\/v[\d.]+/, "")}`);
     expect(paths).toEqual([
       "GET /oauth/access_token",
-      "GET /debug_token", // which permissions were granted
+      "GET /debug_token", // what Meta reports about the token (recorded, not decided on)
       "GET /me/assigned_instagram_accounts", // business_management
       `GET /${IG_ID}`, // instagram_basic: username, name
       `POST /${IG_ID}/subscribed_apps`, // comments and messages notifications
     ]);
     const accounts = await (await accountsRoute()).json();
     expect(accounts.data.instagramAccounts).toEqual([expect.objectContaining({ username: "demo.store", instagramId: IG_ID })]);
+    // business_management is absent from `scopes` yet the connection went through;
+    // what debug_token reported is in the admin's Diagnostics, without the token.
+    const report = await state.db.operationalEvent.findFirstOrThrow({
+      where: { workspaceId: workspace.id, message: { startsWith: "Instagram login: Meta's debug_token reports scopes" } },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(report.payload).toMatchObject({
+      type: "SYSTEM_USER",
+      scopes: ["instagram_basic", "instagram_manage_comments", "instagram_manage_messages", "public_profile"],
+      granularScopes: expect.arrayContaining([{ scope: "instagram_basic", target_ids: [IG_ID] }]),
+      notInScopes: ["business_management"],
+    });
+    expect(JSON.stringify(report)).not.toContain("system-user-token");
   });
 
   it("   the demo script then adds one automation per channel, in English, Direct mode, no follow gate", async () => {

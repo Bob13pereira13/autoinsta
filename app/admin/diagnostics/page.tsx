@@ -205,6 +205,14 @@ export default async function AdminDiagnosticsPage({ searchParams }: { searchPar
                 <div className="min-w-0">
                   <p className="break-words text-sm text-foreground">{event.message}</p>
                   <ClientTag client={event.client} />
+                  {event.payload != null && (
+                    <details className="mt-1.5 text-xs" data-event-payload>
+                      <summary className="cursor-pointer text-muted">{t("Details")}</summary>
+                      <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-control border border-border-subtle bg-surface p-2.5 font-mono text-[11px] leading-relaxed text-foreground">
+                        {JSON.stringify(event.payload, null, 2)}
+                      </pre>
+                    </details>
+                  )}
                 </div>
                 <p className="text-xs text-faint">{formatDate(event.createdAt, locale, true)}</p>
               </li>

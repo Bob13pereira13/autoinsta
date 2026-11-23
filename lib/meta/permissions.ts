@@ -12,6 +12,10 @@
  *
  * Instagram API with Instagram Login (no META_LOGIN_CONFIG_ID): the scopes go
  * in the authorization URL (lib/meta/scopes.ts).
+ *
+ * What was granted is judged by the calls themselves (lib/meta/permission-errors.ts),
+ * not by debug_token's `scopes`: with a system user token (Facebook Login for
+ * Business) that list can leave out business_management while the permission works.
  */
 import { isUnifiedLogin } from "@/lib/env";
 import { INSTAGRAM_REQUIRED_SCOPES } from "@/lib/meta/scopes";
@@ -51,7 +55,9 @@ export function requestedPermissions(): readonly MetaPermission[] {
 }
 
 /**
- * Requested permissions missing from what the login granted. An empty
+ * Requested permissions not listed in what debug_token reports. Information
+ * only (the admin's Diagnostics): nothing is blocked on it, since a system
+ * user token can work with a permission its `scopes` leave out. An empty
  * `granted` list means Meta did not say (nothing is reported missing then).
  */
 export function missingPermissions(granted: readonly string[], requested: readonly string[] = requestedPermissions()): string[] {

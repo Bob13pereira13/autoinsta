@@ -951,5 +951,6 @@
   "Shares messages with {count} automations": "Divide as mensagens com {count} automações",
   "Shares comments with “{name}”": "Divide os comentários com “{name}”",
   "Shares comments with {count} automations": "Divide os comentários com {count} automações",
-  "Heads-up: another active automation catches the same comments or messages, and one of the two stops answering them.": "Atenção: outra automação ativa pega os mesmos comentários ou mensagens, e uma das duas deixa de responder."
+  "Heads-up: another active automation catches the same comments or messages, and one of the two stops answering them.": "Atenção: outra automação ativa pega os mesmos comentários ou mensagens, e uma das duas deixa de responder.",
+  "Details": "Detalhes"
 }
